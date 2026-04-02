@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for merchants and carriers",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "nombre": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "telefono": { "type": "string" },
+        "documento": { "type": "string" },
+        "tipoUsuario": { "type": "string", "enum": ["comerciante", "transportista"] },
+        "verificado": { "type": "string", "enum": ["pendiente", "verificado", "rechazado"] },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "nombre", "email", "tipoUsuario", "verificado", "createdAt"]
+    },
+    "Cargo": {
+      "title": "Cargo",
+      "description": "Cargo shipment request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "comercianteId": { "type": "string" },
+        "tipoCarga": { "type": "string" },
+        "peso": { "type": "number" },
+        "descripcion": { "type": "string" },
+        "origen": { "type": "string" },
+        "destino": { "type": "string" },
+        "precioPropuesto": { "type": "number" },
+        "estado": { "type": "string", "enum": ["disponible", "en_negociacion", "asignado", "completado"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["comercianteId", "tipoCarga", "peso", "origen", "destino", "precioPropuesto", "estado", "createdAt"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "Carrier offer for a cargo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cargoId": { "type": "string" },
+        "transportistaId": { "type": "string" },
+        "precioOfertado": { "type": "number" },
+        "estado": { "type": "string", "enum": ["pendiente", "aceptada", "rechazada"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["cargoId", "transportistaId", "precioOfertado", "estado", "createdAt"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "Active or completed trip",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cargoId": { "type": "string" },
+        "comercianteId": { "type": "string" },
+        "transportistaId": { "type": "string" },
+        "origen": { "type": "string" },
+        "destino": { "type": "string" },
+        "precioFinal": { "type": "number" },
+        "estado": { "type": "string", "enum": ["en_progreso", "completado", "cancelado"] },
+        "seguimiento": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "updatedAt": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["cargoId", "comercianteId", "transportistaId", "origen", "destino", "precioFinal", "estado", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User review for a trip",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tripId": { "type": "string" },
+        "reviewerId": { "type": "string" },
+        "revieweeId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["tripId", "reviewerId", "revieweeId", "rating", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/cargos/{cargoId}": {
+      "schema": "Cargo",
+      "description": "Cargo requests"
+    },
+    "/cargos/{cargoId}/offers/{offerId}": {
+      "schema": "Offer",
+      "description": "Carrier offers for cargo"
+    },
+    "/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "Active and past trips"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "User reviews"
+    }
+  }
+}

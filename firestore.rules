@@ -1,0 +1,193 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (auth.uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - nombre: string (required)
+    //   - email: string (required, format: email)
+    //   - telefono: string (optional)
+    //   - documento: string (optional)
+    //   - tipoUsuario: string (required, enum: ['comerciante', 'transportista'])
+    //   - verificado: string (required, enum: ['pendiente', 'verificado', 'rechazado'])
+    //   - rating: number (optional)
+    //   - createdAt: number (required)
+    //
+    // Collection: cargos
+    // Document ID: cargoId
+    // Fields:
+    //   - comercianteId: string (required)
+    //   - tipoCarga: string (required)
+    //   - peso: number (required)
+    //   - descripcion: string (optional)
+    //   - origen: string (required)
+    //   - destino: string (required)
+    //   - precioPropuesto: number (required)
+    //   - estado: string (required, enum: ['disponible', 'en_negociacion', 'asignado', 'completado'])
+    //   - createdAt: number (required)
+    //
+    // Collection: cargos/{cargoId}/offers
+    // Document ID: offerId
+    // Fields:
+    //   - cargoId: string (required)
+    //   - transportistaId: string (required)
+    //   - precioOfertado: number (required)
+    //   - estado: string (required, enum: ['pendiente', 'aceptada', 'rechazada'])
+    //   - createdAt: number (required)
+    //
+    // Collection: trips
+    // Document ID: tripId
+    // Fields:
+    //   - cargoId: string (required)
+    //   - comercianteId: string (required)
+    //   - transportistaId: string (required)
+    //   - origen: string (required)
+    //   - destino: string (required)
+    //   - precioFinal: number (required)
+    //   - estado: string (required, enum: ['en_progreso', 'completado', 'cancelado'])
+    //   - seguimiento: map (optional)
+    //   - createdAt: number (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin' ||
+          (request.auth.token.email == "lurgia18yuar@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isMerchant() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'comerciante';
+    }
+
+    function isCarrier() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'transportista';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'nombre', 'email', 'tipoUsuario', 'verificado', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.nombre is string && data.nombre.size() > 0 && data.nombre.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.tipoUsuario in ['comerciante', 'transportista'] &&
+             data.verificado in ['pendiente', 'verificado', 'rechazado'] &&
+             data.createdAt is number &&
+             (!('telefono' in data) || (data.telefono is string && data.telefono.size() < 20)) &&
+             (!('documento' in data) || (data.documento is string && data.documento.size() < 20));
+    }
+
+    function isValidCargo(data) {
+      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
+             data.comercianteId == request.auth.uid &&
+             data.tipoCarga is string && data.tipoCarga.size() > 0 && data.tipoCarga.size() < 100 &&
+             data.peso is number && data.peso > 0 && data.peso < 100000 &&
+             data.origen is string && data.origen.size() > 0 && data.origen.size() < 200 &&
+             data.destino is string && data.destino.size() > 0 && data.destino.size() < 200 &&
+             data.precioPropuesto is number && data.precioPropuesto > 0 && data.precioPropuesto < 1000000 &&
+             data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
+             data.createdAt is number &&
+             (!('descripcion' in data) || (data.descripcion is string && data.descripcion.size() < 1000));
+    }
+
+    function isValidOffer(data) {
+      return hasRequiredFields(['cargoId', 'transportistaId', 'precioOfertado', 'estado', 'createdAt']) &&
+             data.transportistaId == request.auth.uid &&
+             data.cargoId is string &&
+             data.precioOfertado is number && data.precioOfertado > 0 && data.precioOfertado < 1000000 &&
+             data.estado in ['pendiente', 'aceptada', 'rechazada'] &&
+             data.createdAt is number;
+    }
+
+    function isValidTrip(data) {
+      return hasRequiredFields(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'estado', 'createdAt']) &&
+             data.cargoId is string &&
+             data.comercianteId is string &&
+             data.transportistaId is string &&
+             data.origen is string && data.origen.size() < 200 &&
+             data.destino is string && data.destino.size() < 200 &&
+             data.precioFinal is number && data.precioFinal > 0 &&
+             data.estado in ['en_progreso', 'completado', 'cancelado'] &&
+             data.createdAt is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.tipoUsuario == resource.data.tipoUsuario) || isAdmin();
+    }
+
+    match /cargos/{cargoId} {
+      allow read: if isAuthenticated();
+      allow create: if isMerchant() && isValidCargo(request.resource.data);
+      allow update: if (isAuthenticated() && (request.auth.uid == resource.data.comercianteId || isAdmin())) && isValidCargo(request.resource.data);
+      allow delete: if isAdmin();
+
+      match /offers/{offerId} {
+        allow read: if isAuthenticated();
+        allow create: if isCarrier() && isValidOffer(request.resource.data);
+        allow update: if (isAuthenticated() && (request.auth.uid == resource.data.transportistaId || request.auth.uid == get(/databases/$(database)/documents/cargos/$(cargoId)).data.comercianteId || isAdmin())) && isValidOffer(request.resource.data);
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /trips/{tripId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
+      allow create: if isAuthenticated() && isValidTrip(request.resource.data);
+      allow update: if (isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin())) && isValidTrip(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.reviewerId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

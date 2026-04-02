@@ -1,0 +1,5 @@
+{
+  "name": "TransportaYa",
+  "description": "Plataforma de transporte de carga tipo InDrive para el mercado peruano.",
+  "requestFramePermissions": ["geolocation", "camera"]
+}
