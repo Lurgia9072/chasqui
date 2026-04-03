@@ -47,6 +47,8 @@ export const Register = () => {
     register,
     handleSubmit,
     watch,
+    trigger,
+    setValue,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -94,13 +96,40 @@ export const Register = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError('Error al registrar usuario. El email podría estar en uso.');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este correo electrónico ya está registrado.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('El registro con correo/contraseña no está habilitado en Firebase. Por favor, actívalo en la consola.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('La contraseña es muy débil.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('El formato del correo electrónico no es válido.');
+      } else {
+        setError('Error al registrar usuario. Por favor intenta de nuevo.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const nextStep = () => setStep(s => s + 1);
+  const nextStep = async () => {
+    let fieldsToValidate: (keyof RegisterFormValues)[] = [];
+    
+    if (step === 1) {
+      fieldsToValidate = ['tipoUsuario'];
+    } else if (step === 2) {
+      fieldsToValidate = ['nombre', 'email', 'telefono', 'documento', 'password'];
+      if (role === 'comerciante') {
+        fieldsToValidate.push('tipoCuenta');
+      }
+    }
+    
+    const isValid = await trigger(fieldsToValidate);
+    if (isValid) {
+      setStep(s => s + 1);
+    }
+  };
+
   const prevStep = () => setStep(s => s - 1);
 
   return (
@@ -140,7 +169,11 @@ export const Register = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => { setRole('comerciante'); nextStep(); }}
+                  onClick={() => { 
+                    setValue('tipoUsuario', 'comerciante');
+                    setRole('comerciante'); 
+                    nextStep(); 
+                  }}
                   className={cn(
                     "flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition-all text-center",
                     role === 'comerciante' ? "border-blue-600 bg-blue-50" : "border-gray-100 hover:border-blue-200"
@@ -152,7 +185,11 @@ export const Register = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setRole('transportista'); nextStep(); }}
+                  onClick={() => { 
+                    setValue('tipoUsuario', 'transportista');
+                    setRole('transportista'); 
+                    nextStep(); 
+                  }}
                   className={cn(
                     "flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition-all text-center",
                     role === 'transportista' ? "border-blue-600 bg-blue-50" : "border-gray-100 hover:border-blue-200"
@@ -162,7 +199,7 @@ export const Register = () => {
                   <h3 className="font-bold text-lg">Soy Transportista</h3>
                   <p className="text-sm text-gray-500 mt-2">Tengo un vehículo y quiero ofertar por servicios de carga.</p>
                 </button>
-                <input type="hidden" {...register('tipoUsuario')} value={role} />
+                <input type="hidden" {...register('tipoUsuario')} />
               </div>
             )}
 
@@ -179,6 +216,7 @@ export const Register = () => {
                   <Input
                     label="Email"
                     type="email"
+                    autoComplete="email"
                     placeholder="nombre@ejemplo.com"
                     {...register('email')}
                     error={errors.email?.message}
@@ -200,6 +238,7 @@ export const Register = () => {
                   <Input
                     label="Contraseña"
                     type="password"
+                    autoComplete="new-password"
                     placeholder="••••••••"
                     {...register('password')}
                     error={errors.password?.message}
@@ -235,22 +274,26 @@ export const Register = () => {
                         label="Tipo de Vehículo"
                         placeholder="Ej: Camión 5tn, Furgón"
                         {...register('tipoVehiculo')}
+                        error={errors.tipoVehiculo?.message}
                       />
                       <Input
                         label="Placa"
                         placeholder="ABC-123"
                         {...register('placa')}
+                        error={errors.placa?.message}
                       />
                     </div>
                     <Input
                       label="Capacidad de Carga"
                       placeholder="Ej: 5 Toneladas"
                       {...register('capacidad')}
+                      error={errors.capacidad?.message}
                     />
                     <Input
                       label="Zonas de Operación (separadas por coma)"
                       placeholder="Ej: Lima, Arequipa, Trujillo"
                       {...register('zonas')}
+                      error={errors.zonas?.message}
                     />
                     <div className="rounded-lg bg-blue-50 p-4 border border-blue-100">
                       <div className="flex items-start space-x-3">

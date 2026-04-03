@@ -4,8 +4,9 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { auth, db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
+import { OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
@@ -39,7 +40,8 @@ export const PostCargo = () => {
     if (!user) return;
     setIsLoading(true);
     try {
-      await addDoc(collection(db, 'cargas'), {
+      const path = 'cargas';
+      await addDoc(collection(db, path), {
         ...data,
         comercianteId: user.uid,
         comercianteNombre: user.nombre,
@@ -48,7 +50,7 @@ export const PostCargo = () => {
       });
       navigate('/merchant/dashboard');
     } catch (err) {
-      console.error('Error posting cargo:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'cargas');
     } finally {
       setIsLoading(false);
     }

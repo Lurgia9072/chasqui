@@ -118,7 +118,7 @@ service cloud.firestore {
       return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
              data.comercianteId == request.auth.uid &&
              data.tipoCarga is string && data.tipoCarga.size() > 0 && data.tipoCarga.size() < 100 &&
-             data.peso is number && data.peso > 0 && data.peso < 100000 &&
+             data.peso is string && data.peso.size() > 0 && data.peso.size() < 50 &&
              data.origen is string && data.origen.size() > 0 && data.origen.size() < 200 &&
              data.destino is string && data.destino.size() > 0 && data.destino.size() < 200 &&
              data.precioPropuesto is number && data.precioPropuesto > 0 && data.precioPropuesto < 1000000 &&
@@ -158,7 +158,7 @@ service cloud.firestore {
       allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.tipoUsuario == resource.data.tipoUsuario) || isAdmin();
     }
 
-    match /cargos/{cargoId} {
+    match /cargas/{cargoId} {
       allow read: if isAuthenticated();
       allow create: if isMerchant() && isValidCargo(request.resource.data);
       allow update: if (isAuthenticated() && (request.auth.uid == resource.data.comercianteId || isAdmin())) && isValidCargo(request.resource.data);
@@ -167,7 +167,7 @@ service cloud.firestore {
       match /offers/{offerId} {
         allow read: if isAuthenticated();
         allow create: if isCarrier() && isValidOffer(request.resource.data);
-        allow update: if (isAuthenticated() && (request.auth.uid == resource.data.transportistaId || request.auth.uid == get(/databases/$(database)/documents/cargos/$(cargoId)).data.comercianteId || isAdmin())) && isValidOffer(request.resource.data);
+        allow update: if (isAuthenticated() && (request.auth.uid == resource.data.transportistaId || request.auth.uid == get(/databases/$(database)/documents/cargas/$(cargoId)).data.comercianteId || isAdmin())) && isValidOffer(request.resource.data);
         allow delete: if isAdmin();
       }
     }

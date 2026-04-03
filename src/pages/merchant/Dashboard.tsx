@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { auth, db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo } from '../../types';
+import { Cargo, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
 import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle } from 'lucide-react';
@@ -30,7 +30,7 @@ export const MerchantDashboard = () => {
       setCargas(docs);
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching cargas:", error);
+      handleFirestoreError(error, OperationType.LIST, 'cargas');
       setLoading(false);
     });
 

@@ -55,7 +55,15 @@ export const Login = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError('Credenciales incorrectas o error de conexión.');
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Credenciales incorrectas. Verifica tu correo y contraseña.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Demasiados intentos fallidos. Tu cuenta ha sido bloqueada temporalmente.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('Esta cuenta de usuario ha sido desactivada.');
+      } else {
+        setError('Error al iniciar sesión. Por favor intenta de nuevo.');
+      }
     } finally {
       setIsLoading(false);
     }
