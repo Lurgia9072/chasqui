@@ -69,6 +69,18 @@ export interface Trip {
     lng: number;
     updatedAt: number;
   };
+  tiempoEstimado?: string;
+  createdAt: number;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  titulo: string;
+  mensaje: string;
+  tipo: 'oferta_nueva' | 'oferta_aceptada' | 'oferta_rechazada' | 'viaje_actualizado';
+  leido: boolean;
+  link?: string;
   createdAt: number;
 }
 

@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { Truck, LogOut, User, Package, History } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import { NotificationBell } from './NotificationBell';
 
 export const Navbar = () => {
   const { user, setUser } = useAuthStore();
@@ -45,6 +46,7 @@ export const Navbar = () => {
                 <History className="h-4 w-4" />
                 <span className="hidden sm:inline">Historial</span>
               </Link>
+              <NotificationBell />
               <div className="flex items-center space-x-2 border-l border-gray-200 pl-4">
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-semibold text-gray-900">{user.nombre}</span>

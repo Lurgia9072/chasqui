@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Trip, Cargo } from '../types';
+import { Trip, Cargo, OperationType } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star } from 'lucide-react';
@@ -41,7 +41,7 @@ export const TripDetails = () => {
   useEffect(() => {
     if (!id || !user) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'viajes', id), async (snapshot) => {
+    const unsubscribe = onSnapshot(doc(db, 'trips', id), async (snapshot) => {
       if (snapshot.exists()) {
         const tripData = { id: snapshot.id, ...snapshot.data() } as Trip;
         setTrip(tripData);
@@ -53,6 +53,9 @@ export const TripDetails = () => {
           }
         }
       }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `trips/${id}`);
       setLoading(false);
     });
 
@@ -66,7 +69,7 @@ export const TripDetails = () => {
         const newLat = (trip.seguimiento?.lat || center.lat) + (Math.random() - 0.5) * 0.001;
         const newLng = (trip.seguimiento?.lng || center.lng) + (Math.random() - 0.5) * 0.001;
         
-        await updateDoc(doc(db, 'viajes', trip.id), {
+        await updateDoc(doc(db, 'trips', trip.id), {
           seguimiento: { lat: newLat, lng: newLng, updatedAt: Date.now() }
         });
       }, 5000);
@@ -79,11 +82,11 @@ export const TripDetails = () => {
     if (!trip) return;
     setIsCompleting(true);
     try {
-      await updateDoc(doc(db, 'viajes', trip.id), {
+      await updateDoc(doc(db, 'trips', trip.id), {
         estado: 'completado',
       });
     } catch (err) {
-      console.error('Error completing trip:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
       setIsCompleting(false);
     }
@@ -130,7 +133,12 @@ export const TripDetails = () => {
                 <Navigation className="h-5 w-5 animate-pulse" />
                 <span className="font-bold">Ubicación en Tiempo Real</span>
               </div>
-              <span className="text-xs font-medium opacity-80">Actualizado hace unos segundos</span>
+              <div className="flex flex-col items-end">
+                <span className="text-xs font-medium opacity-80">Actualizado hace unos segundos</span>
+                {trip.tiempoEstimado && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Llega en: {trip.tiempoEstimado}</span>
+                )}
+              </div>
             </div>
             <div className="p-0">
               {isLoaded ? (

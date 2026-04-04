@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { doc, getDoc, collection, addDoc, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo, Offer } from '../../types';
+import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
@@ -48,10 +48,29 @@ export const CarrierCargoDetails = () => {
       if (!snapshot.empty) {
         setMyOffer({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Offer);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `cargas/${id}/offers`);
     });
 
     return () => unsubscribe();
   }, [id, user]);
+
+  const handleGoToTrip = async () => {
+    if (!id || !user) return;
+    try {
+      const q = query(
+        collection(db, 'trips'),
+        where('cargoId', '==', id),
+        where('transportistaId', '==', user.uid)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        navigate(`/trip/${snapshot.docs[0].id}`);
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, 'trips');
+    }
+  };
 
   const handleMakeOffer = async () => {
     if (!carga || !user || !id) return;
@@ -66,9 +85,19 @@ export const CarrierCargoDetails = () => {
         estado: 'pendiente',
         createdAt: Date.now(),
       });
-      // Notificar al comerciante (en un app real usaríamos Cloud Functions)
+      
+      // Notificar al comerciante
+      await addDoc(collection(db, 'notifications'), {
+        userId: carga.comercianteId,
+        titulo: 'Nueva Oferta Recibida',
+        mensaje: `${user.nombre} ha enviado una oferta de S/ ${offerPrice} para tu carga de ${carga.tipoCarga}.`,
+        tipo: 'oferta_nueva',
+        leido: false,
+        link: `/merchant/cargo/${id}`,
+        createdAt: Date.now(),
+      });
     } catch (err) {
-      console.error('Error making offer:', err);
+      handleFirestoreError(err, OperationType.CREATE, `cargas/${id}/offers`);
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +195,15 @@ export const CarrierCargoDetails = () => {
                    myOffer.estado === 'aceptada' ? <ShieldCheck className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
                   <span>{myOffer.estado}</span>
                 </div>
+
+                {myOffer.estado === 'aceptada' && (
+                  <Button 
+                    className="w-full bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100"
+                    onClick={handleGoToTrip}
+                  >
+                    Ir al Viaje
+                  </Button>
+                )}
               </CardContent>
               <CardFooter>
                 <p className="text-xs text-center text-gray-500 w-full">

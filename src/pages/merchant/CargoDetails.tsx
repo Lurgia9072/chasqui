@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, onSnapshot, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo, Offer, Trip } from '../../types';
+import { Cargo, Offer, Trip, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
 import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight } from 'lucide-react';
@@ -39,6 +39,8 @@ export const MerchantCargoDetails = () => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
       setOffers(docs.sort((a, b) => a.precioOfertado - b.precioOfertado));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `cargas/${id}/offers`);
     });
 
     return () => unsubscribe();
@@ -59,10 +61,11 @@ export const MerchantCargoDetails = () => {
         comision: offer.precioOfertado * 0.1,
         estado: 'en_progreso',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
+        tiempoEstimado: '2 horas', // Mocked estimation
         createdAt: Date.now(),
       };
       
-      const tripRef = await addDoc(collection(db, 'viajes'), tripData);
+      const tripRef = await addDoc(collection(db, 'trips'), tripData);
       
       // 2. Actualizar estado de la carga
       await updateDoc(doc(db, 'cargas', id), {
@@ -74,10 +77,21 @@ export const MerchantCargoDetails = () => {
         estado: 'aceptada',
       });
 
-      // 4. Navegar al viaje
+      // 4. Crear notificación para el transportista
+      await addDoc(collection(db, 'notifications'), {
+        userId: offer.transportistaId,
+        titulo: '¡Oferta Aceptada!',
+        mensaje: `Tu oferta para la carga "${carga.tipoCarga}" ha sido aceptada. El viaje ya está en curso.`,
+        tipo: 'oferta_aceptada',
+        leido: false,
+        link: `/trip/${tripRef.id}`,
+        createdAt: Date.now(),
+      });
+
+      // 5. Navegar al viaje
       navigate(`/trip/${tripRef.id}`);
     } catch (err) {
-      console.error('Error accepting offer:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'trips');
     } finally {
       setIsAccepting(null);
     }
