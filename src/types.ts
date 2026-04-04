@@ -57,7 +57,9 @@ export interface Offer {
 export interface Trip {
   id: string;
   cargoId: string;
+  cargoTipo?: string;
   comercianteId: string;
+  comercianteNombre?: string;
   transportistaId: string;
   origen: string;
   destino: string;

@@ -53,7 +53,9 @@ export const MerchantCargoDetails = () => {
       // 1. Crear el viaje
       const tripData: Omit<Trip, 'id'> = {
         cargoId: id,
+        cargoTipo: carga.tipoCarga,
         comercianteId: user!.uid,
+        comercianteNombre: user!.nombre,
         transportistaId: offer.transportistaId,
         transportistaNombre: offer.transportistaNombre,
         vehiculo: { tipo: 'Camión de Carga', placa: 'V3R-982' }, // Mocked for now

@@ -11,6 +11,7 @@ import { PostCargo } from './pages/merchant/PostCargo';
 import { MerchantCargoDetails } from './pages/merchant/CargoDetails';
 import { CarrierCargoDetails } from './pages/carrier/CargoDetails';
 import { TripDetails } from './pages/TripDetails';
+import { History } from './pages/History';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
 
@@ -45,7 +46,7 @@ export default function App() {
                 {/* Shared Protected Routes */}
                 <Route element={<ProtectedRoute />}>
                   <Route path="/trip/:id" element={<TripDetails />} />
-                  <Route path="/history" element={<div className="p-20 text-center text-gray-500">Historial en desarrollo...</div>} />
+                  <Route path="/history" element={<History />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,3 +1,4 @@
+import React from 'react';
 import { MapPin, Package, Calendar, ArrowRight, User, Truck, CheckCircle, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Card, CardContent, CardFooter } from './Card';
@@ -18,7 +19,7 @@ interface TripCardProps {
   isMerchant?: boolean;
 }
 
-export const TripCard = ({ trip, cargoName, partnerName, onClick, className, isMerchant = false }: TripCardProps) => {
+export const TripCard: React.FC<TripCardProps> = ({ trip, cargoName, partnerName, onClick, className, isMerchant = false }) => {
   return (
     <Card
       onClick={onClick}
