@@ -5,7 +5,7 @@ type StatusType =
   | 'pendiente' | 'verificado' | 'rechazado' 
   | 'disponible' | 'en_negociacion' | 'asignado' | 'completado'
   | 'en_progreso' | 'cancelado'
-  | 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino';
+  | 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino' | 'entregado_pendiente_confirmacion';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -26,6 +26,7 @@ export const StatusBadge = ({ status, className }: StatusBadgeProps) => {
     en_camino_a_recojo: { label: 'Camino al Recojo', variant: 'warning' },
     recojo_completado: { label: 'Carga Recogida', variant: 'success' },
     en_camino_a_destino: { label: 'En Tránsito', variant: 'success' },
+    entregado_pendiente_confirmacion: { label: 'Entregado (Confirmar)', variant: 'warning' },
   };
 
   const { label, variant } = config[status] || { label: status, variant: 'default' };

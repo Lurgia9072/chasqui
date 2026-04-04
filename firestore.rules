@@ -149,7 +149,7 @@ service cloud.firestore {
              data.origen is string && data.origen.size() < 200 &&
              data.destino is string && data.destino.size() < 200 &&
              data.precioFinal is number && data.precioFinal > 0 &&
-             data.estado in ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado', 'cancelado'] &&
+             data.estado in ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
              data.createdAt is number;
     }
 

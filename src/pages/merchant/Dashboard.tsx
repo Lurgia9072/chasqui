@@ -39,7 +39,7 @@ export const MerchantDashboard = () => {
     const qTrips = query(
       collection(db, 'trips'),
       where('comercianteId', '==', user.uid),
-      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino']),
+      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion']),
       orderBy('createdAt', 'desc')
     );
 

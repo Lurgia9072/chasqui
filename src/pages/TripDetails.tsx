@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
@@ -80,23 +80,50 @@ export const TripDetails = () => {
   }, [trip?.estado, trip?.id, trip?.seguimiento, user?.tipoUsuario]);
 
   const updateTripStatus = async (newStatus: TripStatus) => {
-    if (!trip) return;
+    if (!trip || !carga) return;
     setIsUpdating(true);
     try {
       const updates: any = { estado: newStatus };
+      let notificationTitle = '';
+      let notificationMessage = '';
       
       // Actualizar tiempo estimado según el estado
       if (newStatus === 'recojo_completado') {
         updates.tiempoEstimado = 'En camino al destino';
+        notificationTitle = 'Carga Recogida';
+        notificationMessage = `El transportista ha recogido tu carga de ${carga.tipoCarga} y está en camino al destino.`;
       } else if (newStatus === 'en_camino_a_destino') {
         updates.tiempoEstimado = '1h 30min para la entrega';
+        notificationTitle = 'En Tránsito';
+        notificationMessage = `Tu carga de ${carga.tipoCarga} está en camino al destino final.`;
+      } else if (newStatus === 'entregado_pendiente_confirmacion') {
+        updates.tiempoEstimado = 'Esperando confirmación';
+        notificationTitle = 'Carga Entregada';
+        notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.tipoCarga}. Por favor, confirma la recepción.`;
       } else if (newStatus === 'completado') {
-        updates.tiempoEstimado = 'Entregado';
+        updates.tiempoEstimado = 'Viaje Finalizado';
+        notificationTitle = 'Viaje Completado';
+        notificationMessage = `El comerciante ha confirmado la recepción de la carga. ¡Buen trabajo!`;
+        
+        // También actualizar el estado de la carga original
+        await updateDoc(doc(db, 'cargas', trip.cargoId), { estado: 'completado' });
       }
 
-      await updateDoc(doc(db, 'trips', trip.id), {
-        ...updates
-      });
+      await updateDoc(doc(db, 'trips', trip.id), updates);
+
+      // Enviar notificación al otro usuario
+      const recipientId = isCarrier ? trip.comercianteId : trip.transportistaId;
+      if (notificationTitle) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: recipientId,
+          titulo: notificationTitle,
+          mensaje: notificationMessage,
+          tipo: 'viaje_actualizado',
+          leido: false,
+          link: `/trip/${trip.id}`,
+          createdAt: Date.now(),
+        });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
@@ -114,6 +141,7 @@ export const TripDetails = () => {
       case 'en_camino_a_recojo': return 'En camino al recojo';
       case 'recojo_completado': return 'Carga Recogida';
       case 'en_camino_a_destino': return 'En camino al destino';
+      case 'entregado_pendiente_confirmacion': return 'Entregado (Pendiente Confirmación)';
       case 'completado': return 'Completado';
       case 'cancelado': return 'Cancelado';
       default: return status;
@@ -257,9 +285,11 @@ export const TripDetails = () => {
                   { id: 'en_camino_a_recojo', label: 'Camino al Recojo', desc: 'El transportista se dirige al origen.' },
                   { id: 'recojo_completado', label: 'Carga Recogida', desc: 'La mercadería ha sido cargada en el vehículo.' },
                   { id: 'en_camino_a_destino', label: 'En Tránsito', desc: 'La carga está en camino al destino final.' },
-                  { id: 'completado', label: 'Entregado', desc: 'El viaje ha finalizado con éxito.' }
+                  { id: 'entregado_pendiente_confirmacion', label: 'Entregado', desc: 'El transportista ha llegado al destino.' },
+                  { id: 'completado', label: 'Finalizado', desc: 'El comerciante confirmó la recepción.' }
                 ].map((step, idx) => {
-                  const isPast = idx < ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado'].indexOf(trip.estado);
+                  const stepsOrder = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
+                  const isPast = stepsOrder.indexOf(trip.estado) > idx;
                   const isCurrent = step.id === trip.estado;
                   
                   return (
@@ -345,13 +375,41 @@ export const TripDetails = () => {
                   {trip.estado === 'en_camino_a_destino' && (
                     <Button 
                       className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
-                      onClick={() => updateTripStatus('completado')}
+                      onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
                       isLoading={isUpdating}
                     >
                       <CheckCircle className="h-5 w-5 mr-2" />
                       Confirmar Entrega
                     </Button>
                   )}
+
+                  {trip.estado === 'entregado_pendiente_confirmacion' && (
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start space-x-3">
+                      <Clock className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                      <p className="text-sm text-blue-800">
+                        Has marcado la carga como entregada. Esperando que el comerciante confirme la recepción para finalizar el servicio.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!isCarrier && trip.estado === 'entregado_pendiente_confirmacion' && (
+                <div className="space-y-4">
+                  <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+                    <p className="text-sm text-yellow-800 font-medium">
+                      El transportista ha marcado la carga como entregada. Por favor, verifica que todo esté correcto y confirma la recepción.
+                    </p>
+                  </div>
+                  <Button 
+                    className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
+                    onClick={() => updateTripStatus('completado')}
+                    isLoading={isUpdating}
+                  >
+                    <ShieldCheck className="h-5 w-5 mr-2" />
+                    Confirmar Recepción de Carga
+                  </Button>
                 </div>
               )}
 
