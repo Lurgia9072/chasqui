@@ -1,28 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { collection, query, where, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo } from '../../types';
+import { Cargo, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
   const [cargas, setCargas] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [files, setFiles] = useState<{ [key: string]: File | null }>({
+    dni: null,
+    licencia: null,
+    tarjetaPropiedad: null
+  });
 
   const fetchCargas = () => {
     if (!user) return;
     setRefreshing(true);
 
-    // En un MVP real, filtraríamos por zonasOperacion del transportista
-    // Para este demo, mostramos todas las abiertas
     const q = query(
       collection(db, 'cargas'),
       where('estado', '==', 'disponible'),
@@ -35,7 +41,7 @@ export const CarrierDashboard = () => {
       setLoading(false);
       setRefreshing(false);
     }, (error) => {
-      console.error("Error fetching cargas:", error);
+      handleFirestoreError(error, OperationType.LIST, 'cargas');
       setLoading(false);
       setRefreshing(false);
     });
@@ -47,6 +53,44 @@ export const CarrierDashboard = () => {
     const unsubscribe = fetchCargas();
     return () => unsubscribe?.();
   }, [user]);
+
+  const handleFileChange = (type: string, e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFiles(prev => ({ ...prev, [type]: e.target.files![0] }));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      // En un entorno real, subiríamos a Firebase Storage
+      // Para este demo, simulamos la subida y actualizamos el estado a 'verificado'
+      // para que el usuario pueda probar la app inmediatamente.
+      const userRef = doc(db, 'users', user.uid);
+      const updatedData = {
+        verificado: 'verificado' as const,
+        documentosUrls: {
+          dni: 'https://placeholder.com/dni.jpg',
+          licencia: 'https://placeholder.com/licencia.jpg',
+          tarjetaPropiedad: 'https://placeholder.com/tarjeta.jpg'
+        }
+      };
+      await updateDoc(userRef, updatedData);
+      
+      // Actualizar el estado local para que la UI reaccione inmediatamente
+      useAuthStore.getState().setUser({
+        ...user,
+        ...updatedData
+      });
+      
+      setShowUploadModal(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (user?.verificado !== 'verificado') {
     return (
@@ -62,13 +106,92 @@ export const CarrierDashboard = () => {
           <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-left">
             <h3 className="font-bold text-blue-900 mb-2">Pasos pendientes:</h3>
             <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-center"><div className="h-1.5 w-1.5 rounded-full bg-blue-600 mr-2" /> Subir foto de DNI</li>
-              <li className="flex items-center"><div className="h-1.5 w-1.5 rounded-full bg-blue-600 mr-2" /> Subir Licencia de Conducir</li>
-              <li className="flex items-center"><div className="h-1.5 w-1.5 rounded-full bg-blue-600 mr-2" /> Subir Tarjeta de Propiedad</li>
+              <li className="flex items-center">
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.dni ? "bg-green-500" : "bg-blue-600")} /> 
+                Subir foto de DNI {files.dni && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+              </li>
+              <li className="flex items-center">
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.licencia ? "bg-green-500" : "bg-blue-600")} /> 
+                Subir Licencia de Conducir {files.licencia && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+              </li>
+              <li className="flex items-center">
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.tarjetaPropiedad ? "bg-green-500" : "bg-blue-600")} /> 
+                Subir Tarjeta de Propiedad {files.tarjetaPropiedad && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+              </li>
             </ul>
           </div>
-          <Button variant="outline">Subir Documentos Ahora</Button>
+          <Button variant="outline" onClick={() => setShowUploadModal(true)}>Subir Documentos Ahora</Button>
         </div>
+
+        <AnimatePresence>
+          {showUploadModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+              >
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                  <h2 className="text-xl font-bold text-gray-900">Subir Documentos</h2>
+                  <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                  <div className="space-y-4">
+                    {['dni', 'licencia', 'tarjetaPropiedad'].map((type) => (
+                      <div key={type} className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700 capitalize">
+                          {type === 'tarjetaPropiedad' ? 'Tarjeta de Propiedad' : type.toUpperCase()}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            onChange={(e) => handleFileChange(type, e)}
+                            className="hidden"
+                            id={`file-${type}`}
+                            accept="image/*"
+                          />
+                          <label
+                            htmlFor={`file-${type}`}
+                            className={cn(
+                              "flex items-center justify-between p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                              files[type] ? "border-green-200 bg-green-50" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                            )}
+                          >
+                            <div className="flex items-center">
+                              <Upload className={cn("h-5 w-5 mr-3", files[type] ? "text-green-600" : "text-gray-400")} />
+                              <span className="text-sm text-gray-600 truncate max-w-[200px]">
+                                {files[type] ? files[type]!.name : "Seleccionar archivo..."}
+                              </span>
+                            </div>
+                            {files[type] && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-4">
+                    <Button 
+                      className="w-full h-12 text-lg shadow-lg shadow-blue-200"
+                      onClick={handleUpload}
+                      disabled={!files.dni || !files.licencia || !files.tarjetaPropiedad || uploading}
+                      isLoading={uploading}
+                    >
+                      {uploading ? "Subiendo..." : "Enviar para Verificación"}
+                    </Button>
+                    <p className="text-center text-xs text-gray-400 mt-4">
+                      Tus datos están protegidos y solo serán usados para la verificación de tu cuenta.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
