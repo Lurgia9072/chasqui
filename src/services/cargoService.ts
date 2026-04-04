@@ -24,16 +24,18 @@ export const cargoService = {
       cargoId: cargoId,
       comercianteId: merchantId,
       transportistaId: offer.transportistaId,
+      transportistaNombre: offer.transportistaNombre,
       origen,
       destino,
       precioFinal: offer.precioOfertado,
       comision: offer.precioOfertado * 0.1,
-      estado: 'en_progreso',
+      estado: 'en_camino_a_recojo',
       seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() },
+      tiempoEstimado: '45 min para el recojo',
       createdAt: Date.now(),
     };
 
-    const tripRef = await addDoc(collection(db, 'viajes'), tripData);
+    const tripRef = await addDoc(collection(db, 'trips'), tripData);
     await updateDoc(doc(db, 'cargas', cargoId), { estado: 'asignado' });
     await updateDoc(doc(db, 'cargas', cargoId, 'offers', offer.id), { estado: 'aceptada' });
     
@@ -41,6 +43,6 @@ export const cargoService = {
   },
 
   async completeTrip(tripId: string) {
-    return updateDoc(doc(db, 'viajes', tripId), { estado: 'completado' });
+    return updateDoc(doc(db, 'trips', tripId), { estado: 'completado' });
   }
 };

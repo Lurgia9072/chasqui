@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Trip, Cargo, OperationType } from '../types';
+import { Trip, Cargo, OperationType, TripStatus } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
@@ -31,7 +31,7 @@ export const TripDetails = () => {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isCompleting, setIsCompleting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -64,7 +64,8 @@ export const TripDetails = () => {
 
   // Simulación de movimiento del transportista
   useEffect(() => {
-    if (trip?.estado === 'en_progreso' && user?.tipoUsuario === 'transportista') {
+    const activeStatuses: TripStatus[] = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino'];
+    if (trip && activeStatuses.includes(trip.estado) && user?.tipoUsuario === 'transportista') {
       const interval = setInterval(async () => {
         const newLat = (trip.seguimiento?.lat || center.lat) + (Math.random() - 0.5) * 0.001;
         const newLng = (trip.seguimiento?.lng || center.lng) + (Math.random() - 0.5) * 0.001;
@@ -78,17 +79,28 @@ export const TripDetails = () => {
     }
   }, [trip?.estado, trip?.id, trip?.seguimiento, user?.tipoUsuario]);
 
-  const handleCompleteTrip = async () => {
+  const updateTripStatus = async (newStatus: TripStatus) => {
     if (!trip) return;
-    setIsCompleting(true);
+    setIsUpdating(true);
     try {
+      const updates: any = { estado: newStatus };
+      
+      // Actualizar tiempo estimado según el estado
+      if (newStatus === 'recojo_completado') {
+        updates.tiempoEstimado = 'En camino al destino';
+      } else if (newStatus === 'en_camino_a_destino') {
+        updates.tiempoEstimado = '1h 30min para la entrega';
+      } else if (newStatus === 'completado') {
+        updates.tiempoEstimado = 'Entregado';
+      }
+
       await updateDoc(doc(db, 'trips', trip.id), {
-        estado: 'completado',
+        ...updates
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
-      setIsCompleting(false);
+      setIsUpdating(false);
     }
   };
 
@@ -97,17 +109,28 @@ export const TripDetails = () => {
 
   const isCarrier = user?.tipoUsuario === 'transportista';
 
+  const getStatusLabel = (status: TripStatus) => {
+    switch (status) {
+      case 'en_camino_a_recojo': return 'En camino al recojo';
+      case 'recojo_completado': return 'Carga Recogida';
+      case 'en_camino_a_destino': return 'En camino al destino';
+      case 'completado': return 'Completado';
+      case 'cancelado': return 'Cancelado';
+      default: return status;
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <h1 className="text-3xl font-bold text-gray-900">Viaje en Curso</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Seguimiento de Viaje</h1>
             <span className={cn(
               "text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider",
-              trip.estado === 'en_progreso' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+              trip.estado === 'completado' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
             )}>
-              {trip.estado}
+              {getStatusLabel(trip.estado)}
             </span>
           </div>
           <p className="text-gray-600">ID de Viaje: {trip.id}</p>
@@ -131,12 +154,14 @@ export const TripDetails = () => {
             <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <Navigation className="h-5 w-5 animate-pulse" />
-                <span className="font-bold">Ubicación en Tiempo Real</span>
+                <span className="font-bold">
+                  {trip.estado === 'en_camino_a_recojo' ? 'Camino al punto de recojo' : 'Camino al punto de entrega'}
+                </span>
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-xs font-medium opacity-80">Actualizado hace unos segundos</span>
                 {trip.tiempoEstimado && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Llega en: {trip.tiempoEstimado}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">{trip.tiempoEstimado}</span>
                 )}
               </div>
             </div>
@@ -161,20 +186,32 @@ export const TripDetails = () => {
           </Card>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-gray-500">Origen</CardTitle>
+            <Card className={cn(trip.estado === 'en_camino_a_recojo' && "ring-2 ring-blue-500")}>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-gray-500">Punto de Recojo</CardTitle>
+                {trip.estado === 'en_camino_a_recojo' && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">ACTUAL</span>}
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <div className="flex items-start space-x-3">
                   <MapPin className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
                   <p className="text-gray-900 font-medium">{carga.origen}</p>
                 </div>
+                <div className="flex items-center space-x-4 pt-2 border-t border-gray-50">
+                  <div className="flex items-center text-xs text-gray-500">
+                    <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                    {trip.fechaRecojo || 'Hoy'}
+                  </div>
+                  <div className="flex items-center text-xs text-gray-500">
+                    <Clock className="h-3.5 w-3.5 mr-1.5" />
+                    {trip.horaRecojo || '14:30'}
+                  </div>
+                </div>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold uppercase tracking-wider text-gray-500">Destino</CardTitle>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-gray-500">Punto de Entrega</CardTitle>
+                {trip.estado === 'en_camino_a_destino' && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">ACTUAL</span>}
               </CardHeader>
               <CardContent>
                 <div className="flex items-start space-x-3">
@@ -184,6 +221,65 @@ export const TripDetails = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Instrucciones de Carga/Descarga */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <Card className="bg-gray-50/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Instrucciones de Recojo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 italic">
+                  "Presentarse en la puerta 4 con el documento de identidad. Preguntar por el encargado de almacén."
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="bg-gray-50/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Instrucciones de Entrega</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 italic">
+                  "Entregar guía de remisión firmada. El horario de descarga es hasta las 6:00 PM."
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Línea de tiempo del viaje */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Línea de Tiempo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-blue-500 before:via-gray-200 before:to-gray-200">
+                {[
+                  { id: 'en_camino_a_recojo', label: 'Camino al Recojo', desc: 'El transportista se dirige al origen.' },
+                  { id: 'recojo_completado', label: 'Carga Recogida', desc: 'La mercadería ha sido cargada en el vehículo.' },
+                  { id: 'en_camino_a_destino', label: 'En Tránsito', desc: 'La carga está en camino al destino final.' },
+                  { id: 'completado', label: 'Entregado', desc: 'El viaje ha finalizado con éxito.' }
+                ].map((step, idx) => {
+                  const isPast = idx < ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado'].indexOf(trip.estado);
+                  const isCurrent = step.id === trip.estado;
+                  
+                  return (
+                    <div key={step.id} className="relative flex items-center justify-between md:justify-start md:space-x-10">
+                      <div className={cn(
+                        "flex items-center justify-center w-10 h-10 rounded-full border-4 border-white shadow-sm z-10",
+                        isPast ? "bg-green-500" : isCurrent ? "bg-blue-600 animate-pulse" : "bg-gray-200"
+                      )}>
+                        {isPast ? <CheckCircle className="h-5 w-5 text-white" /> : <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 ml-4">
+                        <h4 className={cn("text-sm font-bold", isCurrent ? "text-blue-600" : "text-gray-900")}>{step.label}</h4>
+                        <p className="text-xs text-gray-500">{step.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Detalles del Servicio y Pago */}
@@ -222,15 +318,41 @@ export const TripDetails = () => {
                 </div>
               </div>
 
-              {trip.estado === 'en_progreso' && isCarrier && (
-                <Button 
-                  className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
-                  onClick={handleCompleteTrip}
-                  isLoading={isCompleting}
-                >
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  Finalizar Viaje
-                </Button>
+              {isCarrier && trip.estado !== 'completado' && (
+                <div className="space-y-3">
+                  {trip.estado === 'en_camino_a_recojo' && (
+                    <Button 
+                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                      onClick={() => updateTripStatus('recojo_completado')}
+                      isLoading={isUpdating}
+                    >
+                      <Package className="h-5 w-5 mr-2" />
+                      Confirmar Recojo
+                    </Button>
+                  )}
+                  
+                  {trip.estado === 'recojo_completado' && (
+                    <Button 
+                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                      onClick={() => updateTripStatus('en_camino_a_destino')}
+                      isLoading={isUpdating}
+                    >
+                      <Navigation className="h-5 w-5 mr-2" />
+                      Iniciar Ruta a Destino
+                    </Button>
+                  )}
+
+                  {trip.estado === 'en_camino_a_destino' && (
+                    <Button 
+                      className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
+                      onClick={() => updateTripStatus('completado')}
+                      isLoading={isUpdating}
+                    >
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      Confirmar Entrega
+                    </Button>
+                  )}
+                </div>
               )}
 
               {trip.estado === 'completado' && (
@@ -257,9 +379,9 @@ export const TripDetails = () => {
                 <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center">
                   <User className="h-6 w-6 text-gray-400" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="font-bold text-gray-900">
-                    {isCarrier ? carga.comercianteNombre : 'Transportista Asignado'}
+                    {isCarrier ? carga.comercianteNombre : (trip.transportistaNombre || 'Transportista Asignado')}
                   </p>
                   <div className="flex items-center text-yellow-500">
                     <Star className="h-3 w-3 fill-current" />
@@ -267,6 +389,19 @@ export const TripDetails = () => {
                   </div>
                 </div>
               </div>
+              
+              {!isCarrier && trip.vehiculo && (
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                  <p className="text-[10px] uppercase font-bold text-gray-400">Vehículo Asignado</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Truck className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-900">{trip.vehiculo.tipo}</span>
+                    </div>
+                    <span className="text-sm font-bold bg-gray-100 px-2 py-0.5 rounded uppercase">{trip.vehiculo.placa}</span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

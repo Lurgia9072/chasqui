@@ -47,11 +47,16 @@ service cloud.firestore {
     //   - cargoId: string (required)
     //   - comercianteId: string (required)
     //   - transportistaId: string (required)
+    //   - transportistaNombre: string (optional)
+    //   - vehiculo: map (optional)
     //   - origen: string (required)
     //   - destino: string (required)
     //   - precioFinal: number (required)
-    //   - estado: string (required, enum: ['en_progreso', 'completado', 'cancelado'])
+    //   - estado: string (required, enum: ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado', 'cancelado'])
     //   - seguimiento: map (optional)
+    //   - tiempoEstimado: string (optional)
+    //   - fechaRecojo: string (optional)
+    //   - horaRecojo: string (optional)
     //   - createdAt: number (required)
     //
     // ===============================================================
@@ -144,7 +149,7 @@ service cloud.firestore {
              data.origen is string && data.origen.size() < 200 &&
              data.destino is string && data.destino.size() < 200 &&
              data.precioFinal is number && data.precioFinal > 0 &&
-             data.estado in ['en_progreso', 'completado', 'cancelado'] &&
+             data.estado in ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado', 'cancelado'] &&
              data.createdAt is number;
     }
 

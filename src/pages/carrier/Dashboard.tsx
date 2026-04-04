@@ -1,12 +1,12 @@
 import { useState, useEffect, ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo, OperationType } from '../../types';
+import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2 } from 'lucide-react';
+import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2, Navigation } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -15,10 +15,13 @@ import { motion, AnimatePresence } from 'motion/react';
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
   const [cargas, setCargas] = useState<Cargo[]>([]);
+  const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTrips, setLoadingTrips] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [indexError, setIndexError] = useState<string | null>(null);
   const [files, setFiles] = useState<{ [key: string]: File | null }>({
     dni: null,
     licencia: null,
@@ -26,8 +29,12 @@ export const CarrierDashboard = () => {
   });
 
   const fetchCargas = () => {
-    if (!user) return;
+    if (!user || user.verificado !== 'verificado') {
+      setLoading(false);
+      return;
+    }
     setRefreshing(true);
+    setIndexError(null);
 
     const q = query(
       collection(db, 'cargas'),
@@ -40,7 +47,10 @@ export const CarrierDashboard = () => {
       setCargas(docs);
       setLoading(false);
       setRefreshing(false);
-    }, (error) => {
+    }, (error: any) => {
+      if (error.message?.includes('index')) {
+        setIndexError(error.message);
+      }
       handleFirestoreError(error, OperationType.LIST, 'cargas');
       setLoading(false);
       setRefreshing(false);
@@ -49,10 +59,39 @@ export const CarrierDashboard = () => {
     return unsubscribe;
   };
 
+  const fetchActiveTrips = () => {
+    if (!user || user.verificado !== 'verificado') {
+      setLoadingTrips(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'trips'),
+      where('transportistaId', '==', user.uid),
+      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino']),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      setActiveTrips(docs);
+      setLoadingTrips(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'trips');
+      setLoadingTrips(false);
+    });
+
+    return unsubscribe;
+  };
+
   useEffect(() => {
-    const unsubscribe = fetchCargas();
-    return () => unsubscribe?.();
-  }, [user]);
+    const unsubscribeCargas = fetchCargas();
+    const unsubscribeTrips = fetchActiveTrips();
+    return () => {
+      unsubscribeCargas?.();
+      unsubscribeTrips?.();
+    };
+  }, [user?.uid, user?.verificado]);
 
   const handleFileChange = (type: string, e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -64,12 +103,9 @@ export const CarrierDashboard = () => {
     if (!user) return;
     setUploading(true);
     try {
-      // En un entorno real, subiríamos a Firebase Storage
-      // Para este demo, simulamos la subida y actualizamos el estado a 'verificado'
-      // para que el usuario pueda probar la app inmediatamente.
       const userRef = doc(db, 'users', user.uid);
       const updatedData = {
-        verificado: 'verificado' as const,
+        verificado: 'pendiente' as const,
         documentosUrls: {
           dni: 'https://placeholder.com/dni.jpg',
           licencia: 'https://placeholder.com/licencia.jpg',
@@ -78,7 +114,6 @@ export const CarrierDashboard = () => {
       };
       await updateDoc(userRef, updatedData);
       
-      // Actualizar el estado local para que la UI reaccione inmediatamente
       useAuthStore.getState().setUser({
         ...user,
         ...updatedData
@@ -92,6 +127,20 @@ export const CarrierDashboard = () => {
     }
   };
 
+  const handleAdminApprove = async () => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { verificado: 'verificado' });
+      useAuthStore.getState().setUser({ ...user, verificado: 'verificado' });
+    } catch (error) {
+      console.error("Error approving:", error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (user?.verificado !== 'verificado') {
     return (
       <div className="max-w-3xl mx-auto px-4 py-20 text-center space-y-8">
@@ -99,28 +148,50 @@ export const CarrierDashboard = () => {
           <ShieldCheck className="h-10 w-10 text-yellow-600" />
         </div>
         <div className="space-y-4">
-          <h1 className="text-3xl font-bold text-gray-900">Cuenta en Verificación</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {user?.verificado === 'pendiente' ? "Documentos en Revisión" : "Cuenta en Verificación"}
+          </h1>
           <p className="text-lg text-gray-600">
-            Tu cuenta está siendo revisada por nuestro equipo. Una vez verificado, podrás empezar a ofertar por cargas.
+            {user?.verificado === 'pendiente' 
+              ? "Hemos recibido tus documentos. Nuestro equipo los validará en un plazo máximo de 24 horas."
+              : "Tu cuenta está siendo revisada por nuestro equipo. Una vez verificado, podrás empezar a ofertar por cargas."}
           </p>
+          
           <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-left">
-            <h3 className="font-bold text-blue-900 mb-2">Pasos pendientes:</h3>
+            <h3 className="font-bold text-blue-900 mb-2">Estado de documentos:</h3>
             <ul className="space-y-2 text-sm text-blue-800">
               <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.dni ? "bg-green-500" : "bg-blue-600")} /> 
-                Subir foto de DNI {files.dni && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.dni || user?.documentosUrls?.dni) ? "bg-green-500" : "bg-blue-600")} /> 
+                DNI {(files.dni || user?.documentosUrls?.dni) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
               </li>
               <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.licencia ? "bg-green-500" : "bg-blue-600")} /> 
-                Subir Licencia de Conducir {files.licencia && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.licencia || user?.documentosUrls?.licencia) ? "bg-green-500" : "bg-blue-600")} /> 
+                Licencia de Conducir {(files.licencia || user?.documentosUrls?.licencia) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
               </li>
               <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", files.tarjetaPropiedad ? "bg-green-500" : "bg-blue-600")} /> 
-                Subir Tarjeta de Propiedad {files.tarjetaPropiedad && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
+                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.tarjetaPropiedad || user?.documentosUrls?.tarjetaPropiedad) ? "bg-green-500" : "bg-blue-600")} /> 
+                Tarjeta de Propiedad {(files.tarjetaPropiedad || user?.documentosUrls?.tarjetaPropiedad) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
               </li>
             </ul>
           </div>
-          <Button variant="outline" onClick={() => setShowUploadModal(true)}>Subir Documentos Ahora</Button>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {user?.verificado !== 'pendiente' && (
+              <Button variant="outline" onClick={() => setShowUploadModal(true)}>Subir Documentos Ahora</Button>
+            )}
+            
+            {/* Botón de simulación para el dueño de la app */}
+            {user?.verificado === 'pendiente' && (
+              <div className="space-y-4 w-full">
+                <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-sm italic">
+                  Como eres el desarrollador, puedes usar este botón para simular la aprobación que haría un administrador.
+                </div>
+                <Button onClick={handleAdminApprove} isLoading={uploading} className="bg-orange-600 hover:bg-orange-700">
+                  Simular Aprobación (Admin)
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
         <AnimatePresence>
@@ -197,8 +268,70 @@ export const CarrierDashboard = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {/* Viajes en Curso */}
+      {activeTrips.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <Navigation className="h-5 w-5 text-green-600 animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Viajes en Curso</h2>
+            </div>
+            <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              {activeTrips.length} Activo{activeTrips.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {activeTrips.map((trip) => (
+              <Link key={trip.id} to={`/trip/${trip.id}`}>
+                <Card className="border-2 border-green-200 hover:border-green-500 transition-all bg-green-50/30 overflow-hidden group">
+                  <div className="bg-green-600 h-1 w-full" />
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <p className="text-[10px] uppercase font-bold text-green-600 tracking-widest">Servicio Activo</p>
+                        <h3 className="text-lg font-bold text-gray-900">Viaje a {trip.destino}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Pago Final</p>
+                        <p className="text-xl font-black text-gray-900">S/ {trip.precioFinal}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-4 text-sm text-gray-600 bg-white/50 p-3 rounded-xl border border-green-100">
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1 text-red-500" />
+                        <span className="truncate max-w-[120px]">{trip.origen}</span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1 text-blue-500" />
+                        <span className="truncate max-w-[120px]">{trip.destino}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center text-xs text-gray-500 font-medium">
+                        <Clock className="h-3.5 w-3.5 mr-1.5" />
+                        Llega en: <span className="text-green-700 font-bold ml-1">{trip.tiempoEstimado || 'Calculando...'}</span>
+                      </div>
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700 h-9 px-4">
+                        Ver Mapa
+                        <Navigation className="h-3.5 w-3.5 ml-1.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-gray-100">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Cargas Disponibles</h1>
           <p className="text-gray-600">Encuentra fletes en tus zonas de operación y haz tu oferta.</p>
@@ -224,6 +357,18 @@ export const CarrierDashboard = () => {
           </span>
         ))}
       </section>
+
+      {indexError && (
+        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="font-bold text-orange-900">Falta un índice en Firestore</h4>
+            <p className="text-sm text-orange-800">
+              Esta consulta requiere un índice compuesto. Por favor, haz clic en el enlace que aparece en la consola del navegador para crearlo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">

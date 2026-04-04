@@ -3,7 +3,7 @@ export type AccountType = 'natural' | 'ruc10' | 'ruc20';
 export type VerificationStatus = 'pendiente' | 'verificado' | 'rechazado';
 export type CargoStatus = 'disponible' | 'en_negociacion' | 'asignado' | 'completado';
 export type OfferStatus = 'pendiente' | 'aceptada' | 'rechazada';
-export type TripStatus = 'en_progreso' | 'completado' | 'cancelado';
+export type TripStatus = 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino' | 'completado' | 'cancelado';
 
 export interface User {
   uid: string;
@@ -70,6 +70,13 @@ export interface Trip {
     updatedAt: number;
   };
   tiempoEstimado?: string;
+  fechaRecojo?: string;
+  horaRecojo?: string;
+  transportistaNombre?: string;
+  vehiculo?: {
+    tipo: string;
+    placa: string;
+  };
   createdAt: number;
 }
 

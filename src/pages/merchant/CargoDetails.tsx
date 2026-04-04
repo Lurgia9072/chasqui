@@ -55,13 +55,17 @@ export const MerchantCargoDetails = () => {
         cargoId: id,
         comercianteId: user!.uid,
         transportistaId: offer.transportistaId,
+        transportistaNombre: offer.transportistaNombre,
+        vehiculo: { tipo: 'Camión de Carga', placa: 'V3R-982' }, // Mocked for now
         origen: carga.origen,
         destino: carga.destino,
         precioFinal: offer.precioOfertado,
         comision: offer.precioOfertado * 0.1,
-        estado: 'en_progreso',
+        estado: 'en_camino_a_recojo',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
-        tiempoEstimado: '2 horas', // Mocked estimation
+        tiempoEstimado: '45 min para el recojo', // Mocked estimation
+        fechaRecojo: new Date().toLocaleDateString('es-PE'),
+        horaRecojo: '14:30', // Mocked
         createdAt: Date.now(),
       };
       

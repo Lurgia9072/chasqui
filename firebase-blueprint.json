@@ -58,10 +58,18 @@
         "cargoId": { "type": "string" },
         "comercianteId": { "type": "string" },
         "transportistaId": { "type": "string" },
+        "transportistaNombre": { "type": "string" },
+        "vehiculo": {
+          "type": "object",
+          "properties": {
+            "tipo": { "type": "string" },
+            "placa": { "type": "string" }
+          }
+        },
         "origen": { "type": "string" },
         "destino": { "type": "string" },
         "precioFinal": { "type": "number" },
-        "estado": { "type": "string", "enum": ["en_progreso", "completado", "cancelado"] },
+        "estado": { "type": "string", "enum": ["en_camino_a_recojo", "recojo_completado", "en_camino_a_destino", "completado", "cancelado"] },
         "seguimiento": {
           "type": "object",
           "properties": {
@@ -70,6 +78,9 @@
             "updatedAt": { "type": "number" }
           }
         },
+        "tiempoEstimado": { "type": "string" },
+        "fechaRecojo": { "type": "string" },
+        "horaRecojo": { "type": "string" },
         "createdAt": { "type": "number" }
       },
       "required": ["cargoId", "comercianteId", "transportistaId", "origen", "destino", "precioFinal", "estado", "createdAt"]

@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { auth, db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Cargo, OperationType } from '../../types';
+import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -14,18 +14,20 @@ import { cn } from '../../lib/utils';
 export const MerchantDashboard = () => {
   const { user } = useAuthStore();
   const [cargas, setCargas] = useState<Cargo[]>([]);
+  const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTrips, setLoadingTrips] = useState(true);
 
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
+    const qCargas = query(
       collection(db, 'cargas'),
       where('comercianteId', '==', user.uid),
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeCargas = onSnapshot(qCargas, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cargo));
       setCargas(docs);
       setLoading(false);
@@ -34,12 +36,93 @@ export const MerchantDashboard = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const qTrips = query(
+      collection(db, 'trips'),
+      where('comercianteId', '==', user.uid),
+      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino']),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribeTrips = onSnapshot(qTrips, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      setActiveTrips(docs);
+      setLoadingTrips(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'trips');
+      setLoadingTrips(false);
+    });
+
+    return () => {
+      unsubscribeCargas();
+      unsubscribeTrips();
+    };
   }, [user]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {/* Viajes en Curso */}
+      {activeTrips.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Navigation className="h-5 w-5 text-blue-600 animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Seguimiento de Envíos</h2>
+            </div>
+            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              {activeTrips.length} en camino
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {activeTrips.map((trip) => (
+              <Link key={trip.id} to={`/trip/${trip.id}`}>
+                <Card className="border-2 border-blue-200 hover:border-blue-500 transition-all bg-blue-50/30 overflow-hidden group">
+                  <div className="bg-blue-600 h-1 w-full" />
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <p className="text-[10px] uppercase font-bold text-blue-600 tracking-widest">Carga en Tránsito</p>
+                        <h3 className="text-lg font-bold text-gray-900">Destino: {trip.destino}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Estado</p>
+                        <p className="text-sm font-bold text-green-600">En Camino</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-4 text-sm text-gray-600 bg-white/50 p-3 rounded-xl border border-blue-100">
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1 text-red-500" />
+                        <span className="truncate max-w-[120px]">{trip.origen}</span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1 text-blue-500" />
+                        <span className="truncate max-w-[120px]">{trip.destino}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center text-xs text-gray-500 font-medium">
+                        <Clock className="h-3.5 w-3.5 mr-1.5" />
+                        Llega en: <span className="text-blue-700 font-bold ml-1">{trip.tiempoEstimado || 'Calculando...'}</span>
+                      </div>
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 h-9 px-4">
+                        Rastrear Carga
+                        <Navigation className="h-3.5 w-3.5 ml-1.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-gray-100">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Mis Cargas</h1>
           <p className="text-gray-600">Gestiona tus envíos y revisa las ofertas recibidas.</p>
