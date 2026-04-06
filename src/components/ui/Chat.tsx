@@ -238,24 +238,7 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
   };
 
   return (
-    <div className="flex flex-col h-[500px] bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
-      <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="bg-white/20 p-2 rounded-full">
-            {isCarrier ? <Truck className="h-5 w-5" /> : <User className="h-5 w-5" />}
-          </div>
-          <div>
-            <h3 className="font-bold">Chat del Viaje</h3>
-            <p className="text-xs text-blue-100">En línea</p>
-          </div>
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="text-white/80 hover:text-white">
-            <Square className="h-5 w-5 rotate-45" />
-          </button>
-        )}
-      </div>
-
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((msg) => {
           const isMe = msg.senderId === user?.uid;

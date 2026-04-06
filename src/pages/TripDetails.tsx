@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus } from '../types';
@@ -34,6 +34,8 @@ export const TripDetails = () => {
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -63,6 +65,34 @@ export const TripDetails = () => {
 
     return () => unsubscribe();
   }, [id, user, carga]);
+
+  // Listener para nuevos mensajes (Auto-abrir chat)
+  useEffect(() => {
+    if (!id || !user) return;
+
+    const q = query(
+      collection(db, 'trips', id, 'messages'),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) return;
+      
+      const lastMsg = snapshot.docs[0].data();
+      
+      // Si el mensaje es del otro usuario y no es el primero que vemos en esta sesión
+      if (lastMsg.senderId !== user.uid) {
+        if (lastMessageCount !== null) {
+          setShowChat(true);
+          setIsChatMinimized(false);
+        }
+      }
+      setLastMessageCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [id, user, lastMessageCount]);
 
   // Simulación de movimiento del transportista
   useEffect(() => {
@@ -182,30 +212,8 @@ export const TripDetails = () => {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
-        {/* Chat Overlay for Mobile or Sidebar for Desktop */}
-        {showChat && (
-          <div className="fixed inset-0 z-50 lg:relative lg:inset-auto lg:z-0 bg-black/50 lg:bg-transparent flex items-end lg:items-start justify-center lg:justify-start p-4 lg:p-0">
-            <div className="w-full max-w-md lg:max-w-none lg:sticky lg:top-24">
-              <Chat 
-                tripId={trip.id} 
-                isCarrier={isCarrier} 
-                onClose={() => setShowChat(false)} 
-              />
-            </div>
-            <button 
-              onClick={() => setShowChat(false)}
-              className="absolute top-8 right-8 p-2 bg-white rounded-full lg:hidden"
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-        )}
-
         {/* Mapa y Seguimiento */}
-        <div className={cn(
-          "space-y-6 transition-all duration-300",
-          showChat ? "lg:col-span-1" : "lg:col-span-2"
-        )}>
+        <div className="lg:col-span-2 space-y-6">
           <Card className="overflow-hidden border-2 border-blue-100">
             <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -490,6 +498,77 @@ export const TripDetails = () => {
               )}
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      {/* Floating Chat Window (Facebook Style) */}
+      <div className="fixed bottom-0 right-0 z-50 p-4 pointer-events-none w-full max-w-md">
+        <div className="flex flex-col items-end space-y-2 pointer-events-auto">
+          {showChat && (
+            <div className={cn(
+              "w-full bg-white rounded-t-2xl shadow-2xl border border-gray-200 transition-all duration-300 overflow-hidden flex flex-col",
+              isChatMinimized ? "h-14" : "h-[550px]"
+            )}>
+              {/* Chat Header / Bar */}
+              <div 
+                className="bg-blue-600 p-4 text-white flex items-center justify-between cursor-pointer shrink-0"
+                onClick={() => setIsChatMinimized(!isChatMinimized)}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="bg-white/20 p-1.5 rounded-full">
+                    {isCarrier ? <Truck className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm">Chat del Viaje</h3>
+                    {!isChatMinimized && <p className="text-[10px] text-blue-100">En línea</p>}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsChatMinimized(!isChatMinimized);
+                    }}
+                    className="p-1 hover:bg-white/10 rounded transition-colors"
+                  >
+                    {isChatMinimized ? <Navigation className="h-4 w-4 rotate-180" /> : <div className="w-4 h-0.5 bg-white rounded-full" />}
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowChat(false);
+                    }}
+                    className="p-1 hover:bg-white/10 rounded transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Content */}
+              {!isChatMinimized && (
+                <div className="flex-1 overflow-hidden">
+                  <Chat 
+                    tripId={trip.id} 
+                    isCarrier={isCarrier} 
+                    onClose={() => setShowChat(false)} 
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {!showChat && (
+            <Button 
+              onClick={() => {
+                setShowChat(true);
+                setIsChatMinimized(false);
+              }}
+              className="rounded-full h-14 w-14 shadow-xl bg-blue-600 hover:bg-blue-700 flex items-center justify-center p-0"
+            >
+              <MessageSquare className="h-6 w-6" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
