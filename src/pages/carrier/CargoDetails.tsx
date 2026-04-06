@@ -7,7 +7,7 @@ import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -18,6 +18,7 @@ export const CarrierCargoDetails = () => {
   const navigate = useNavigate();
   
   const [carga, setCarga] = useState<Cargo | null>(null);
+  const [merchantPhone, setMerchantPhone] = useState<string | null>(null);
   const [myOffer, setMyOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [offerPrice, setOfferPrice] = useState<number>(0);
@@ -27,12 +28,26 @@ export const CarrierCargoDetails = () => {
     if (!id || !user) return;
 
     const fetchCarga = async () => {
-      const docRef = doc(db, 'cargas', id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = { id: docSnap.id, ...docSnap.data() } as Cargo;
-        setCarga(data);
-        setOfferPrice(data.precioPropuesto);
+      try {
+        const docRef = doc(db, 'cargas', id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = { id: docSnap.id, ...docSnap.data() } as Cargo;
+          setCarga(data);
+          setOfferPrice(data.precioPropuesto);
+
+          // Fetch merchant phone
+          try {
+            const merchantDoc = await getDoc(doc(db, 'users', data.comercianteId));
+            if (merchantDoc.exists()) {
+              setMerchantPhone(merchantDoc.data().telefono || null);
+            }
+          } catch (err) {
+            console.warn('No se pudo obtener el teléfono del comerciante:', err);
+          }
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.GET, `cargas/${id}`);
       }
       setLoading(false);
     };
@@ -162,6 +177,12 @@ export const CarrierCargoDetails = () => {
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Comerciante</span>
                   <p className="text-gray-900 font-medium">{carga.comercianteNombre}</p>
+                  {merchantPhone && (
+                    <p className="text-xs text-blue-600 font-bold flex items-center mt-1">
+                      <Phone className="h-3 w-3 mr-1" />
+                      {merchantPhone}
+                    </p>
+                  )}
                 </div>
               </div>
 

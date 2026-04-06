@@ -13,6 +13,8 @@ import { cn } from '../lib/utils';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { Chat } from '../components/ui/Chat';
 
+
+
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -31,12 +33,16 @@ export const TripDetails = () => {
   
   const [trip, setTrip] = useState<Trip | null>(null);
   const [carga, setCarga] = useState<Cargo | null>(null);
+  const [merchantPhone, setMerchantPhone] = useState<string | null>(null);
+  const [carrierPhone, setCarrierPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+
+  const isCarrier = user?.tipoUsuario === 'transportista';
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -47,16 +53,48 @@ export const TripDetails = () => {
     if (!id || !user) return;
 
     const unsubscribe = onSnapshot(doc(db, 'trips', id), async (snapshot) => {
-      if (snapshot.exists()) {
-        const tripData = { id: snapshot.id, ...snapshot.data() } as Trip;
-        setTrip(tripData);
-        
-        if (!carga) {
-          const cargaDoc = await getDoc(doc(db, 'cargas', tripData.cargoId));
-          if (cargaDoc.exists()) {
-            setCarga({ id: cargaDoc.id, ...cargaDoc.data() } as Cargo);
+      try {
+        if (snapshot.exists()) {
+          const tripData = { id: snapshot.id, ...snapshot.data() } as Trip;
+          setTrip(tripData);
+          
+          // Fetch merchant phone if not already fetched
+          if (!merchantPhone) {
+            try {
+              const merchantDoc = await getDoc(doc(db, 'users', tripData.comercianteId));
+              if (merchantDoc.exists()) {
+                setMerchantPhone(merchantDoc.data().telefono || null);
+              }
+            } catch (err) {
+              console.warn('No se pudo obtener el teléfono del comerciante:', err);
+            }
+          }
+
+          // Fetch carrier phone if not already fetched
+          if (!carrierPhone) {
+            try {
+              const carrierDoc = await getDoc(doc(db, 'users', tripData.transportistaId));
+              if (carrierDoc.exists()) {
+                setCarrierPhone(carrierDoc.data().telefono || null);
+              }
+            } catch (err) {
+              console.warn('No se pudo obtener el teléfono del transportista:', err);
+            }
+          }
+          
+          if (!carga) {
+            try {
+              const cargaDoc = await getDoc(doc(db, 'cargas', tripData.cargoId));
+              if (cargaDoc.exists()) {
+                setCarga({ id: cargaDoc.id, ...cargaDoc.data() } as Cargo);
+              }
+            } catch (err) {
+              console.warn('No se pudo obtener la información de la carga:', err);
+            }
           }
         }
+      } catch (err) {
+        console.error('Error en el listener de viaje:', err);
       }
       setLoading(false);
     }, (error) => {
@@ -177,10 +215,16 @@ export const TripDetails = () => {
     }
   };
 
+  const handleCall = () => {
+    if (!trip) return;
+    const phoneToCall = isCarrier ? merchantPhone : carrierPhone;
+    if (phoneToCall) {
+      window.location.href = `tel:${phoneToCall}`;
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" /></div>;
   if (!trip || !carga) return <div className="text-center py-20">Viaje no encontrado</div>;
-
-  const isCarrier = user?.tipoUsuario === 'transportista';
 
   const getStatusLabel = (status: TripStatus) => {
     switch (status) {
@@ -210,7 +254,7 @@ export const TripDetails = () => {
           <p className="text-gray-600">ID de Viaje: {trip.id}</p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleCall}>
             <Phone className="h-4 w-4 mr-2" />
             Llamar
           </Button>
@@ -505,6 +549,10 @@ export const TripDetails = () => {
                     <Star className="h-3 w-3 fill-current" />
                     <span className="ml-1 text-xs font-bold">5.0</span>
                   </div>
+                  <p className="text-xs text-gray-500 mt-1 flex items-center">
+                    <Phone className="h-3 w-3 mr-1" />
+                    {isCarrier ? merchantPhone : carrierPhone}
+                  </p>
                 </div>
               </div>
               

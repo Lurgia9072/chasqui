@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, Offer, Trip, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -18,6 +18,7 @@ export const MerchantCargoDetails = () => {
   
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [carrierPhones, setCarrierPhones] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [isAccepting, setIsAccepting] = useState<string | null>(null);
 
@@ -36,9 +37,29 @@ export const MerchantCargoDetails = () => {
     fetchCarga();
 
     const q = query(collection(db, 'cargas', id, 'offers'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
-      setOffers(docs.sort((a, b) => a.precioOfertado - b.precioOfertado));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      try {
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
+        setOffers(docs.sort((a, b) => a.precioOfertado - b.precioOfertado));
+
+        // Fetch carrier phones
+        const phones: Record<string, string> = { ...carrierPhones };
+        for (const offer of docs) {
+          if (!phones[offer.transportistaId]) {
+            try {
+              const carrierDoc = await getDoc(doc(db, 'users', offer.transportistaId));
+              if (carrierDoc.exists()) {
+                phones[offer.transportistaId] = carrierDoc.data().telefono || '';
+              }
+            } catch (err) {
+              console.warn(`No se pudo obtener el teléfono del transportista ${offer.transportistaId}:`, err);
+            }
+          }
+        }
+        setCarrierPhones(phones);
+      } catch (err) {
+        console.error('Error procesando ofertas:', err);
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `cargas/${id}/offers`);
     });
@@ -208,7 +229,12 @@ export const MerchantCargoDetails = () => {
                               <span className="ml-1 text-sm font-bold">{offer.transportistaRating}</span>
                             </div>
                             <span className="text-gray-300">|</span>
-                            <span className="text-xs text-gray-500">Verificado</span>
+                            {carrierPhones[offer.transportistaId] && (
+                              <p className="text-xs text-blue-600 font-bold flex items-center">
+                                <Phone className="h-3 w-3 mr-1" />
+                                {carrierPhones[offer.transportistaId]}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>

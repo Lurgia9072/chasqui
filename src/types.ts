@@ -61,6 +61,7 @@ export interface Trip {
   comercianteId: string;
   comercianteNombre?: string;
   transportistaId: string;
+  transportistaNombre?: string;
   origen: string;
   destino: string;
   precioFinal: number;
@@ -74,7 +75,6 @@ export interface Trip {
   tiempoEstimado?: string;
   fechaRecojo?: string;
   horaRecojo?: string;
-  transportistaNombre?: string;
   vehiculo?: {
     tipo: string;
     placa: string;
