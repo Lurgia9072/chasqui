@@ -36,6 +36,7 @@ export const TripDetails = () => {
   const [showChat, setShowChat] = useState(false);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
+  const [hasUnread, setHasUnread] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -84,15 +85,28 @@ export const TripDetails = () => {
       // Si el mensaje es del otro usuario y no es el primero que vemos en esta sesión
       if (lastMsg.senderId !== user.uid) {
         if (lastMessageCount !== null) {
-          setShowChat(true);
-          setIsChatMinimized(false);
+          // Si el chat está cerrado o minimizado, marcar como no leído
+          if (!showChat || isChatMinimized) {
+            setHasUnread(true);
+          }
+          
+          // Opcional: Auto-abrir si el usuario lo prefiere (ya estaba implementado)
+          // setShowChat(true);
+          // setIsChatMinimized(false);
         }
       }
       setLastMessageCount(snapshot.size);
     });
 
     return () => unsubscribe();
-  }, [id, user, lastMessageCount]);
+  }, [id, user, lastMessageCount, showChat, isChatMinimized]);
+
+  // Resetear notificaciones cuando el chat se abre y expande
+  useEffect(() => {
+    if (showChat && !isChatMinimized) {
+      setHasUnread(false);
+    }
+  }, [showChat, isChatMinimized]);
 
   // Simulación de movimiento del transportista
   useEffect(() => {
@@ -203,10 +217,20 @@ export const TripDetails = () => {
           <Button 
             variant={showChat ? "default" : "outline"} 
             size="sm"
-            onClick={() => setShowChat(!showChat)}
+            onClick={() => {
+              setShowChat(!showChat);
+              setIsChatMinimized(false);
+            }}
+            className="relative"
           >
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat
+            {hasUnread && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+            )}
           </Button>
         </div>
       </header>
@@ -511,12 +535,21 @@ export const TripDetails = () => {
             )}>
               {/* Chat Header / Bar */}
               <div 
-                className="bg-blue-600 p-4 text-white flex items-center justify-between cursor-pointer shrink-0"
+                className="bg-blue-600 p-4 text-white flex items-center justify-between cursor-pointer shrink-0 relative"
                 onClick={() => setIsChatMinimized(!isChatMinimized)}
               >
+                {isChatMinimized && hasUnread && (
+                  <span className="absolute top-0 left-0 w-full h-full bg-red-500/10 animate-pulse pointer-events-none" />
+                )}
                 <div className="flex items-center space-x-3">
-                  <div className="bg-white/20 p-1.5 rounded-full">
+                  <div className="bg-white/20 p-1.5 rounded-full relative">
                     {isCarrier ? <Truck className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                    {isChatMinimized && hasUnread && (
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
+                    )}
                   </div>
                   <div>
                     <h3 className="font-bold text-sm">Chat del Viaje</h3>
@@ -564,9 +597,15 @@ export const TripDetails = () => {
                 setShowChat(true);
                 setIsChatMinimized(false);
               }}
-              className="rounded-full h-14 w-14 shadow-xl bg-blue-600 hover:bg-blue-700 flex items-center justify-center p-0"
+              className="rounded-full h-14 w-14 shadow-xl bg-blue-600 hover:bg-blue-700 flex items-center justify-center p-0 relative"
             >
               <MessageSquare className="h-6 w-6" />
+              {hasUnread && (
+                <span className="absolute -top-1 -right-1 flex h-5 w-5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 border-2 border-white"></span>
+                </span>
+              )}
             </Button>
           )}
         </div>
