@@ -198,8 +198,22 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
     }
 
+    // Reglas para los mensajes del chat
+    match /trips/{tripId}/messages/{messageId} {
+      function canChat() {
+        let trip = get(/databases/$(database)/documents/trips/$(tripId)).data;
+        return isAuthenticated() && (request.auth.uid == trip.comercianteId || request.auth.uid == trip.transportistaId);
+      }
+      
+      allow read: if canChat();
+      allow create: if canChat() && 
+                    request.resource.data.senderId == request.auth.uid &&
+                    (request.resource.data.type == 'text' || request.resource.data.type == 'audio') &&
+                    (request.resource.data.text is string || request.resource.data.audioUrl is string);
+    }
+
     match /{path=**} {
       allow read, write: if false;
     }
-  }
-}
+    }
+    }

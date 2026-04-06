@@ -6,11 +6,12 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
+import { Chat } from '../components/ui/Chat';
 
 const containerStyle = {
   width: '100%',
@@ -32,6 +33,7 @@ export const TripDetails = () => {
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -168,16 +170,42 @@ export const TripDetails = () => {
             <Phone className="h-4 w-4 mr-2" />
             Llamar
           </Button>
-          <Button variant="outline" size="sm">
+          <Button 
+            variant={showChat ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setShowChat(!showChat)}
+          >
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat
           </Button>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
+        {/* Chat Overlay for Mobile or Sidebar for Desktop */}
+        {showChat && (
+          <div className="fixed inset-0 z-50 lg:relative lg:inset-auto lg:z-0 bg-black/50 lg:bg-transparent flex items-end lg:items-start justify-center lg:justify-start p-4 lg:p-0">
+            <div className="w-full max-w-md lg:max-w-none lg:sticky lg:top-24">
+              <Chat 
+                tripId={trip.id} 
+                isCarrier={isCarrier} 
+                onClose={() => setShowChat(false)} 
+              />
+            </div>
+            <button 
+              onClick={() => setShowChat(false)}
+              className="absolute top-8 right-8 p-2 bg-white rounded-full lg:hidden"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+        )}
+
         {/* Mapa y Seguimiento */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={cn(
+          "space-y-6 transition-all duration-300",
+          showChat ? "lg:col-span-1" : "lg:col-span-2"
+        )}>
           <Card className="overflow-hidden border-2 border-blue-100">
             <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">

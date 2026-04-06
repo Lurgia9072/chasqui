@@ -82,6 +82,16 @@ export interface Trip {
   createdAt: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text?: string;
+  audioUrl?: string;
+  type: 'text' | 'audio';
+  createdAt: number;
+}
+
 export interface Notification {
   id: string;
   userId: string;
