@@ -10,6 +10,121 @@ import { cn } from '../../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+interface AudioPlayerProps {
+  url: string;
+  isMe: boolean;
+  messageId: string;
+  playingId: string | null;
+  setPlayingId: (id: string | null) => void;
+}
+
+const AudioPlayer = ({ url, isMe, messageId, playingId, setPlayingId }: AudioPlayerProps) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const isPlaying = playingId === messageId;
+
+  useEffect(() => {
+    const audio = new Audio(url);
+    audioRef.current = audio;
+
+    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleTimeUpdate = () => setProgress((audio.currentTime / audio.duration) * 100);
+    const handleEnded = () => {
+      setPlayingId(null);
+      setProgress(0);
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audioRef.current = null;
+    };
+  }, [url]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch(console.error);
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlaying]);
+
+  const togglePlay = () => {
+    if (isPlaying) {
+      setPlayingId(null);
+    } else {
+      setPlayingId(messageId);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = (Number(e.target.value) / 100) * duration;
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setProgress(Number(e.target.value));
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-3 min-w-[200px]">
+      <button
+        className={cn(
+          "h-10 w-10 rounded-full flex items-center justify-center shrink-0 transition-all",
+          isMe 
+            ? "bg-white/20 hover:bg-white/30 text-white" 
+            : "bg-blue-100 text-blue-600 hover:bg-blue-200"
+        )}
+        onClick={togglePlay}
+      >
+        {isPlaying ? (
+          <Pause className="h-5 w-5 fill-current" />
+        ) : (
+          <Play className="h-5 w-5 fill-current ml-0.5" />
+        )}
+      </button>
+      
+      <div className="flex-1 space-y-1">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={progress}
+          onChange={handleSeek}
+          className={cn(
+            "w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-current",
+            isMe ? "bg-white/30" : "bg-gray-200"
+          )}
+          style={{
+            background: isMe 
+              ? `linear-gradient(to right, white ${progress}%, rgba(255,255,255,0.3) ${progress}%)`
+              : `linear-gradient(to right, #2563eb ${progress}%, #e5e7eb ${progress}%)`
+          }}
+        />
+        <div className="flex justify-between text-[9px] opacity-70">
+          <span>{formatTime(audioRef.current?.currentTime || 0)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const formatTime = (seconds: number) => {
+  if (isNaN(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 interface ChatProps {
   tripId: string;
   isCarrier: boolean;
@@ -21,7 +136,7 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,7 +192,6 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
-        setAudioBlob(blob);
         
         // Convert to base64 to store in Firestore (Workaround for no Storage)
         const reader = new FileReader();
@@ -121,12 +235,6 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
       setIsRecording(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -173,24 +281,13 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
                 {msg.type === 'text' ? (
                   <p className="text-sm">{msg.text}</p>
                 ) : (
-                  <div className="flex items-center space-x-2 min-w-[150px]">
-                    <button 
-                      className={cn(
-                        "h-8 w-8 rounded-full flex items-center justify-center",
-                        isMe ? "bg-white/20 hover:bg-white/30" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                      )}
-                      onClick={() => {
-                        const audio = new Audio(msg.audioUrl);
-                        audio.play();
-                      }}
-                    >
-                      <Play className="h-4 w-4 fill-current" />
-                    </button>
-                    <div className="flex-1 h-1.5 bg-current opacity-20 rounded-full overflow-hidden">
-                       <div className="h-full bg-current w-1/3" />
-                    </div>
-                    <span className="text-[10px] opacity-70">Audio</span>
-                  </div>
+                  <AudioPlayer 
+                    url={msg.audioUrl!} 
+                    isMe={isMe} 
+                    messageId={msg.id}
+                    playingId={playingId}
+                    setPlayingId={setPlayingId}
+                  />
                 )}
               </div>
               <span className="text-[9px] text-gray-400 mt-1 px-2">
