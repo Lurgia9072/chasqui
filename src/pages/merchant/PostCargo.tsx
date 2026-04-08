@@ -41,14 +41,14 @@ export const PostCargo = () => {
     setIsLoading(true);
     try {
       const path = 'cargas';
-      await addDoc(collection(db, path), {
+      const docRef = await addDoc(collection(db, path), {
         ...data,
         comercianteId: user.uid,
         comercianteNombre: user.nombre,
         estado: 'disponible',
         createdAt: Date.now(),
       });
-      navigate('/merchant/dashboard');
+      navigate(`/merchant/cargo/${docRef.id}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'cargas');
     } finally {

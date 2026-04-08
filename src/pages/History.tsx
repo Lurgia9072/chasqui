@@ -95,7 +95,7 @@ export const History = () => {
             <TripCard
               key={trip.id}
               trip={trip}
-              cargoName={trip.cargoTipo || 'Carga General'}
+              cargoName={trip.tipoCarga || 'Carga General'}
               partnerName={user?.tipoUsuario === 'comerciante' ? (trip.transportistaNombre || 'Transportista') : (trip.comercianteNombre || 'Comerciante')}
               isMerchant={user?.tipoUsuario === 'comerciante'}
               onClick={() => navigate(`/trip/${trip.id}`)}

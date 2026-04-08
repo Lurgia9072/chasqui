@@ -39,7 +39,7 @@ export const MerchantDashboard = () => {
     const qTrips = query(
       collection(db, 'trips'),
       where('comercianteId', '==', user.uid),
-      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion']),
+      where('estado', 'in', ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion']),
       orderBy('createdAt', 'desc')
     );
 
@@ -83,12 +83,21 @@ export const MerchantDashboard = () => {
                   <CardContent className="p-6 space-y-4">
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-[10px] uppercase font-bold text-blue-600 tracking-widest">Carga en Tránsito</p>
+                        <p className="text-[10px] uppercase font-bold text-blue-600 tracking-widest">
+                          {trip.estado === 'pendiente_pago' || trip.estado === 'pago_en_revision' ? 'Pago Requerido' : 'Carga en Tránsito'}
+                        </p>
                         <h3 className="text-lg font-bold text-gray-900">Destino: {trip.destino}</h3>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] uppercase font-bold text-gray-400">Estado</p>
-                        <p className="text-sm font-bold text-green-600">En Camino</p>
+                        <p className={cn(
+                          "text-sm font-bold",
+                          trip.estado === 'pendiente_pago' ? "text-orange-600" :
+                          trip.estado === 'pago_en_revision' ? "text-blue-600" : "text-green-600"
+                        )}>
+                          {trip.estado === 'pendiente_pago' ? 'Pendiente de Pago' :
+                           trip.estado === 'pago_en_revision' ? 'En Revisión' : 'En Camino'}
+                        </p>
                       </div>
                     </div>
 

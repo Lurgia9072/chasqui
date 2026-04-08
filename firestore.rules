@@ -80,7 +80,8 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin' ||
-          (request.auth.token.email == "lurgia18yuar@gmail.com" && request.auth.token.email_verified == true));
+          request.auth.token.email == "lurgia18yuar@gmail.com" ||
+          request.auth.token.email == "lurgiayuar18@gmail.com");
     }
 
     function isMerchant() {
@@ -134,7 +135,6 @@ service cloud.firestore {
 
     function isValidOffer(data) {
       return hasRequiredFields(['cargoId', 'transportistaId', 'precioOfertado', 'estado', 'createdAt']) &&
-             data.transportistaId == request.auth.uid &&
              data.cargoId is string &&
              data.precioOfertado is number && data.precioOfertado > 0 && data.precioOfertado < 1000000 &&
              data.estado in ['pendiente', 'aceptada', 'rechazada'] &&
@@ -142,14 +142,15 @@ service cloud.firestore {
     }
 
     function isValidTrip(data) {
-      return hasRequiredFields(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'estado', 'createdAt']) &&
+      return hasRequiredFields(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'comision', 'estado', 'createdAt']) &&
              data.cargoId is string &&
              data.comercianteId is string &&
              data.transportistaId is string &&
              data.origen is string && data.origen.size() < 200 &&
              data.destino is string && data.destino.size() < 200 &&
              data.precioFinal is number && data.precioFinal > 0 &&
-             data.estado in ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
+             data.comision is number && data.comision >= 0 &&
+             data.estado in ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
              data.createdAt is number;
     }
 
@@ -171,7 +172,7 @@ service cloud.firestore {
 
       match /offers/{offerId} {
         allow read: if isAuthenticated();
-        allow create: if isCarrier() && isValidOffer(request.resource.data);
+        allow create: if isCarrier() && isValidOffer(request.resource.data) && request.resource.data.transportistaId == request.auth.uid;
         allow update: if (isAuthenticated() && (request.auth.uid == resource.data.transportistaId || request.auth.uid == get(/databases/$(database)/documents/cargas/$(cargoId)).data.comercianteId || isAdmin())) && isValidOffer(request.resource.data);
         allow delete: if isAdmin();
       }

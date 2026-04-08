@@ -10,11 +10,13 @@ import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle,
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { useNotification } from '../../components/ui/NotificationProvider';
 
 export const MerchantCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const { addNotification } = useNotification();
   
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -74,7 +76,7 @@ export const MerchantCargoDetails = () => {
       // 1. Crear el viaje
       const tripData: Omit<Trip, 'id'> = {
         cargoId: id,
-        cargoTipo: carga.tipoCarga,
+        tipoCarga: carga.tipoCarga,
         comercianteId: user!.uid,
         comercianteNombre: user!.nombre,
         transportistaId: offer.transportistaId,
@@ -84,9 +86,9 @@ export const MerchantCargoDetails = () => {
         destino: carga.destino,
         precioFinal: offer.precioOfertado,
         comision: offer.precioOfertado * 0.1,
-        estado: 'en_camino_a_recojo',
+        estado: 'pendiente_pago',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
-        tiempoEstimado: '45 min para el recojo', // Mocked estimation
+        tiempoEstimado: 'Esperando pago del flete',
         fechaRecojo: new Date().toLocaleDateString('es-PE'),
         horaRecojo: '14:30', // Mocked
         createdAt: Date.now(),
@@ -115,10 +117,28 @@ export const MerchantCargoDetails = () => {
         createdAt: Date.now(),
       });
 
+      addNotification({
+        title: '¡Oferta Aceptada!',
+        message: 'El viaje ha sido creado exitosamente. Redirigiendo...',
+        type: 'success'
+      });
+
       // 5. Navegar al viaje
       navigate(`/trip/${tripRef.id}`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'trips');
+    } catch (err: any) {
+      console.error("Error accepting offer:", err);
+      
+      let errorMessage = "No se pudo aceptar la oferta. Por favor intenta de nuevo.";
+      if (err.message?.includes("permissions")) {
+        errorMessage = "Error de permisos: Debes actualizar las reglas de Firestore en tu consola de Firebase para permitir el estado 'pendiente_pago'.";
+      }
+
+      addNotification({
+        title: 'Error al aceptar oferta',
+        message: errorMessage,
+        type: 'error',
+        duration: 10000
+      });
     } finally {
       setIsAccepting(null);
     }
@@ -249,6 +269,7 @@ export const MerchantCargoDetails = () => {
                           <Button 
                             onClick={() => handleAcceptOffer(offer)}
                             isLoading={isAccepting === offer.id}
+                            disabled={isAccepting !== null}
                             className="h-12 px-8"
                           >
                             Aceptar

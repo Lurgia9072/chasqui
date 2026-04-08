@@ -6,12 +6,13 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { Chat } from '../components/ui/Chat';
+import { Input } from '../components/ui/Input';
 
 
 
@@ -41,8 +42,13 @@ export const TripDetails = () => {
   const [isChatMinimized, setIsChatMinimized] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentProofUrl, setPaymentProofUrl] = useState('');
 
   const isCarrier = user?.tipoUsuario === 'transportista';
+  const isAdmin = user?.tipoUsuario === 'admin' || 
+                  user?.email === 'lurgia18yuar@gmail.com' || 
+                  user?.email === 'lurgiayuar18@gmail.com';
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -215,6 +221,44 @@ export const TripDetails = () => {
     }
   };
 
+  const handlePaymentSubmit = async (referencia: string, comprobanteUrl?: string) => {
+    if (!trip) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), {
+        estado: 'pago_en_revision',
+        pagoInfo: {
+          referencia,
+          comprobanteUrl: comprobanteUrl || '',
+          informadoAt: Date.now(),
+          fechaPago: Date.now()
+        },
+        tiempoEstimado: 'Pago en revisión por el administrador'
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleVerifyPayment = async () => {
+    if (!trip) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), {
+        estado: 'en_camino_a_recojo',
+        'pagoInfo.verificadoPor': user?.uid,
+        'pagoInfo.verificadoAt': Date.now(),
+        tiempoEstimado: '45 min para el recojo'
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleCall = () => {
     if (!trip) return;
     const phoneToCall = isCarrier ? merchantPhone : carrierPhone;
@@ -228,6 +272,8 @@ export const TripDetails = () => {
 
   const getStatusLabel = (status: TripStatus) => {
     switch (status) {
+      case 'pendiente_pago': return 'Pendiente de Pago';
+      case 'pago_en_revision': return 'Pago en Revisión';
       case 'en_camino_a_recojo': return 'En camino al recojo';
       case 'recojo_completado': return 'Carga Recogida';
       case 'en_camino_a_destino': return 'En camino al destino';
@@ -282,6 +328,166 @@ export const TripDetails = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
         {/* Mapa y Seguimiento */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Sección de Pago (Solo para Comerciante si está pendiente) */}
+          {!isCarrier && trip.estado === 'pendiente_pago' && (
+            <Card className="border-2 border-orange-200 bg-orange-50/30">
+              <CardHeader>
+                <div className="flex items-center space-x-2 text-orange-700">
+                  <Banknote className="h-5 w-5" />
+                  <CardTitle className="text-lg">Pago del Flete Pendiente</CardTitle>
+                </div>
+                <CardDescription>
+                  Para iniciar el viaje, debes realizar el pago total del flete.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-white p-4 rounded-lg border border-orange-100 space-y-3">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-500">Monto del Flete:</span>
+                    <span className="text-lg font-bold text-gray-900">S/ {trip.precioFinal.toFixed(2)}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Métodos de Pago Disponibles:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
+                        <div className="h-8 w-8 bg-purple-100 rounded flex items-center justify-center mr-3">
+                          <span className="text-[10px] font-bold text-purple-700">YAPE</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold">987 654 321</p>
+                          <p className="text-[10px] text-gray-500">A nombre de: TransportaYa SAC</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
+                        <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center mr-3">
+                          <span className="text-[10px] font-bold text-blue-700">BCP</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold">191-98765432-0-11</p>
+                          <p className="text-[10px] text-gray-500">CCI: 00219100987654320111</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Número de Referencia / Operación:</label>
+                    <Input 
+                      placeholder="Ej: 12345678" 
+                      value={paymentRef}
+                      onChange={(e) => setPaymentRef(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Comprobante de Pago (Opcional):</label>
+                    <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-200 hover:border-blue-400 transition-colors cursor-pointer text-center group">
+                      {paymentProofUrl ? (
+                        <div className="relative inline-block">
+                          <img src={paymentProofUrl} alt="Comprobante" className="h-20 w-20 object-cover rounded shadow-sm" referrerPolicy="no-referrer" />
+                          <button 
+                            onClick={() => setPaymentProofUrl('')}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center space-y-1">
+                          <Receipt className="h-8 w-8 text-gray-400 group-hover:text-blue-500" />
+                          <p className="text-xs text-gray-500">Haz clic para subir foto del comprobante</p>
+                          {/* Mock upload for now */}
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => setPaymentProofUrl('https://picsum.photos/seed/receipt/400/600')}
+                          >
+                            Simular Subida
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full"
+                    disabled={!paymentRef || isUpdating}
+                    onClick={() => handlePaymentSubmit(paymentRef, paymentProofUrl)}
+                  >
+                    {isUpdating ? 'Enviando...' : 'Informar Pago'}
+                  </Button>
+                  <p className="text-[10px] text-gray-500 flex items-center justify-center">
+                    <Info className="h-3 w-3 mr-1" />
+                    Una vez informado, el administrador verificará el pago en un plazo máximo de 15 minutos.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Sección de Revisión de Pago (Para el Administrador o el Comerciante que espera) */}
+          {trip.estado === 'pago_en_revision' && (
+            <Card className="border-2 border-blue-200 bg-blue-50/30">
+              <CardHeader>
+                <div className="flex items-center space-x-2 text-blue-700">
+                  <Clock className="h-5 w-5 animate-pulse" />
+                  <CardTitle className="text-lg">Pago en Revisión</CardTitle>
+                </div>
+                <CardDescription>
+                  Estamos verificando tu pago. El transportista será notificado una vez confirmado.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-white p-4 rounded-lg border border-blue-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="flex items-center space-x-4">
+                    {trip.pagoInfo?.comprobanteUrl && (
+                      <div 
+                        className="h-16 w-16 bg-gray-100 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => window.open(trip.pagoInfo?.comprobanteUrl, '_blank')}
+                      >
+                        <img src={trip.pagoInfo.comprobanteUrl} alt="Recibo" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Referencia informada:</p>
+                      <p className="text-lg font-mono font-bold text-gray-900">{trip.pagoInfo?.referencia}</p>
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <Button 
+                      variant="default" 
+                      className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
+                      onClick={handleVerifyPayment}
+                      disabled={isUpdating}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Verificar Pago
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Mensaje para el Transportista esperando pago */}
+          {isCarrier && (trip.estado === 'pendiente_pago' || trip.estado === 'pago_en_revision') && (
+            <Card className="border-2 border-yellow-200 bg-yellow-50/30">
+              <CardContent className="py-6 flex items-center space-x-4">
+                <div className="h-12 w-12 bg-yellow-100 rounded-full flex items-center justify-center shrink-0">
+                  <Clock className="h-6 w-6 text-yellow-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-yellow-900">Esperando Confirmación de Pago</h3>
+                  <p className="text-sm text-yellow-700">
+                    {trip.estado === 'pendiente_pago' 
+                      ? 'El comerciante aún no ha realizado el pago del flete.' 
+                      : 'El comerciante ya informó el pago. Estamos verificándolo para que puedas iniciar el viaje.'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="overflow-hidden border-2 border-blue-100">
             <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -386,13 +592,15 @@ export const TripDetails = () => {
             <CardContent>
               <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-blue-500 before:via-gray-200 before:to-gray-200">
                 {[
+                  { id: 'pendiente_pago', label: 'Pendiente de Pago', desc: 'El comerciante debe pagar el flete.' },
+                  { id: 'pago_en_revision', label: 'Pago en Revisión', desc: 'El administrador está verificando el pago.' },
                   { id: 'en_camino_a_recojo', label: 'Camino al Recojo', desc: 'El transportista se dirige al origen.' },
                   { id: 'recojo_completado', label: 'Carga Recogida', desc: 'La mercadería ha sido cargada en el vehículo.' },
                   { id: 'en_camino_a_destino', label: 'En Tránsito', desc: 'La carga está en camino al destino final.' },
                   { id: 'entregado_pendiente_confirmacion', label: 'Entregado', desc: 'El transportista ha llegado al destino.' },
                   { id: 'completado', label: 'Finalizado', desc: 'El comerciante confirmó la recepción.' }
                 ].map((step, idx) => {
-                  const stepsOrder = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
+                  const stepsOrder = ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
                   const isPast = stepsOrder.indexOf(trip.estado) > idx;
                   const isCurrent = step.id === trip.estado;
                   
@@ -452,7 +660,26 @@ export const TripDetails = () => {
                 </div>
               </div>
 
-              {isCarrier && trip.estado !== 'completado' && (
+              {trip.pagoInfo && (
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                  <p className="text-[10px] uppercase font-bold text-gray-400">Información de Pago</p>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500">Referencia:</span>
+                    <span className="font-mono font-bold text-gray-900">{trip.pagoInfo.referencia}</span>
+                  </div>
+                  {trip.pagoInfo.verificadoAt && (
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500">Verificado:</span>
+                      <span className="text-green-600 font-bold flex items-center">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Confirmado
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {isCarrier && !['completado', 'pendiente_pago', 'pago_en_revision', 'cancelado'].includes(trip.estado) && (
                 <div className="space-y-3">
                   {trip.estado === 'en_camino_a_recojo' && (
                     <Button 

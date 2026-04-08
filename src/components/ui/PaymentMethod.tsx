@@ -1,4 +1,4 @@
-import { CreditCard, Wallet, Banknote } from 'lucide-react';
+import { CreditCard, Banknote } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface PaymentMethodProps {
@@ -13,7 +13,7 @@ interface PaymentMethodProps {
 export const PaymentMethod = ({ type, label, description, isSelected, onClick, className }: PaymentMethodProps) => {
   const icons = {
     card: <CreditCard className="h-5 w-5" />,
-    wallet: <Wallet className="h-5 w-5" />,
+    wallet: <Banknote className="h-5 w-5" />,
     cash: <Banknote className="h-5 w-5" />,
   };
 
