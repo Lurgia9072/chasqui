@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { auth, db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -13,10 +13,19 @@ import { cn } from '../../lib/utils';
 
 export const MerchantDashboard = () => {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [cargas, setCargas] = useState<Cargo[]>([]);
   const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
+
+  const isAdmin = user?.email === 'lurgia18yuar@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
+
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/admin');
+    }
+  }, [isAdmin, navigate]);
 
   useEffect(() => {
     if (!user) return;
@@ -57,8 +66,6 @@ export const MerchantDashboard = () => {
       unsubscribeTrips();
     };
   }, [user]);
-
-  const isAdmin = user?.email === 'lurgia18yuar@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">

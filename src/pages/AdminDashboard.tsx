@@ -2,20 +2,29 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Trip, OperationType, TripStatus } from '../types';
+import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
-type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente';
+type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'todos' | 'users' | 'cargas';
 
 export const AdminDashboard = () => {
   const { user } = useAuthStore();
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [platformUsers, setPlatformUsers] = useState<any[]>([]);
+  const [platformCargas, setPlatformCargas] = useState<Cargo[]>([]);
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalCargos: 0,
+    totalTrips: 0,
+    totalRevenue: 0,
+    totalCommission: 0
+  });
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('revision');
@@ -24,22 +33,67 @@ export const AdminDashboard = () => {
                   user?.email === 'lurgia18yuar@gmail.com' || 
                   user?.email === 'lurgiaalidayupa@gmail.com';
 
+  // Fetch Platform Stats
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    // Users Count
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPlatformUsers(docs);
+      setStats(prev => ({ ...prev, totalUsers: snap.size }));
+    });
+
+    // Cargos Count
+    const unsubCargos = onSnapshot(collection(db, 'cargas'), (snap) => {
+      const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cargo));
+      setPlatformCargas(docs);
+      setStats(prev => ({ ...prev, totalCargos: snap.size }));
+    });
+
+    // Trips Stats
+    const unsubTrips = onSnapshot(collection(db, 'trips'), (snap) => {
+      const allTrips = snap.docs.map(d => d.data() as Trip);
+      const completedTrips = allTrips.filter(t => t.estado === 'completado');
+      const revenue = completedTrips.reduce((sum, t) => sum + (t.precioFinal || 0), 0);
+      const commission = completedTrips.reduce((sum, t) => sum + (t.comision || 0), 0);
+      
+      setStats(prev => ({ 
+        ...prev, 
+        totalTrips: snap.size,
+        totalRevenue: revenue,
+        totalCommission: commission
+      }));
+    });
+
+    return () => {
+      unsubUsers();
+      unsubCargos();
+      unsubTrips();
+    };
+  }, [isAdmin]);
+
   useEffect(() => {
     if (!isAdmin) return;
 
     setLoading(true);
-    let statusFilter: TripStatus[] = [];
+    let q;
     
-    if (activeTab === 'revision') statusFilter = ['pago_en_revision'];
-    else if (activeTab === 'confirmado') statusFilter = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
-    else if (activeTab === 'rechazado') statusFilter = ['pago_rechazado'];
-    else if (activeTab === 'pendiente') statusFilter = ['pendiente_pago'];
+    if (activeTab === 'todos') {
+      q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
+    } else {
+      let statusFilter: TripStatus[] = [];
+      if (activeTab === 'revision') statusFilter = ['pago_en_revision'];
+      else if (activeTab === 'confirmado') statusFilter = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
+      else if (activeTab === 'rechazado') statusFilter = ['pago_rechazado'];
+      else if (activeTab === 'pendiente') statusFilter = ['pendiente_pago'];
 
-    const q = query(
-      collection(db, 'trips'),
-      where('estado', 'in', statusFilter),
-      orderBy('createdAt', 'desc')
-    );
+      q = query(
+        collection(db, 'trips'),
+        where('estado', 'in', statusFilter),
+        orderBy('createdAt', 'desc')
+      );
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
@@ -124,14 +178,26 @@ export const AdminDashboard = () => {
     }
   };
 
-  if (!isAdmin) return <div className="text-center py-20">No tienes permisos para acceder a esta página.</div>;
-
-  const stats = {
-    revision: trips.filter(t => t.estado === 'pago_en_revision').length,
-    confirmado: trips.filter(t => ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'].includes(t.estado)).length,
-    rechazado: trips.filter(t => t.estado === 'pago_rechazado').length,
-    pendiente: trips.filter(t => t.estado === 'pendiente_pago').length,
+  const handleUpdateUserStatus = async (userId: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        verificado: status
+      });
+      
+      await addDoc(collection(db, 'notifications'), {
+        userId,
+        titulo: 'Estado de Cuenta Actualizado',
+        mensaje: `Tu cuenta ha sido marcada como: ${status.toUpperCase()}.`,
+        tipo: 'sistema',
+        leido: false,
+        createdAt: Date.now(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
   };
+
+  if (!isAdmin) return <div className="text-center py-20">No tienes permisos para acceder a esta página.</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
@@ -141,60 +207,125 @@ export const AdminDashboard = () => {
             <div className="bg-purple-600 p-2 rounded-lg text-white">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Panel de Control Maestro</h1>
           </div>
-          <p className="text-gray-600">Gestión de pagos, verificaciones y estados de viajes.</p>
+          <p className="text-gray-600">Supervisión global de la plataforma, usuarios y transacciones.</p>
         </div>
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start space-x-3 max-w-md">
           <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
           <p className="text-xs text-blue-800">
-            <strong>Nota:</strong> Los viajes aparecen aquí una vez que un comerciante acepta una oferta. Los pagos aparecen "En Revisión" cuando el comerciante sube su comprobante.
+            <strong>Modo Admin:</strong> Tienes acceso total para verificar pagos, gestionar usuarios y supervisar la logística en tiempo real.
           </p>
         </div>
       </header>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={cn(
-          "p-4 rounded-2xl border-2 transition-all cursor-pointer",
-          activeTab === 'revision' ? "bg-blue-50 border-blue-200" : "bg-white border-gray-100 hover:border-gray-200"
-        )} onClick={() => setActiveTab('revision')}>
-          <div className="flex items-center justify-between mb-2">
-            <Clock className="h-5 w-5 text-blue-600" />
-            <span className="text-2xl font-black text-blue-700">{activeTab === 'revision' ? trips.length : '...'}</span>
+      {/* Platform Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Usuarios</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalUsers}</p>
+          <div className="mt-2 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 w-3/4" />
           </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">En Revisión</p>
         </div>
-        <div className={cn(
-          "p-4 rounded-2xl border-2 transition-all cursor-pointer",
-          activeTab === 'confirmado' ? "bg-green-50 border-green-200" : "bg-white border-gray-100 hover:border-gray-200"
-        )} onClick={() => setActiveTab('confirmado')}>
-          <div className="flex items-center justify-between mb-2">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-            <span className="text-2xl font-black text-green-700">{activeTab === 'confirmado' ? trips.length : '...'}</span>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cargas</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalCargos}</p>
+          <div className="mt-2 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-purple-500 w-1/2" />
           </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Confirmados</p>
         </div>
-        <div className={cn(
-          "p-4 rounded-2xl border-2 transition-all cursor-pointer",
-          activeTab === 'rechazado' ? "bg-red-50 border-red-200" : "bg-white border-gray-100 hover:border-gray-200"
-        )} onClick={() => setActiveTab('rechazado')}>
-          <div className="flex items-center justify-between mb-2">
-            <XCircle className="h-5 w-5 text-red-600" />
-            <span className="text-2xl font-black text-red-700">{activeTab === 'rechazado' ? trips.length : '...'}</span>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Viajes</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalTrips}</p>
+          <div className="mt-2 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 w-2/3" />
           </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Rechazados</p>
         </div>
-        <div className={cn(
-          "p-4 rounded-2xl border-2 transition-all cursor-pointer",
-          activeTab === 'pendiente' ? "bg-orange-50 border-orange-200" : "bg-white border-gray-100 hover:border-gray-200"
-        )} onClick={() => setActiveTab('pendiente')}>
-          <div className="flex items-center justify-between mb-2">
-            <AlertCircle className="h-5 w-5 text-orange-600" />
-            <span className="text-2xl font-black text-orange-700">{activeTab === 'pendiente' ? trips.length : '...'}</span>
-          </div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pendientes</p>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Volumen (S/)</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalRevenue.toLocaleString()}</p>
+          <p className="text-[10px] text-green-600 font-bold mt-1">Total fletes completados</p>
         </div>
+        <div className="bg-purple-600 p-5 rounded-2xl border border-purple-500 shadow-lg shadow-purple-100">
+          <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-1">Comisiones (S/)</p>
+          <p className="text-2xl font-black text-white">{stats.totalCommission.toLocaleString()}</p>
+          <p className="text-[10px] text-purple-100 font-bold mt-1">Tu ganancia neta (10%)</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 p-1 bg-gray-100 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('revision')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'revision' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Clock className="h-4 w-4 mr-2" />
+          En Revisión
+        </button>
+        <button
+          onClick={() => setActiveTab('confirmado')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'confirmado' ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Confirmados
+        </button>
+        <button
+          onClick={() => setActiveTab('rechazado')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'rechazado' ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <XCircle className="h-4 w-4 mr-2" />
+          Rechazados
+        </button>
+        <button
+          onClick={() => setActiveTab('pendiente')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'pendiente' ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <AlertCircle className="h-4 w-4 mr-2" />
+          Pendientes
+        </button>
+        <button
+          onClick={() => setActiveTab('todos')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'todos' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Filter className="h-4 w-4 mr-2" />
+          Todos
+        </button>
+        <button
+          onClick={() => setActiveTab('users')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'users' ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <ShieldCheck className="h-4 w-4 mr-2" />
+          Usuarios
+        </button>
+        <button
+          onClick={() => setActiveTab('cargas')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'cargas' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Package className="h-4 w-4 mr-2" />
+          Cargas
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
@@ -206,24 +337,89 @@ export const AdminDashboard = () => {
                 {activeTab === 'confirmado' && <CheckCircle className="h-5 w-5 mr-2 text-green-500" />}
                 {activeTab === 'rechazado' && <XCircle className="h-5 w-5 mr-2 text-red-500" />}
                 {activeTab === 'pendiente' && <AlertCircle className="h-5 w-5 mr-2 text-orange-500" />}
+                {activeTab === 'todos' && <Filter className="h-5 w-5 mr-2 text-gray-500" />}
+                {activeTab === 'users' && <ShieldCheck className="h-5 w-5 mr-2 text-purple-500" />}
+                {activeTab === 'cargas' && <Package className="h-5 w-5 mr-2 text-blue-500" />}
                 {activeTab === 'revision' ? 'Pagos por Verificar' : 
                  activeTab === 'confirmado' ? 'Pagos Confirmados' :
-                 activeTab === 'rechazado' ? 'Pagos Rechazados' : 'Viajes Pendientes de Pago'}
+                 activeTab === 'rechazado' ? 'Pagos Rechazados' : 
+                 activeTab === 'pendiente' ? 'Viajes Pendientes de Pago' : 
+                 activeTab === 'users' ? 'Gestión de Usuarios' : 
+                 activeTab === 'cargas' ? 'Todas las Cargas Publicadas' : 'Todos los Viajes'}
               </CardTitle>
               <span className={cn(
                 "text-xs font-bold px-3 py-1 rounded-full",
                 activeTab === 'revision' ? "bg-blue-100 text-blue-700" :
                 activeTab === 'confirmado' ? "bg-green-100 text-green-700" :
-                activeTab === 'rechazado' ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"
+                activeTab === 'rechazado' ? "bg-red-100 text-red-700" : 
+                activeTab === 'pendiente' ? "bg-orange-100 text-orange-700" : 
+                activeTab === 'users' ? "bg-purple-100 text-purple-700" : 
+                activeTab === 'cargas' ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
               )}>
-                {trips.length} resultados
+                {activeTab === 'users' ? platformUsers.length : 
+                 activeTab === 'cargas' ? platformCargas.length : trips.length} resultados
               </span>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {loading ? (
+            {loading && activeTab !== 'users' && activeTab !== 'cargas' ? (
               <div className="flex justify-center py-12">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
+              </div>
+            ) : activeTab === 'users' ? (
+              <div className="divide-y divide-gray-100">
+                {platformUsers.map((u) => (
+                  <div key={u.id} className="p-6 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500">
+                        {u.nombre?.[0] || 'U'}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{u.nombre}</p>
+                        <p className="text-xs text-gray-500">{u.email} • {u.tipoUsuario}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                        u.verificado === 'verificado' ? "bg-green-100 text-green-700" :
+                        u.verificado === 'rechazado' ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"
+                      )}>
+                        {u.verificado || 'pendiente'}
+                      </span>
+                      <select 
+                        className="text-xs border rounded p-1"
+                        value={u.verificado || 'pendiente'}
+                        onChange={(e) => handleUpdateUserStatus(u.id, e.target.value)}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="verificado">Verificado</option>
+                        <option value="rechazado">Rechazado</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : activeTab === 'cargas' ? (
+              <div className="divide-y divide-gray-100">
+                {platformCargas.map((c) => (
+                  <div key={c.id} className="p-6 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900">{c.tipoCarga}</p>
+                      <p className="text-xs text-gray-500">{c.origen} → {c.destino}</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Publicado por: {c.comercianteNombre}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-purple-600">S/ {c.precioSugerido}</p>
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                        c.estado === 'abierta' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                      )}>
+                        {c.estado}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : trips.length === 0 ? (
               <div className="text-center py-20 space-y-3">
