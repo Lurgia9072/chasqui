@@ -14,6 +14,8 @@ import { TripDetails } from './pages/TripDetails';
 import { History } from './pages/History';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
+import { AdminDashboard } from './pages/AdminDashboard';
+
 
 export default function App() {
   useAuth();
@@ -47,6 +49,7 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route path="/trip/:id" element={<TripDetails />} />
                   <Route path="/history" element={<History />} />
+                  <Route path="/admin" element={<AdminDashboard />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

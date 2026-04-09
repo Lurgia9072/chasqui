@@ -1,4 +1,4 @@
-import { LogOut, User, Settings, CreditCard } from 'lucide-react';
+import { LogOut, User, Settings, CreditCard, ShieldCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from './DropdownMenu';
 import { UserAvatar } from './UserAvatar';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -16,6 +16,8 @@ export const UserMenu = () => {
   };
 
   if (!user) return null;
+
+  const isAdmin = user.email === 'lurgia18yuar@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
 
   return (
     <DropdownMenu>
@@ -43,6 +45,12 @@ export const UserMenu = () => {
           <CreditCard className="mr-2 h-4 w-4" />
           <span>Pagos</span>
         </DropdownMenuItem>
+        {isAdmin && (
+          <DropdownMenuItem onClick={() => navigate('/admin')} className="text-purple-600 focus:bg-purple-50 focus:text-purple-600">
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            <span>Panel Admin</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:bg-red-50 focus:text-red-600">
           <LogOut className="mr-2 h-4 w-4" />

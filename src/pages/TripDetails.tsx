@@ -15,7 +15,6 @@ import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 
 
-
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -48,7 +47,7 @@ export const TripDetails = () => {
   const isCarrier = user?.tipoUsuario === 'transportista';
   const isAdmin = user?.tipoUsuario === 'admin' || 
                   user?.email === 'lurgia18yuar@gmail.com' || 
-                  user?.email === 'lurgiayuar18@gmail.com';
+                  user?.email === 'lurgiaalidayupa@gmail.com';
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -274,6 +273,7 @@ export const TripDetails = () => {
     switch (status) {
       case 'pendiente_pago': return 'Pendiente de Pago';
       case 'pago_en_revision': return 'Pago en Revisión';
+      case 'pago_rechazado': return 'Pago Rechazado';
       case 'en_camino_a_recojo': return 'En camino al recojo';
       case 'recojo_completado': return 'Carga Recogida';
       case 'en_camino_a_destino': return 'En camino al destino';
@@ -329,18 +329,31 @@ export const TripDetails = () => {
         {/* Mapa y Seguimiento */}
         <div className="lg:col-span-2 space-y-6">
           {/* Sección de Pago (Solo para Comerciante si está pendiente) */}
-          {!isCarrier && trip.estado === 'pendiente_pago' && (
+          {!isCarrier && (trip.estado === 'pendiente_pago' || trip.estado === 'pago_rechazado') && (
             <Card className="border-2 border-orange-200 bg-orange-50/30">
               <CardHeader>
                 <div className="flex items-center space-x-2 text-orange-700">
                   <Banknote className="h-5 w-5" />
-                  <CardTitle className="text-lg">Pago del Flete Pendiente</CardTitle>
+                  <CardTitle className="text-lg">
+                    {trip.estado === 'pago_rechazado' ? 'Pago Rechazado - Reintentar' : 'Pago del Flete Pendiente'}
+                  </CardTitle>
                 </div>
                 <CardDescription>
-                  Para iniciar el viaje, debes realizar el pago total del flete.
+                  {trip.estado === 'pago_rechazado' 
+                    ? 'Tu pago anterior fue rechazado. Por favor, verifica los datos y vuelve a informar.' 
+                    : 'Para iniciar el viaje, debes realizar el pago total del flete.'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {trip.estado === 'pago_rechazado' && trip.pagoInfo?.motivoRechazo && (
+                  <div className="bg-red-100 p-4 rounded-lg border border-red-200 flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-red-800">Motivo del rechazo:</p>
+                      <p className="text-sm text-red-700">{trip.pagoInfo.motivoRechazo}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="bg-white p-4 rounded-lg border border-orange-100 space-y-3">
                   <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span className="text-sm text-gray-500">Monto del Flete:</span>

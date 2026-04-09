@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation } from 'lucide-react';
+import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation, ShieldCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -58,8 +58,30 @@ export const MerchantDashboard = () => {
     };
   }, [user]);
 
+  const isAdmin = user?.email === 'lurgia18yuar@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {isAdmin && (
+        <div className="bg-purple-600 rounded-2xl p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-purple-200">
+          <div className="flex items-center space-x-4">
+            <div className="bg-white/20 p-3 rounded-xl">
+              <ShieldCheck className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Modo Administrador Activo</h2>
+              <p className="text-purple-100 text-sm">Tienes pagos pendientes por verificar en la plataforma.</p>
+            </div>
+          </div>
+          <Link to="/admin">
+            <Button className="bg-white text-purple-600 hover:bg-purple-50 font-bold px-8 h-12">
+              Ir al Panel Admin
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* Viajes en Curso */}
       {activeTrips.length > 0 && (
         <section className="space-y-6">
@@ -84,7 +106,7 @@ export const MerchantDashboard = () => {
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
                         <p className="text-[10px] uppercase font-bold text-blue-600 tracking-widest">
-                          {trip.estado === 'pendiente_pago' || trip.estado === 'pago_en_revision' ? 'Pago Requerido' : 'Carga en Tránsito'}
+                          {trip.estado === 'pendiente_pago' || trip.estado === 'pago_en_revision' || trip.estado === 'pago_rechazado' ? 'Pago Requerido' : 'Carga en Tránsito'}
                         </p>
                         <h3 className="text-lg font-bold text-gray-900">Destino: {trip.destino}</h3>
                       </div>
@@ -93,10 +115,12 @@ export const MerchantDashboard = () => {
                         <p className={cn(
                           "text-sm font-bold",
                           trip.estado === 'pendiente_pago' ? "text-orange-600" :
-                          trip.estado === 'pago_en_revision' ? "text-blue-600" : "text-green-600"
+                          trip.estado === 'pago_en_revision' ? "text-blue-600" : 
+                          trip.estado === 'pago_rechazado' ? "text-red-600" : "text-green-600"
                         )}>
                           {trip.estado === 'pendiente_pago' ? 'Pendiente de Pago' :
-                           trip.estado === 'pago_en_revision' ? 'En Revisión' : 'En Camino'}
+                           trip.estado === 'pago_en_revision' ? 'En Revisión' : 
+                           trip.estado === 'pago_rechazado' ? 'Pago Rechazado' : 'En Camino'}
                         </p>
                       </div>
                     </div>

@@ -3,7 +3,7 @@ export type AccountType = 'natural' | 'ruc10' | 'ruc20';
 export type VerificationStatus = 'pendiente' | 'verificado' | 'rechazado';
 export type CargoStatus = 'disponible' | 'en_negociacion' | 'asignado' | 'completado';
 export type OfferStatus = 'pendiente' | 'aceptada' | 'rechazada';
-export type TripStatus = 'pendiente_pago' | 'pago_en_revision' | 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino' | 'entregado_pendiente_confirmacion' | 'completado' | 'cancelado';
+export type TripStatus = 'pendiente_pago' | 'pago_en_revision' | 'pago_rechazado' | 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino' | 'entregado_pendiente_confirmacion' | 'completado' | 'cancelado';
 
 export interface User {
   uid: string;
