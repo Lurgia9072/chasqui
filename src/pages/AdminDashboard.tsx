@@ -5,13 +5,13 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
-type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'todos' | 'users' | 'cargas';
+type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'payouts' | 'todos' | 'users' | 'cargas';
 
 export const AdminDashboard = () => {
   const { user } = useAuthStore();
@@ -30,6 +30,10 @@ export const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('revision');
   const [rejectingTrip, setRejectingTrip] = useState<Trip | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [payingTrip, setPayingTrip] = useState<Trip | null>(null);
+  const [payoutRef, setPayoutRef] = useState('');
+  const [payoutFile, setPayoutFile] = useState<File | null>(null);
+  const [payoutProofUrl, setPayoutProofUrl] = useState('');
 
   const isAdmin = user?.tipoUsuario === 'admin' || 
                   user?.email === 'lurgia18yuar@gmail.com' || 
@@ -89,6 +93,7 @@ export const AdminDashboard = () => {
       else if (activeTab === 'confirmado') statusFilter = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
       else if (activeTab === 'rechazado') statusFilter = ['pago_rechazado', 'pendiente_pago']; // Incluimos pendiente_pago para filtrar luego
       else if (activeTab === 'pendiente') statusFilter = ['pendiente_pago'];
+      else if (activeTab === 'payouts') statusFilter = ['completado'];
 
       q = query(
         collection(db, 'trips'),
@@ -108,6 +113,9 @@ export const AdminDashboard = () => {
       } else if (activeTab === 'pendiente') {
         // En la pestaña de pendientes, ocultamos los que tienen motivo de rechazo (porque esos van a la pestaña de rechazados)
         docs = docs.filter(t => t.estado === 'pendiente_pago' && !t.pagoInfo?.motivoRechazo);
+      } else if (activeTab === 'payouts') {
+        // En la pestaña de reembolsos, mostramos los completados que no han sido pagados aún
+        docs = docs.filter(t => t.estado === 'completado' && t.payoutInfo?.estado !== 'pagado');
       }
 
       setTrips(docs);
@@ -192,6 +200,40 @@ export const AdminDashboard = () => {
     }
   };
 
+  const handleProcessPayout = async () => {
+    if (!payingTrip || !payoutRef.trim()) return;
+    setIsUpdating(payingTrip.id);
+    try {
+      await updateDoc(doc(db, 'trips', payingTrip.id), {
+        payoutInfo: {
+          estado: 'pagado',
+          referencia: payoutRef,
+          comprobanteUrl: payoutProofUrl || '',
+          pagadoAt: Date.now(),
+          montoPagado: payingTrip.precioFinal - payingTrip.comision
+        }
+      });
+
+      // Notificar al transportista
+      await addDoc(collection(db, 'notifications'), {
+        userId: payingTrip.transportistaId,
+        titulo: '¡Pago Enviado!',
+        mensaje: `Se ha procesado el pago de S/ ${(payingTrip.precioFinal - payingTrip.comision).toFixed(2)} por tu servicio a ${payingTrip.destino}.`,
+        tipo: 'viaje_actualizado',
+        leido: false,
+        link: `/trip/${payingTrip.id}`,
+        createdAt: Date.now(),
+      });
+
+      setPayingTrip(null);
+      setPayoutRef('');
+      setPayoutProofUrl('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${payingTrip.id}`);
+    } finally {
+      setIsUpdating(null);
+    }
+  };
   const handleUpdateUserStatus = async (userId: string, status: string) => {
     try {
       await updateDoc(doc(db, 'users', userId), {
@@ -311,6 +353,16 @@ export const AdminDashboard = () => {
           Pendientes
         </button>
         <button
+          onClick={() => setActiveTab('payouts')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'payouts' ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Banknote className="h-4 w-4 mr-2" />
+          Reembolsos
+        </button>
+        <button
           onClick={() => setActiveTab('todos')}
           className={cn(
             "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
@@ -354,10 +406,12 @@ export const AdminDashboard = () => {
                 {activeTab === 'todos' && <Filter className="h-5 w-5 mr-2 text-gray-500" />}
                 {activeTab === 'users' && <ShieldCheck className="h-5 w-5 mr-2 text-purple-500" />}
                 {activeTab === 'cargas' && <Package className="h-5 w-5 mr-2 text-blue-500" />}
+                {activeTab === 'payouts' && <Banknote className="h-5 w-5 mr-2 text-emerald-500" />}
                 {activeTab === 'revision' ? 'Pagos por Verificar' : 
                  activeTab === 'confirmado' ? 'Pagos Confirmados' :
                  activeTab === 'rechazado' ? 'Pagos Rechazados' : 
                  activeTab === 'pendiente' ? 'Viajes Pendientes de Pago' : 
+                 activeTab === 'payouts' ? 'Reembolsos a Transportistas' :
                  activeTab === 'users' ? 'Gestión de Usuarios' : 
                  activeTab === 'cargas' ? 'Todas las Cargas Publicadas' : 'Todos los Viajes'}
               </CardTitle>
@@ -475,10 +529,43 @@ export const AdminDashboard = () => {
                           <p className="text-sm font-bold text-gray-700">{trip.transportistaNombre}</p>
                         </div>
                         <div className="space-y-1">
-                          <p className="text-[10px] uppercase font-bold text-gray-400">Referencia</p>
+                          <p className="text-[10px] uppercase font-bold text-gray-400">Referencia Pago</p>
                           <p className="text-sm font-mono font-bold text-blue-600">{trip.pagoInfo?.referencia || 'N/A'}</p>
                         </div>
                       </div>
+
+                      {activeTab === 'payouts' && (
+                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Datos Bancarios del Transportista</p>
+                            <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Monto a Pagar: S/ {(trip.precioFinal - trip.comision).toFixed(2)}</span>
+                          </div>
+                          {(() => {
+                            const carrier = platformUsers.find(u => u.uid === trip.transportistaId);
+                            if (!carrier?.datosBancarios) return <p className="text-xs text-red-600 font-bold">El transportista no ha configurado sus datos bancarios.</p>;
+                            return (
+                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Banco</p>
+                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.banco}</p>
+                                </div>
+                                <div>
+                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Número de Cuenta</p>
+                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.numeroCuenta}</p>
+                                </div>
+                                <div>
+                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">CCI</p>
+                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.cci || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Titular</p>
+                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.titular}</p>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                       
                       {trip.estado === 'pago_rechazado' && (
                         <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex items-start space-x-2">
@@ -547,6 +634,18 @@ export const AdminDashboard = () => {
                           </Button>
                         </div>
                       )}
+                      {activeTab === 'payouts' && (
+                        <div className="w-full">
+                          <Button 
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
+                            onClick={() => setPayingTrip(trip)}
+                            disabled={isUpdating === trip.id || !platformUsers.find(u => u.uid === trip.transportistaId)?.datosBancarios}
+                          >
+                            <Banknote className="h-4 w-4 mr-2" />
+                            Procesar Reembolso
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -555,6 +654,58 @@ export const AdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Payout Modal */}
+      {payingTrip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900">Procesar Reembolso</h3>
+              <button onClick={() => setPayingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-start space-x-3">
+                <Banknote className="h-5 w-5 text-emerald-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-emerald-900">Monto a reembolsar: S/ {(payingTrip.precioFinal - payingTrip.comision).toFixed(2)}</p>
+                  <p className="text-[10px] text-emerald-700">Asegúrate de haber realizado la transferencia bancaria antes de confirmar.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Referencia de Transferencia:</label>
+                <input 
+                  type="text"
+                  className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Número de operación o referencia"
+                  value={payoutRef}
+                  onChange={(e) => setPayoutRef(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setPayingTrip(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={!payoutRef.trim() || isUpdating === payingTrip.id}
+                  onClick={handleProcessPayout}
+                  isLoading={isUpdating === payingTrip.id}
+                >
+                  Confirmar Pago
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rejection Modal */}
       {rejectingTrip && (

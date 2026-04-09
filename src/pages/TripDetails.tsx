@@ -14,8 +14,6 @@ import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 
-
-
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -51,6 +49,9 @@ export const TripDetails = () => {
   const [rejectionReason, setRejectionReason] = useState('');
 
   const isCarrier = user?.tipoUsuario === 'transportista';
+  const [payoutRef, setPayoutRef] = useState('');
+  const [carrierData, setCarrierData] = useState<any>(null);
+
   const isAdmin = user?.tipoUsuario === 'admin' || 
                   user?.email === 'lurgia18yuar@gmail.com' || 
                   user?.email === 'lurgiaalidayupa@gmail.com';
@@ -115,6 +116,17 @@ export const TripDetails = () => {
 
     return () => unsubscribe();
   }, [id, user, carga]);
+
+  useEffect(() => {
+    if (trip?.transportistaId) {
+      const unsub = onSnapshot(doc(db, 'users', trip.transportistaId), (doc) => {
+        if (doc.exists()) {
+          setCarrierData(doc.data());
+        }
+      });
+      return () => unsub();
+    }
+  }, [trip?.transportistaId]);
 
   // Listener para nuevos mensajes (Auto-abrir chat)
   useEffect(() => {
@@ -307,6 +319,38 @@ export const TripDetails = () => {
     }
   };
 
+  const handleProcessPayout = async () => {
+    if (!trip || !payoutRef.trim()) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), {
+        payoutInfo: {
+          estado: 'pagado',
+          referencia: payoutRef,
+          comprobanteUrl: '',
+          pagadoAt: Date.now(),
+          montoPagado: trip.precioFinal - trip.comision
+        }
+      });
+
+      // Notificar al transportista
+      await addDoc(collection(db, 'notifications'), {
+        userId: trip.transportistaId,
+        titulo: '¡Pago Enviado!',
+        mensaje: `Se ha procesado el pago de S/ ${(trip.precioFinal - trip.comision).toFixed(2)} por tu servicio a ${trip.destino}.`,
+        tipo: 'viaje_actualizado',
+        leido: false,
+        link: `/trip/${trip.id}`,
+        createdAt: Date.now(),
+      });
+
+      setPayoutRef('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
   const handleVerifyPayment = async () => {
     if (!trip) return;
     setIsUpdating(true);
@@ -317,6 +361,29 @@ export const TripDetails = () => {
         'pagoInfo.verificadoAt': Date.now(),
         tiempoEstimado: '45 min para el recojo'
       });
+
+      // Notificar al transportista
+      await addDoc(collection(db, 'notifications'), {
+        userId: trip.transportistaId,
+        titulo: '¡Pago Verificado!',
+        mensaje: `El pago para el viaje de ${trip.tipoCarga} ha sido verificado. Ya puedes iniciar el recojo.`,
+        tipo: 'viaje_actualizado',
+        leido: false,
+        link: `/trip/${trip.id}`,
+        createdAt: Date.now(),
+      });
+
+      // Notificar al comerciante
+      await addDoc(collection(db, 'notifications'), {
+        userId: trip.comercianteId,
+        titulo: 'Pago Confirmado',
+        mensaje: `Tu pago para el viaje a ${trip.destino} ha sido verificado. El transportista está en camino.`,
+        tipo: 'viaje_actualizado',
+        leido: false,
+        link: `/trip/${trip.id}`,
+        createdAt: Date.now(),
+      });
+
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
@@ -931,11 +998,158 @@ export const TripDetails = () => {
               )}
 
               {trip.estado === 'completado' && (
-                <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-center space-y-2">
-                  <CheckCircle className="h-10 w-10 text-green-600 mx-auto" />
-                  <h3 className="text-lg font-bold text-green-900">Viaje Completado</h3>
-                  <p className="text-sm text-green-700">El servicio ha sido finalizado con éxito.</p>
-                  <Button variant="outline" className="mt-4 w-full" onClick={() => navigate('/')}>
+                <div className="space-y-4">
+                  <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-center space-y-2">
+                    <CheckCircle className="h-10 w-10 text-green-600 mx-auto" />
+                    <h3 className="text-lg font-bold text-green-900">Viaje Completado</h3>
+                    <p className="text-sm text-green-700">El servicio ha sido finalizado con éxito.</p>
+                  </div>
+
+                  {isAdmin && trip.payoutInfo?.estado !== 'pagado' && (
+                    <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 space-y-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-emerald-600 p-2 rounded-lg text-white">
+                          <Banknote className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-emerald-900">Reembolso al Transportista</h3>
+                          <p className="text-xs text-emerald-700">El servicio ha finalizado. Procesa el pago al transportista.</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-xl border border-emerald-200 space-y-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Datos de Pago</p>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-[10px] text-emerald-600 font-bold uppercase">Monto Neto</p>
+                            <p className="font-bold text-gray-900">S/ {(trip.precioFinal - trip.comision).toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-emerald-600 font-bold uppercase">Comisión Retenida</p>
+                            <p className="font-bold text-gray-900">S/ {trip.comision.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {carrierData?.datosBancarios ? (
+                          <div className="pt-3 border-t border-gray-100 grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                            <div className="col-span-2">
+                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Titular</p>
+                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.titular}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Banco</p>
+                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.banco}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Tipo</p>
+                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.tipoCuenta}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Número de Cuenta</p>
+                              <p className="font-bold text-gray-900 font-mono">{carrierData.datosBancarios.numeroCuenta}</p>
+                            </div>
+                            {carrierData.datosBancarios.cci && (
+                              <div className="col-span-2">
+                                <p className="text-[10px] text-emerald-600 font-bold uppercase">CCI</p>
+                                <p className="font-bold text-gray-900 font-mono">{carrierData.datosBancarios.cci}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-start space-x-2">
+                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                            <p className="text-xs text-red-700 font-medium">El transportista aún no ha configurado sus datos bancarios.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {carrierData?.datosBancarios && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-emerald-800 uppercase">Referencia de Transferencia:</label>
+                            <Input 
+                              placeholder="Ej: OP-123456789"
+                              value={payoutRef}
+                              onChange={(e) => setPayoutRef(e.target.value)}
+                              className="bg-white border-emerald-200 focus:ring-emerald-500"
+                            />
+                          </div>
+                          <Button 
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-lg shadow-lg shadow-emerald-100"
+                            onClick={handleProcessPayout}
+                            disabled={!payoutRef || isUpdating}
+                            isLoading={isUpdating}
+                          >
+                            <CheckCircle className="h-5 w-5 mr-2" />
+                            Confirmar Reembolso Enviado
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isAdmin && trip.payoutInfo?.estado === 'pagado' && (
+                    <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-6 w-6 text-emerald-600" />
+                        <h3 className="text-lg font-bold text-emerald-900">Reembolso Procesado</h3>
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-emerald-700">Referencia:</span>
+                          <span className="font-mono font-bold text-gray-900">{trip.payoutInfo.referencia}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-emerald-700">Fecha:</span>
+                          <span className="font-bold text-gray-900">{new Date(trip.payoutInfo.pagadoAt!).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-emerald-700">Monto:</span>
+                          <span className="font-bold text-gray-900">S/ {trip.payoutInfo.montoPagado?.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {isCarrier && (
+                    <div className={cn(
+                      "p-4 rounded-xl border flex flex-col space-y-3",
+                      trip.payoutInfo?.estado === 'pagado' ? "bg-emerald-50 border-emerald-100" : "bg-blue-50 border-blue-100"
+                    )}>
+                      <div className="flex items-center space-x-3">
+                        <Banknote className={cn("h-6 w-6", trip.payoutInfo?.estado === 'pagado' ? "text-emerald-600" : "text-blue-600")} />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Estado del Reembolso</p>
+                          <p className={cn("font-bold", trip.payoutInfo?.estado === 'pagado' ? "text-emerald-700" : "text-blue-700")}>
+                            {trip.payoutInfo?.estado === 'pagado' ? 'PAGO ENVIADO' : 'PAGO EN PROCESO'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {trip.payoutInfo?.estado === 'pagado' ? (
+                        <div className="space-y-2 pt-2 border-t border-emerald-200">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-emerald-600">Referencia:</span>
+                            <span className="font-mono font-bold text-gray-900">{trip.payoutInfo.referencia}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-emerald-600">Fecha:</span>
+                            <span className="font-bold text-gray-900">{new Date(trip.payoutInfo.pagadoAt!).toLocaleDateString()}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-emerald-600">Monto:</span>
+                            <span className="font-bold text-gray-900">S/ {trip.payoutInfo.montoPagado?.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-blue-700 italic">
+                          El administrador está procesando tu pago a tu cuenta bancaria configurada.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/')}>
                     Volver al Inicio
                   </Button>
                 </div>

@@ -26,6 +26,13 @@ export interface User {
     licencia: string;
     tarjetaPropiedad: string;
   };
+  datosBancarios?: {
+    banco: string;
+    tipoCuenta: string;
+    numeroCuenta: string;
+    cci: string;
+    titular: string;
+  };
   createdAt: number;
 }
 
@@ -85,6 +92,17 @@ export interface Trip {
     fechaPago?: number;
     verificadoPor?: string;
     verificadoAt?: number;
+    motivoRechazo?: string | null;
+    rechazadoPor?: string;
+    rechazadoAt?: number;
+    fileName?: string;
+  };
+  payoutInfo?: {
+    estado: 'pendiente' | 'pagado';
+    referencia?: string;
+    comprobanteUrl?: string;
+    pagadoAt?: number;
+    montoPagado?: number;
   };
   createdAt: number;
 }
