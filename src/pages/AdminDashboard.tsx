@@ -450,8 +450,12 @@ export const AdminDashboard = () => {
                 {platformUsers.map((u) => (
                   <div key={u.id} className="p-6 flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500">
-                        {u.nombre?.[0] || 'U'}
+                      <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500 overflow-hidden border border-gray-200">
+                        {u.photoUrl ? (
+                          <img src={u.photoUrl} alt={u.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          u.nombre?.[0] || 'U'
+                        )}
                       </div>
                       <div>
                         <p className="font-bold text-gray-900">{u.nombre}</p>

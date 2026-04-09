@@ -13,6 +13,7 @@ export interface User {
   documento: string;
   telefono: string;
   email: string;
+  photoUrl?: string;
   verificado: VerificationStatus;
   rating: number;
   zonasOperacion?: string[];
@@ -111,6 +112,7 @@ export interface ChatMessage {
   id: string;
   senderId: string;
   senderName: string;
+  senderPhotoUrl?: string;
   text?: string;
   audioUrl?: string;
   type: 'text' | 'audio';

@@ -14,6 +14,8 @@ import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 
+
+
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -32,8 +34,8 @@ export const TripDetails = () => {
   
   const [trip, setTrip] = useState<Trip | null>(null);
   const [carga, setCarga] = useState<Cargo | null>(null);
-  const [merchantPhone, setMerchantPhone] = useState<string | null>(null);
-  const [carrierPhone, setCarrierPhone] = useState<string | null>(null);
+  const [merchantData, setMerchantData] = useState<any>(null);
+  const [carrierData, setCarrierData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -50,7 +52,6 @@ export const TripDetails = () => {
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
-  const [carrierData, setCarrierData] = useState<any>(null);
 
   const isAdmin = user?.tipoUsuario === 'admin' || 
                   user?.email === 'lurgia18yuar@gmail.com' || 
@@ -70,27 +71,27 @@ export const TripDetails = () => {
           const tripData = { id: snapshot.id, ...snapshot.data() } as Trip;
           setTrip(tripData);
           
-          // Fetch merchant phone if not already fetched
-          if (!merchantPhone) {
+          // Fetch merchant data if not already fetched
+          if (!merchantData) {
             try {
               const merchantDoc = await getDoc(doc(db, 'users', tripData.comercianteId));
               if (merchantDoc.exists()) {
-                setMerchantPhone(merchantDoc.data().telefono || null);
+                setMerchantData(merchantDoc.data());
               }
             } catch (err) {
-              console.warn('No se pudo obtener el teléfono del comerciante:', err);
+              console.warn('No se pudo obtener datos del comerciante:', err);
             }
           }
 
-          // Fetch carrier phone if not already fetched
-          if (!carrierPhone) {
+          // Fetch carrier data if not already fetched
+          if (!carrierData) {
             try {
               const carrierDoc = await getDoc(doc(db, 'users', tripData.transportistaId));
               if (carrierDoc.exists()) {
-                setCarrierPhone(carrierDoc.data().telefono || null);
+                setCarrierData(carrierDoc.data());
               }
             } catch (err) {
-              console.warn('No se pudo obtener el teléfono del transportista:', err);
+              console.warn('No se pudo obtener datos del transportista:', err);
             }
           }
           
@@ -425,7 +426,7 @@ export const TripDetails = () => {
 
   const handleCall = () => {
     if (!trip) return;
-    const phoneToCall = isCarrier ? merchantPhone : carrierPhone;
+    const phoneToCall = isCarrier ? merchantData?.telefono : carrierData?.telefono;
     if (phoneToCall) {
       window.location.href = `tel:${phoneToCall}`;
     }
@@ -1165,8 +1166,20 @@ export const TripDetails = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center space-x-4">
-                <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center">
-                  <User className="h-6 w-6 text-gray-400" />
+                <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border border-gray-200">
+                  {isCarrier ? (
+                    merchantData?.photoUrl ? (
+                      <img src={merchantData.photoUrl} alt={carga.comercianteNombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <User className="h-6 w-6 text-gray-400" />
+                    )
+                  ) : (
+                    carrierData?.photoUrl ? (
+                      <img src={carrierData.photoUrl} alt={trip.transportistaNombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <User className="h-6 w-6 text-gray-400" />
+                    )
+                  )}
                 </div>
                 <div className="flex-1">
                   <p className="font-bold text-gray-900">
@@ -1178,7 +1191,7 @@ export const TripDetails = () => {
                   </div>
                   <p className="text-xs text-gray-500 mt-1 flex items-center">
                     <Phone className="h-3 w-3 mr-1" />
-                    {isCarrier ? merchantPhone : carrierPhone}
+                    {isCarrier ? merchantData?.telefono : carrierData?.telefono}
                   </p>
                 </div>
               </div>

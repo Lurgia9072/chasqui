@@ -49,9 +49,18 @@ export const Navbar = () => {
               <NotificationBell />
               <div className="flex items-center space-x-2 border-l border-gray-200 pl-4">
                 <div className="flex flex-col items-end">
-                  <span className="text-xs font-semibold text-gray-900">{user.nombre}</span>
+                  <Link to="/profile" className="text-xs font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+                    {user.nombre}
+                  </Link>
                   <span className="text-[10px] uppercase text-gray-500">{user.tipoUsuario}</span>
                 </div>
+                <Link to="/profile" className="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center hover:border-blue-300 transition-colors">
+                  {user.photoUrl ? (
+                    <img src={user.photoUrl} alt={user.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <User className="h-4 w-4 text-gray-500" />
+                  )}
+                </Link>
                 <Button variant="ghost" size="sm" onClick={handleLogout}>
                   <LogOut className="h-4 w-4 text-gray-500" />
                 </Button>

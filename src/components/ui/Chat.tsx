@@ -172,6 +172,7 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
       await addDoc(collection(db, 'trips', tripId, 'messages'), {
         senderId: user.uid,
         senderName: user.nombre,
+        senderPhotoUrl: user.photoUrl || null,
         text: newMessage,
         type: 'text',
         createdAt: Date.now()
@@ -207,6 +208,7 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
             await addDoc(collection(db, 'trips', tripId, 'messages'), {
               senderId: user!.uid,
               senderName: user!.nombre,
+              senderPhotoUrl: user!.photoUrl || null,
               audioUrl: base64Audio,
               type: 'audio',
               createdAt: Date.now()
@@ -246,36 +248,52 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
             <div
               key={msg.id}
               className={cn(
-                "flex flex-col max-w-[80%]",
-                isMe ? "ml-auto items-end" : "mr-auto items-start"
+                "flex items-end space-x-2 max-w-[85%]",
+                isMe ? "ml-auto flex-row-reverse space-x-reverse" : "mr-auto"
               )}
             >
-              <span className="text-[10px] font-bold text-gray-400 mb-1 px-2">
-                {isMe ? 'Tú' : msg.senderName}
-              </span>
-              <div
-                className={cn(
-                  "p-3 rounded-2xl shadow-sm",
-                  isMe 
-                    ? "bg-blue-600 text-white rounded-tr-none" 
-                    : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"
-                )}
-              >
-                {msg.type === 'text' ? (
-                  <p className="text-sm">{msg.text}</p>
+              <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden border border-gray-100 mb-1">
+                {msg.senderPhotoUrl ? (
+                  <img src={msg.senderPhotoUrl} alt={msg.senderName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <AudioPlayer 
-                    url={msg.audioUrl!} 
-                    isMe={isMe} 
-                    messageId={msg.id}
-                    playingId={playingId}
-                    setPlayingId={setPlayingId}
-                  />
+                  <div className="h-full w-full flex items-center justify-center bg-gray-100 text-[10px] font-bold text-gray-400">
+                    {msg.senderName[0]}
+                  </div>
                 )}
               </div>
-              <span className="text-[9px] text-gray-400 mt-1 px-2">
-                {format(msg.createdAt, 'HH:mm', { locale: es })}
-              </span>
+              <div
+                className={cn(
+                  "flex flex-col",
+                  isMe ? "items-end" : "items-start"
+                )}
+              >
+                <span className="text-[9px] font-bold text-gray-400 mb-0.5 px-1">
+                  {isMe ? 'Tú' : msg.senderName}
+                </span>
+                <div
+                  className={cn(
+                    "p-3 rounded-2xl shadow-sm",
+                    isMe 
+                      ? "bg-blue-600 text-white rounded-tr-none" 
+                      : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"
+                  )}
+                >
+                  {msg.type === 'text' ? (
+                    <p className="text-sm leading-relaxed">{msg.text}</p>
+                  ) : (
+                    <AudioPlayer 
+                      url={msg.audioUrl!} 
+                      isMe={isMe} 
+                      messageId={msg.id}
+                      playingId={playingId}
+                      setPlayingId={setPlayingId}
+                    />
+                  )}
+                </div>
+                <span className="text-[8px] text-gray-400 mt-0.5 px-1">
+                  {format(msg.createdAt, 'HH:mm', { locale: es })}
+                </span>
+              </div>
             </div>
           );
         })}
