@@ -113,7 +113,7 @@ service cloud.firestore {
              data.uid == request.auth.uid &&
              data.nombre is string && data.nombre.size() > 0 && data.nombre.size() < 100 &&
              isValidEmail(data.email) &&
-             data.tipoUsuario in ['comerciante', 'transportista'] &&
+             data.tipoUsuario in ['comerciante', 'transportista', 'admin'] &&
              data.verificado in ['pendiente', 'verificado', 'rechazado'] &&
              data.createdAt is number &&
              (!('telefono' in data) || (data.telefono is string && data.telefono.size() < 20)) &&
@@ -150,7 +150,7 @@ service cloud.firestore {
              data.destino is string && data.destino.size() < 200 &&
              data.precioFinal is number && data.precioFinal > 0 &&
              data.comision is number && data.comision >= 0 &&
-             data.estado in ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
+             data.estado in ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
              data.createdAt is number;
     }
 

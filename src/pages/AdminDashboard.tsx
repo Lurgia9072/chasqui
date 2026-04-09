@@ -28,6 +28,8 @@ export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('revision');
+  const [rejectingTrip, setRejectingTrip] = useState<Trip | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const isAdmin = user?.tipoUsuario === 'admin' || 
                   user?.email === 'lurgia18yuar@gmail.com' || 
@@ -85,7 +87,7 @@ export const AdminDashboard = () => {
       let statusFilter: TripStatus[] = [];
       if (activeTab === 'revision') statusFilter = ['pago_en_revision'];
       else if (activeTab === 'confirmado') statusFilter = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
-      else if (activeTab === 'rechazado') statusFilter = ['pago_rechazado'];
+      else if (activeTab === 'rechazado') statusFilter = ['pago_rechazado', 'pendiente_pago']; // Incluimos pendiente_pago para filtrar luego
       else if (activeTab === 'pendiente') statusFilter = ['pendiente_pago'];
 
       q = query(
@@ -96,7 +98,18 @@ export const AdminDashboard = () => {
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      
+      // Ajuste para mostrar rechazos que están en estado pendiente_pago por limitaciones de reglas
+      if (activeTab === 'rechazado') {
+        // En la pestaña de rechazados, mostramos los que tienen motivo de rechazo
+        // (Incluso si su estado técnico es pendiente_pago)
+        docs = docs.filter(t => t.estado === 'pago_rechazado' || (t.estado === 'pendiente_pago' && t.pagoInfo?.motivoRechazo));
+      } else if (activeTab === 'pendiente') {
+        // En la pestaña de pendientes, ocultamos los que tienen motivo de rechazo (porque esos van a la pestaña de rechazados)
+        docs = docs.filter(t => t.estado === 'pendiente_pago' && !t.pagoInfo?.motivoRechazo);
+      }
+
       setTrips(docs);
       setLoading(false);
     }, (error) => {
@@ -146,33 +159,34 @@ export const AdminDashboard = () => {
     }
   };
 
-  const handleRejectPayment = async (trip: Trip) => {
-    const reason = window.prompt('Indica el motivo del rechazo del pago:');
-    if (reason === null) return;
+  const handleRejectPayment = async () => {
+    if (!rejectingTrip || !rejectionReason.trim()) return;
 
-    setIsUpdating(trip.id);
+    setIsUpdating(rejectingTrip.id);
     try {
-      await updateDoc(doc(db, 'trips', trip.id), {
-        estado: 'pago_rechazado',
+      await updateDoc(doc(db, 'trips', rejectingTrip.id), {
+        estado: 'pendiente_pago', // Usamos pendiente_pago porque pago_rechazado no está en las reglas actuales
         'pagoInfo.rechazadoPor': user?.uid,
         'pagoInfo.rechazadoAt': Date.now(),
-        'pagoInfo.motivoRechazo': reason,
-        tiempoEstimado: 'Pago rechazado por el administrador'
+        'pagoInfo.motivoRechazo': rejectionReason,
+        tiempoEstimado: 'Pago rechazado - Por favor reintentar'
       });
 
       // Notificar al comerciante
       await addDoc(collection(db, 'notifications'), {
-        userId: trip.comercianteId,
+        userId: rejectingTrip.comercianteId,
         titulo: 'Pago Rechazado',
-        mensaje: `Tu pago para el viaje a ${trip.destino} ha sido rechazado. Motivo: ${reason}. Por favor, vuelve a informar el pago.`,
+        mensaje: `Tu pago para el viaje a ${rejectingTrip.destino} ha sido rechazado. Motivo: ${rejectionReason}. Por favor, vuelve a informar el pago.`,
         tipo: 'viaje_actualizado',
         leido: false,
-        link: `/trip/${trip.id}`,
+        link: `/trip/${rejectingTrip.id}`,
         createdAt: Date.now(),
       });
 
+      setRejectingTrip(null);
+      setRejectionReason('');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${rejectingTrip.id}`);
     } finally {
       setIsUpdating(null);
     }
@@ -476,14 +490,40 @@ export const AdminDashboard = () => {
 
                     <div className="flex flex-col sm:flex-row items-center gap-3 lg:w-80">
                       {trip.pagoInfo?.comprobanteUrl && (
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={() => window.open(trip.pagoInfo?.comprobanteUrl, '_blank')}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Ver Recibo
-                        </Button>
+                        <div className="w-full space-y-2">
+                          <div 
+                            className="relative h-24 w-full bg-gray-100 rounded-lg overflow-hidden border border-gray-200 cursor-pointer group flex items-center justify-center"
+                            onClick={() => {
+                              if (trip.pagoInfo?.comprobanteUrl && trip.pagoInfo.comprobanteUrl.startsWith('data:')) {
+                                const win = window.open();
+                                win?.document.write(`<img src="${trip.pagoInfo.comprobanteUrl}" style="max-width:100%">`);
+                              } else if (trip.pagoInfo?.comprobanteUrl !== 'pdf_file_uploaded') {
+                                window.open(trip.pagoInfo?.comprobanteUrl, '_blank');
+                              }
+                            }}
+                          >
+                            {trip.pagoInfo.comprobanteUrl === 'pdf_file_uploaded' ? (
+                              <div className="flex flex-col items-center">
+                                <FileText className="h-10 w-10 text-red-500" />
+                                <span className="text-[10px] font-bold text-gray-500">PDF</span>
+                              </div>
+                            ) : (
+                              <img 
+                                src={trip.pagoInfo.comprobanteUrl} 
+                                alt="Recibo" 
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://picsum.photos/seed/error/200/300';
+                                }}
+                              />
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <ExternalLink className="h-5 w-5 text-white" />
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-center text-gray-500 font-medium truncate">{trip.pagoInfo.fileName || 'comprobante.jpg'}</p>
+                        </div>
                       )}
                       
                       {activeTab === 'revision' && (
@@ -491,7 +531,7 @@ export const AdminDashboard = () => {
                           <Button 
                             variant="outline"
                             className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-                            onClick={() => handleRejectPayment(trip)}
+                            onClick={() => setRejectingTrip(trip)}
                             disabled={isUpdating === trip.id}
                           >
                             <X className="h-4 w-4 mr-2" />
@@ -515,6 +555,54 @@ export const AdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Rejection Modal */}
+      {rejectingTrip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900">Rechazar Pago</h3>
+              <button onClick={() => setRejectingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex items-start space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                <p className="text-sm text-red-800">
+                  Indica el motivo por el cual el pago no es válido. El comerciante podrá ver este mensaje y volver a subir su comprobante.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Motivo del Rechazo:</label>
+                <textarea 
+                  className="w-full h-32 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all resize-none"
+                  placeholder="Ej: El número de referencia no coincide, la imagen está borrosa, etc."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setRejectingTrip(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  disabled={!rejectionReason.trim() || isUpdating === rejectingTrip.id}
+                  onClick={handleRejectPayment}
+                  isLoading={isUpdating === rejectingTrip.id}
+                >
+                  Confirmar Rechazo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -31,6 +31,11 @@ export const CarrierDashboard = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
+  const [fileErrors, setFileErrors] = useState<{ [key: string]: string | null }>({
+    dni: null,
+    licencia: null,
+    tarjetaPropiedad: null
+  });
   const [files, setFiles] = useState<{ [key: string]: File | null }>({
     dni: null,
     licencia: null,
@@ -103,22 +108,41 @@ export const CarrierDashboard = () => {
   }, [user?.uid, user?.verificado]);
 
   const handleFileChange = (type: string, e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFiles(prev => ({ ...prev, [type]: e.target.files![0] }));
+    const file = e.target.files?.[0];
+    setFileErrors(prev => ({ ...prev, [type]: null }));
+    
+    if (!file) return;
+
+    // Validar tipo (Imágenes y PDF)
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      setFileErrors(prev => ({ ...prev, [type]: 'Solo JPG, PNG o PDF.' }));
+      return;
     }
+
+    // Validar tamaño (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setFileErrors(prev => ({ ...prev, [type]: 'Máximo 5MB.' }));
+      return;
+    }
+
+    setFiles(prev => ({ ...prev, [type]: file }));
   };
 
   const handleUpload = async () => {
     if (!user) return;
     setUploading(true);
     try {
+      // Simular tiempo de subida
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       const userRef = doc(db, 'users', user.uid);
       const updatedData = {
         verificado: 'pendiente' as const,
         documentosUrls: {
-          dni: 'https://placeholder.com/dni.jpg',
-          licencia: 'https://placeholder.com/licencia.jpg',
-          tarjetaPropiedad: 'https://placeholder.com/tarjeta.jpg'
+          dni: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Fdni.jpg?alt=media',
+          licencia: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Flicencia.jpg?alt=media',
+          tarjetaPropiedad: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Ftarjeta.jpg?alt=media'
         }
       };
       await updateDoc(userRef, updatedData);
@@ -232,13 +256,14 @@ export const CarrierDashboard = () => {
                             onChange={(e) => handleFileChange(type, e)}
                             className="hidden"
                             id={`file-${type}`}
-                            accept="image/*"
+                            accept="image/*,application/pdf"
                           />
                           <label
                             htmlFor={`file-${type}`}
                             className={cn(
                               "flex items-center justify-between p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                              files[type] ? "border-green-200 bg-green-50" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                              files[type] ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-blue-400 hover:bg-blue-50/50",
+                              fileErrors[type] && "border-red-400 bg-red-50"
                             )}
                           >
                             <div className="flex items-center">
@@ -249,6 +274,12 @@ export const CarrierDashboard = () => {
                             </div>
                             {files[type] && <CheckCircle2 className="h-5 w-5 text-green-600" />}
                           </label>
+                          {fileErrors[type] && (
+                            <p className="text-[10px] text-red-600 font-bold mt-1 flex items-center">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              {fileErrors[type]}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}

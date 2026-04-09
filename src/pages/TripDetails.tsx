@@ -15,6 +15,7 @@ import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 
 
+
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -43,6 +44,11 @@ export const TripDetails = () => {
   const [hasUnread, setHasUnread] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const isAdmin = user?.tipoUsuario === 'admin' || 
@@ -220,24 +226,84 @@ export const TripDetails = () => {
     }
   };
 
-  const handlePaymentSubmit = async (referencia: string, comprobanteUrl?: string) => {
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setFileError(null);
+    
+    if (!file) return;
+
+    // Validar tipo (Imágenes y PDF)
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      setFileError('Solo se permiten imágenes (JPG, PNG) o archivos PDF.');
+      return;
+    }
+
+    // Validar tamaño (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setFileError('El archivo es demasiado grande. Máximo 5MB.');
+      return;
+    }
+
+    setPaymentFile(file);
+    
+    // Si es imagen, crear preview local
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentProofUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPaymentProofUrl(''); // No hay preview para PDF por ahora
+    }
+  };
+
+  const handlePaymentSubmit = async (referencia: string) => {
     if (!trip) return;
     setIsUpdating(true);
+    setUploadProgress(10);
+
     try {
+      // Usar la data URL local del archivo seleccionado
+      let finalUrl = paymentProofUrl;
+      
+      if (paymentFile) {
+        // Simular progreso de subida
+        for (let i = 20; i <= 90; i += 20) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          setUploadProgress(i);
+        }
+        
+        // Si es PDF, no tenemos preview de imagen, así que mantenemos una URL descriptiva o vacía
+        // Si es imagen, paymentProofUrl ya contiene la DataURL (base64)
+        if (paymentFile.type === 'application/pdf') {
+          finalUrl = 'pdf_file_uploaded'; 
+        }
+      }
+
       await updateDoc(doc(db, 'trips', trip.id), {
         estado: 'pago_en_revision',
         pagoInfo: {
           referencia,
-          comprobanteUrl: comprobanteUrl || '',
+          comprobanteUrl: finalUrl || '',
           informadoAt: Date.now(),
-          fechaPago: Date.now()
+          fechaPago: Date.now(),
+          fileName: paymentFile?.name || 'comprobante.jpg',
+          motivoRechazo: null // Limpiar motivo anterior si existe
         },
         tiempoEstimado: 'Pago en revisión por el administrador'
       });
+      setUploadProgress(100);
+      // Limpiar campos locales después de éxito
+      setPaymentRef('');
+      setPaymentFile(null);
+      setPaymentProofUrl('');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
       setIsUpdating(false);
+      setTimeout(() => setUploadProgress(0), 1000);
     }
   };
 
@@ -251,6 +317,38 @@ export const TripDetails = () => {
         'pagoInfo.verificadoAt': Date.now(),
         tiempoEstimado: '45 min para el recojo'
       });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRejectPayment = async () => {
+    if (!trip || !rejectionReason.trim()) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), {
+        estado: 'pago_rechazado',
+        'pagoInfo.rechazadoPor': user?.uid,
+        'pagoInfo.rechazadoAt': Date.now(),
+        'pagoInfo.motivoRechazo': rejectionReason,
+        tiempoEstimado: 'Pago rechazado por el administrador'
+      });
+
+      // Notificar al comerciante
+      await addDoc(collection(db, 'notifications'), {
+        userId: trip.comercianteId,
+        titulo: 'Pago Rechazado',
+        mensaje: `Tu pago para el viaje a ${trip.destino} ha sido rechazado. Motivo: ${rejectionReason}. Por favor, vuelve a informar el pago.`,
+        tipo: 'viaje_actualizado',
+        leido: false,
+        link: `/trip/${trip.id}`,
+        createdAt: Date.now(),
+      });
+
+      setShowRejectModal(false);
+      setRejectionReason('');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
     } finally {
@@ -335,17 +433,17 @@ export const TripDetails = () => {
                 <div className="flex items-center space-x-2 text-orange-700">
                   <Banknote className="h-5 w-5" />
                   <CardTitle className="text-lg">
-                    {trip.estado === 'pago_rechazado' ? 'Pago Rechazado - Reintentar' : 'Pago del Flete Pendiente'}
+                    {trip.pagoInfo?.motivoRechazo ? 'Pago Rechazado - Reintentar' : 'Pago del Flete Pendiente'}
                   </CardTitle>
                 </div>
                 <CardDescription>
-                  {trip.estado === 'pago_rechazado' 
+                  {trip.pagoInfo?.motivoRechazo 
                     ? 'Tu pago anterior fue rechazado. Por favor, verifica los datos y vuelve a informar.' 
                     : 'Para iniciar el viaje, debes realizar el pago total del flete.'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {trip.estado === 'pago_rechazado' && trip.pagoInfo?.motivoRechazo && (
+                {trip.pagoInfo?.motivoRechazo && (
                   <div className="bg-red-100 p-4 rounded-lg border border-red-200 flex items-start space-x-3">
                     <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
                     <div>
@@ -393,41 +491,91 @@ export const TripDetails = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Comprobante de Pago (Opcional):</label>
-                    <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-200 hover:border-blue-400 transition-colors cursor-pointer text-center group">
+                    <label className="text-sm font-medium text-gray-700">Comprobante de Pago (Obligatorio):</label>
+                    <div 
+                      className={cn(
+                        "bg-white p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center group relative overflow-hidden",
+                        paymentFile ? "border-green-400 bg-green-50/30" : "border-gray-200 hover:border-blue-400",
+                        fileError && "border-red-400 bg-red-50/30"
+                      )}
+                      onClick={() => document.getElementById('payment-upload')?.click()}
+                    >
+                      <input 
+                        id="payment-upload"
+                        type="file" 
+                        className="hidden" 
+                        accept="image/*,application/pdf"
+                        onChange={handleFileSelect}
+                      />
+                      
                       {paymentProofUrl ? (
-                        <div className="relative inline-block">
-                          <img src={paymentProofUrl} alt="Comprobante" className="h-20 w-20 object-cover rounded shadow-sm" referrerPolicy="no-referrer" />
+                        <div className="space-y-3">
+                          <div className="relative inline-block">
+                            <img src={paymentProofUrl} alt="Comprobante" className="h-32 w-auto object-contain rounded-lg shadow-md" referrerPolicy="no-referrer" />
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPaymentFile(null);
+                                setPaymentProofUrl('');
+                              }}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md hover:bg-red-600 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <p className="text-xs font-bold text-green-700 flex items-center justify-center">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            {paymentFile?.name}
+                          </p>
+                        </div>
+                      ) : paymentFile && paymentFile.type === 'application/pdf' ? (
+                        <div className="space-y-3">
+                          <div className="h-20 w-20 bg-red-100 rounded-xl flex items-center justify-center mx-auto">
+                            <FileText className="h-10 w-10 text-red-600" />
+                          </div>
+                          <p className="text-xs font-bold text-green-700 flex items-center justify-center">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            {paymentFile.name}
+                          </p>
                           <button 
-                            onClick={() => setPaymentProofUrl('')}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentFile(null);
+                            }}
+                            className="text-[10px] text-red-600 hover:underline"
                           >
-                            <X className="h-3 w-3" />
+                            Quitar archivo
                           </button>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center space-y-1">
-                          <Receipt className="h-8 w-8 text-gray-400 group-hover:text-blue-500" />
-                          <p className="text-xs text-gray-500">Haz clic para subir foto del comprobante</p>
-                          {/* Mock upload for now */}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="mt-2"
-                            onClick={() => setPaymentProofUrl('https://picsum.photos/seed/receipt/400/600')}
-                          >
-                            Simular Subida
-                          </Button>
+                        <div className="flex flex-col items-center space-y-2">
+                          <div className="h-12 w-12 bg-gray-50 rounded-full flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                            <Receipt className="h-6 w-6 text-gray-400 group-hover:text-blue-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-700">Subir Boleta de Pago</p>
+                            <p className="text-xs text-gray-500">JPG, PNG o PDF (Máx. 5MB)</p>
+                          </div>
                         </div>
                       )}
+
+                      {uploadProgress > 0 && (
+                        <div className="absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                      )}
                     </div>
+                    {fileError && (
+                      <p className="text-xs text-red-600 font-medium flex items-center">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        {fileError}
+                      </p>
+                    )}
                   </div>
                   <Button 
-                    className="w-full"
-                    disabled={!paymentRef || isUpdating}
-                    onClick={() => handlePaymentSubmit(paymentRef, paymentProofUrl)}
+                    className="w-full h-12 text-lg shadow-lg shadow-blue-100"
+                    disabled={!paymentRef || !paymentFile || isUpdating}
+                    onClick={() => handlePaymentSubmit(paymentRef)}
                   >
-                    {isUpdating ? 'Enviando...' : 'Informar Pago'}
+                    {isUpdating ? 'Procesando...' : 'Informar Pago Ahora'}
                   </Button>
                   <p className="text-[10px] text-gray-500 flex items-center justify-center">
                     <Info className="h-3 w-3 mr-1" />
@@ -455,27 +603,52 @@ export const TripDetails = () => {
                   <div className="flex items-center space-x-4">
                     {trip.pagoInfo?.comprobanteUrl && (
                       <div 
-                        className="h-16 w-16 bg-gray-100 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => window.open(trip.pagoInfo?.comprobanteUrl, '_blank')}
+                        className="h-16 w-16 bg-gray-100 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center"
+                        onClick={() => {
+                          if (trip.pagoInfo?.comprobanteUrl && trip.pagoInfo.comprobanteUrl.startsWith('data:')) {
+                            const win = window.open();
+                            win?.document.write(`<img src="${trip.pagoInfo.comprobanteUrl}" style="max-width:100%">`);
+                          } else if (trip.pagoInfo?.comprobanteUrl !== 'pdf_file_uploaded') {
+                            window.open(trip.pagoInfo?.comprobanteUrl, '_blank');
+                          }
+                        }}
                       >
-                        <img src={trip.pagoInfo.comprobanteUrl} alt="Recibo" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        {trip.pagoInfo.comprobanteUrl === 'pdf_file_uploaded' ? (
+                          <FileText className="h-8 w-8 text-red-500" />
+                        ) : (
+                          <img src={trip.pagoInfo.comprobanteUrl} alt="Recibo" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        )}
                       </div>
                     )}
                     <div>
                       <p className="text-xs text-gray-500">Referencia informada:</p>
                       <p className="text-lg font-mono font-bold text-gray-900">{trip.pagoInfo?.referencia}</p>
+                      {trip.pagoInfo?.fileName && (
+                        <p className="text-[10px] text-blue-600 font-medium">{trip.pagoInfo.fileName}</p>
+                      )}
                     </div>
                   </div>
                   {isAdmin && (
-                    <Button 
-                      variant="default" 
-                      className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-                      onClick={handleVerifyPayment}
-                      disabled={isUpdating}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Verificar Pago
-                    </Button>
+                    <div className="flex w-full sm:w-auto gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={isUpdating}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Rechazar
+                      </Button>
+                      <Button 
+                        variant="default" 
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={handleVerifyPayment}
+                        disabled={isUpdating}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Verificar Pago
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -898,6 +1071,54 @@ export const TripDetails = () => {
           )}
         </div>
       </div>
+
+      {/* Rejection Modal for Admin */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900">Rechazar Pago</h3>
+              <button onClick={() => setShowRejectModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex items-start space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                <p className="text-sm text-red-800">
+                  Indica el motivo por el cual el pago no es válido.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Motivo del Rechazo:</label>
+                <textarea 
+                  className="w-full h-32 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all resize-none"
+                  placeholder="Ej: El número de referencia no coincide..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setShowRejectModal(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  disabled={!rejectionReason.trim() || isUpdating}
+                  onClick={handleRejectPayment}
+                  isLoading={isUpdating}
+                >
+                  Confirmar Rechazo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
