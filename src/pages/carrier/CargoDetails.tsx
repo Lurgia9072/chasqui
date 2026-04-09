@@ -175,6 +175,10 @@ export const CarrierCargoDetails = () => {
                   <p className="text-gray-900 font-medium">{carga.peso}</p>
                 </div>
                 <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad Requerida</span>
+                  <p className="text-gray-900 font-medium">{carga.capacidadRequerida}</p>
+                </div>
+                <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Comerciante</span>
                   <p className="text-gray-900 font-medium">{carga.comercianteNombre}</p>
                   {merchantPhone && (

@@ -194,6 +194,10 @@ export const MerchantCargoDetails = () => {
                   <p className="text-sm text-gray-900 font-medium">{carga.peso}</p>
                 </div>
                 <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
+                  <p className="text-sm text-gray-900 font-medium">{carga.capacidadRequerida}</p>
+                </div>
+                <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Propuesta</span>
                   <p className="text-sm text-blue-600 font-bold">S/ {carga.precioPropuesto}</p>
                 </div>

@@ -209,6 +209,10 @@ export const MerchantDashboard = () => {
                     <CardTitle className="text-lg font-bold group-hover:text-blue-600 transition-colors">
                       {carga.tipoCarga}
                     </CardTitle>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Capacidad</span>
+                      <span className="text-xs font-bold text-blue-600">{carga.capacidadRequerida}</span>
+                    </div>
                     <span className={cn(
                       "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
                       carga.estado === 'disponible' ? "bg-green-100 text-green-700" : 

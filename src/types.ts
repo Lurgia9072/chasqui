@@ -45,6 +45,7 @@ export interface Cargo {
   destino: string;
   tipoCarga: string;
   peso: string;
+  capacidadRequerida: string;
   descripcion: string;
   precioPropuesto: number;
   estado: CargoStatus;

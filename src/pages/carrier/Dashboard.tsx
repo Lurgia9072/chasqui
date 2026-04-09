@@ -491,8 +491,8 @@ export const CarrierDashboard = () => {
                       {carga.tipoCarga}
                     </CardTitle>
                     <div className="flex flex-col items-end">
-                      <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Peso</span>
-                      <span className="text-sm font-bold text-gray-900">{carga.peso}</span>
+                      <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Capacidad</span>
+                      <span className="text-xs font-bold text-blue-600">{carga.capacidadRequerida}</span>
                     </div>
                   </div>
                   <CardDescription className="flex items-center text-xs">
