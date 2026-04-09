@@ -23,7 +23,8 @@ export const AdminDashboard = () => {
     totalCargos: 0,
     totalTrips: 0,
     totalRevenue: 0,
-    totalCommission: 0
+    totalCommission: 0,
+    pendingPayouts: 0
   });
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
@@ -63,12 +64,14 @@ export const AdminDashboard = () => {
       const completedTrips = allTrips.filter(t => t.estado === 'completado');
       const revenue = completedTrips.reduce((sum, t) => sum + (t.precioFinal || 0), 0);
       const commission = completedTrips.reduce((sum, t) => sum + (t.comision || 0), 0);
+      const pendingPayouts = completedTrips.filter(t => t.payoutInfo?.estado !== 'pagado').length;
       
       setStats(prev => ({ 
         ...prev, 
         totalTrips: snap.size,
         totalRevenue: revenue,
-        totalCommission: commission
+        totalCommission: commission,
+        pendingPayouts: pendingPayouts
       }));
     });
 
@@ -114,8 +117,8 @@ export const AdminDashboard = () => {
         // En la pestaña de pendientes, ocultamos los que tienen motivo de rechazo (porque esos van a la pestaña de rechazados)
         docs = docs.filter(t => t.estado === 'pendiente_pago' && !t.pagoInfo?.motivoRechazo);
       } else if (activeTab === 'payouts') {
-        // En la pestaña de reembolsos, mostramos los completados que no han sido pagados aún
-        docs = docs.filter(t => t.estado === 'completado' && t.payoutInfo?.estado !== 'pagado');
+        // En la pestaña de reembolsos, mostramos todos los completados
+        docs = docs.filter(t => t.estado === 'completado');
       }
 
       setTrips(docs);
@@ -307,6 +310,14 @@ export const AdminDashboard = () => {
           <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-1">Comisiones (S/)</p>
           <p className="text-2xl font-black text-white">{stats.totalCommission.toLocaleString()}</p>
           <p className="text-[10px] text-purple-100 font-bold mt-1">Tu ganancia neta (10%)</p>
+        </div>
+        <div className={cn(
+          "p-5 rounded-2xl border shadow-sm transition-colors",
+          stats.pendingPayouts > 0 ? "bg-emerald-50 border-emerald-200" : "bg-white border-gray-100"
+        )}>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reembolsos Pendientes</p>
+          <p className={cn("text-2xl font-black", stats.pendingPayouts > 0 ? "text-emerald-600" : "text-gray-900")}>{stats.pendingPayouts}</p>
+          <p className="text-[10px] text-gray-500 font-bold mt-1">Por pagar a transportistas</p>
         </div>
       </div>
 
@@ -535,10 +546,21 @@ export const AdminDashboard = () => {
                       </div>
 
                       {activeTab === 'payouts' && (
-                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 space-y-3">
+                        <div className={cn(
+                          "p-4 rounded-xl border space-y-3",
+                          trip.payoutInfo?.estado === 'pagado' ? "bg-gray-50 border-gray-200" : "bg-emerald-50 border-emerald-100"
+                        )}>
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Datos Bancarios del Transportista</p>
-                            <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Monto a Pagar: S/ {(trip.precioFinal - trip.comision).toFixed(2)}</span>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-xs font-bold text-gray-800 uppercase tracking-wider">Datos Bancarios del Transportista</p>
+                              <span className={cn(
+                                "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
+                                trip.payoutInfo?.estado === 'pagado' ? "bg-gray-200 text-gray-700" : "bg-emerald-200 text-emerald-800"
+                              )}>
+                                {trip.payoutInfo?.estado === 'pagado' ? 'Reembolsado' : 'Pendiente'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] bg-white border border-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">Monto: S/ {(trip.precioFinal - trip.comision).toFixed(2)}</span>
                           </div>
                           {(() => {
                             const carrier = platformUsers.find(u => u.uid === trip.transportistaId);
@@ -546,24 +568,38 @@ export const AdminDashboard = () => {
                             return (
                               <div className="grid grid-cols-2 gap-4 text-xs">
                                 <div>
-                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Banco</p>
+                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Banco</p>
                                   <p className="font-bold text-gray-900">{carrier.datosBancarios.banco}</p>
                                 </div>
                                 <div>
-                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Número de Cuenta</p>
+                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Número de Cuenta</p>
                                   <p className="font-bold text-gray-900">{carrier.datosBancarios.numeroCuenta}</p>
                                 </div>
                                 <div>
-                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">CCI</p>
+                                  <p className="text-gray-400 font-bold uppercase text-[9px]">CCI</p>
                                   <p className="font-bold text-gray-900">{carrier.datosBancarios.cci || 'N/A'}</p>
                                 </div>
                                 <div>
-                                  <p className="text-emerald-600 font-bold uppercase text-[9px]">Titular</p>
+                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Titular</p>
                                   <p className="font-bold text-gray-900">{carrier.datosBancarios.titular}</p>
                                 </div>
                               </div>
                             );
                           })()}
+
+                          {trip.payoutInfo?.estado === 'pagado' && (
+                            <div className="pt-3 border-t border-gray-200 mt-2 space-y-1">
+                              <p className="text-[9px] font-bold text-gray-400 uppercase">Información del Reembolso</p>
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-gray-500">Referencia:</span>
+                                <span className="font-mono font-bold text-gray-900">{trip.payoutInfo.referencia}</span>
+                              </div>
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-gray-500">Fecha:</span>
+                                <span className="font-bold text-gray-900">{new Date(trip.payoutInfo.pagadoAt!).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                       
@@ -634,7 +670,7 @@ export const AdminDashboard = () => {
                           </Button>
                         </div>
                       )}
-                      {activeTab === 'payouts' && (
+                      {activeTab === 'payouts' && trip.payoutInfo?.estado !== 'pagado' && (
                         <div className="w-full">
                           <Button 
                             className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
