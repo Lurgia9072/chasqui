@@ -17,7 +17,7 @@ export const UserMenu = () => {
 
   if (!user) return null;
 
-  const isAdmin = user.email === 'lurgia18yuar@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user.email === 'vvendiya@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
 
   return (
     <DropdownMenu>

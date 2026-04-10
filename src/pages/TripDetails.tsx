@@ -70,7 +70,7 @@ export const TripDetails = () => {
   const [payoutRef, setPayoutRef] = useState('');
 
   const isAdmin = user?.tipoUsuario === 'admin' || 
-                  user?.email === 'lurgia18yuar@gmail.com' || 
+                  user?.email === 'vvendiya@gmail.com' || 
                   user?.email === 'lurgiaalidayupa@gmail.com';
 
   const { isLoaded } = useJsApiLoader({

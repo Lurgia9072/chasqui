@@ -3,14 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, AlertCircle } from 'lucide-react';
+import { Truck, AlertCircle, Mail } from 'lucide-react';
 import { User } from '../types';
 
 const loginSchema = z.object({
@@ -22,7 +22,9 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export const Login = () => {
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [unverifiedUser, setUnverifiedUser] = useState<any>(null);
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
 
@@ -37,8 +39,11 @@ export const Login = () => {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     setError(null);
+    setInfo(null);
+    setUnverifiedUser(null);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       
       if (userDoc.exists()) {
@@ -69,6 +74,20 @@ export const Login = () => {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!unverifiedUser) return;
+    setIsLoading(true);
+    try {
+      await sendEmailVerification(unverifiedUser);
+      setInfo('Enlace de verificación enviado. Revisa tu correo.');
+      setError(null);
+    } catch (err: any) {
+      setError('Error al enviar el enlace. Intenta de nuevo más tarde.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
@@ -84,9 +103,26 @@ export const Login = () => {
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
-                <AlertCircle className="h-4 w-4" />
-                <span>{error}</span>
+              <div className="flex flex-col space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>{error}</span>
+                </div>
+                {unverifiedUser && (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    className="text-xs font-bold text-red-700 hover:underline text-left pl-6"
+                  >
+                    Reenviar enlace de verificación
+                  </button>
+                )}
+              </div>
+            )}
+            {info && (
+              <div className="flex items-center space-x-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-600 border border-blue-100">
+                <Mail className="h-4 w-4" />
+                <span>{info}</span>
               </div>
             )}
             <Input

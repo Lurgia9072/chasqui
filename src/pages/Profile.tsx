@@ -7,7 +7,7 @@ import { OperationType, Review, User as UserType } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare } from 'lucide-react';
+import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare, FileText, CheckCircle, XCircle, Upload, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,6 +37,12 @@ export const Profile = () => {
   const [cci, setCci] = useState('');
   const [titular, setTitular] = useState('');
 
+  // Verification states
+  const [dniUrl, setDniUrl] = useState('');
+  const [licenciaUrl, setLicenciaUrl] = useState('');
+  const [tarjetaPropiedadUrl, setTarjetaPropiedadUrl] = useState('');
+  const [soatUrl, setSoatUrl] = useState('');
+
   // Fetch Profile User
   useEffect(() => {
     const fetchProfile = async () => {
@@ -50,6 +56,10 @@ export const Profile = () => {
         setNumeroCuenta(currentUser?.datosBancarios?.numeroCuenta || '');
         setCci(currentUser?.datosBancarios?.cci || '');
         setTitular(currentUser?.datosBancarios?.titular || '');
+        setDniUrl(currentUser?.documentosUrls?.dni || '');
+        setLicenciaUrl(currentUser?.documentosUrls?.licencia || '');
+        setTarjetaPropiedadUrl(currentUser?.documentosUrls?.tarjetaPropiedad || '');
+        setSoatUrl(currentUser?.documentosUrls?.soat || '');
         setLoadingProfile(false);
       } else {
         setLoadingProfile(true);
@@ -107,6 +117,66 @@ export const Profile = () => {
     }
   };
 
+  const handleDocumentUpload = (type: 'dni' | 'licencia' | 'tarjetaPropiedad' | 'soat') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        try {
+          const compressedBase64 = await compressImage(file);
+          if (type === 'dni') setDniUrl(compressedBase64);
+          if (type === 'licencia') setLicenciaUrl(compressedBase64);
+          if (type === 'tarjetaPropiedad') setTarjetaPropiedadUrl(compressedBase64);
+          if (type === 'soat') setSoatUrl(compressedBase64);
+        } catch (err) {
+          console.error('Error compressing image:', err);
+        }
+      }
+    };
+    input.click();
+  };
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
   const handleSave = async () => {
     if (!currentUser) return;
     setIsSaving(true);
@@ -123,7 +193,17 @@ export const Profile = () => {
           numeroCuenta,
           cci,
           titular
-        }
+        },
+        documentosUrls: {
+          dni: dniUrl,
+          licencia: licenciaUrl,
+          tarjetaPropiedad: tarjetaPropiedadUrl,
+          soat: soatUrl
+        },
+        // If they uploaded documents, set status to pending if it was rejected or empty
+        verificado: (dniUrl && (currentUser.tipoUsuario === 'comerciante' || (licenciaUrl && tarjetaPropiedadUrl))) 
+          ? (currentUser.verificado === 'verificado' ? 'verificado' : 'pendiente')
+          : currentUser.verificado
       };
 
       await updateDoc(userRef, updatedData);
@@ -132,7 +212,7 @@ export const Profile = () => {
       setCurrentUser({
         ...currentUser,
         ...updatedData
-      });
+      } as UserType);
 
       setIsEditing(false);
     } catch (error) {
@@ -357,6 +437,168 @@ export const Profile = () => {
             </Card>
           )}
 
+          {/* Verification Center (Only for own profile) */}
+          {isOwnProfile && (
+            <Card className="border-blue-100 bg-blue-50/30">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center">
+                  <ShieldCheck className="h-5 w-5 mr-2 text-blue-600" />
+                  Centro de Verificación
+                </CardTitle>
+                <CardDescription>
+                  Completa tu perfil para obtener el sello de confianza y acceder a mejores beneficios.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* DNI / RUC */}
+                  <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-5 w-5 text-gray-400" />
+                        <span className="font-bold text-sm">DNI / RUC</span>
+                      </div>
+                      {dniUrl ? (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5 text-orange-400" />
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full text-xs"
+                        onClick={() => handleDocumentUpload('dni')}
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        {dniUrl ? 'Cambiar Documento' : 'Subir Documento'}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-gray-500">
+                        {dniUrl ? 'Documento cargado correctamente.' : 'Pendiente de carga.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* License (Only for Carriers) */}
+                  {currentUser?.tipoUsuario === 'transportista' && (
+                    <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center space-x-2">
+                          <Truck className="h-5 w-5 text-gray-400" />
+                          <span className="font-bold text-sm">Licencia de Conducir</span>
+                        </div>
+                        {licenciaUrl ? (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-orange-400" />
+                        )}
+                      </div>
+                      {isEditing ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full text-xs"
+                          onClick={() => handleDocumentUpload('licencia')}
+                        >
+                          <Upload className="h-3 w-3 mr-1" />
+                          {licenciaUrl ? 'Cambiar Licencia' : 'Subir Licencia'}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          {licenciaUrl ? 'Licencia cargada correctamente.' : 'Pendiente de carga.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Property Card (Only for Carriers) */}
+                  {currentUser?.tipoUsuario === 'transportista' && (
+                    <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center space-x-2">
+                          <CreditCard className="h-5 w-5 text-gray-400" />
+                          <span className="font-bold text-sm">Tarjeta de Propiedad</span>
+                        </div>
+                        {tarjetaPropiedadUrl ? (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-orange-400" />
+                        )}
+                      </div>
+                      {isEditing ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full text-xs"
+                          onClick={() => handleDocumentUpload('tarjetaPropiedad')}
+                        >
+                          <Upload className="h-3 w-3 mr-1" />
+                          {tarjetaPropiedadUrl ? 'Cambiar Tarjeta' : 'Subir Tarjeta'}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          {tarjetaPropiedadUrl ? 'Tarjeta cargada correctamente.' : 'Pendiente de carga.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SOAT (Only for Carriers) */}
+                  {currentUser?.tipoUsuario === 'transportista' && (
+                    <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center space-x-2">
+                          <ShieldCheck className="h-5 w-5 text-gray-400" />
+                          <span className="font-bold text-sm">SOAT (Opcional)</span>
+                        </div>
+                        {soatUrl ? (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        ) : (
+                          <Clock className="h-5 w-5 text-gray-300" />
+                        )}
+                      </div>
+                      {isEditing ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full text-xs"
+                          onClick={() => handleDocumentUpload('soat')}
+                        >
+                          <Upload className="h-3 w-3 mr-1" />
+                          {soatUrl ? 'Cambiar SOAT' : 'Subir SOAT'}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          {soatUrl ? 'SOAT cargado correctamente.' : 'No cargado.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-start space-x-3 p-3 rounded-lg bg-white/50 border border-blue-100">
+                  <AlertCircle className={cn(
+                    "h-5 w-5 mt-0.5",
+                    profileUser.verificado === 'verificado' ? "text-green-600" : 
+                    profileUser.verificado === 'rechazado' ? "text-red-600" : "text-blue-600"
+                  )} />
+                  <div className="text-xs text-blue-800 space-y-1">
+                    <p className="font-bold">Estado de Verificación: {profileUser.verificado.toUpperCase()}</p>
+                    <p className="text-gray-600">
+                      {profileUser.verificado === 'verificado' 
+                        ? '¡Felicidades! Tu cuenta está verificada y eres un usuario de confianza.' 
+                        : profileUser.verificado === 'pendiente' 
+                          ? (dniUrl ? 'Tus documentos están siendo revisados por nuestro equipo. Esto puede tardar hasta 24 horas.' : 'Sube tus documentos para iniciar el proceso de verificación.')
+                          : 'Tu verificación ha sido rechazada. Por favor, revisa tus documentos y vuelve a subirlos.'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Reviews Section */}
           <Card>
             <CardHeader>
@@ -441,12 +683,18 @@ export const Profile = () => {
                 <h3 className="font-bold text-lg">Nivel de Confianza</h3>
                 <div className="flex items-center space-x-2">
                   <div className="flex items-center text-yellow-400">
-                    <Star className="h-5 w-5 fill-current" />
-                    <span className="ml-1 text-2xl font-black">{(profileUser.rating || 5.0).toFixed(1)}</span>
+                    <Star className={cn("h-5 w-5", profileUser.totalRatings > 0 ? "fill-current" : "text-blue-300")} />
+                    <span className="ml-1 text-2xl font-black">
+                      {profileUser.totalRatings > 0 ? profileUser.rating.toFixed(1) : "---"}
+                    </span>
                   </div>
                   <span className="text-blue-200 text-sm">/ 5.0</span>
                 </div>
-                <p className="text-xs text-blue-100">Basado en {profileUser.totalRatings || 0} calificaciones</p>
+                <p className="text-xs text-blue-100">
+                  {profileUser.totalRatings > 0 
+                    ? `Basado en ${profileUser.totalRatings} calificaciones` 
+                    : "Sin calificaciones aún"}
+                </p>
               </div>
 
               {profileUser.tipoUsuario === 'transportista' && (

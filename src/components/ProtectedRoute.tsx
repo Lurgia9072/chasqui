@@ -21,7 +21,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     return <Navigate to="/login" replace />;
   }
 
-  const isAdmin = user.email === 'lurgia18yuar@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user.email === 'vvendiya@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
 
   if (allowedRoles && !allowedRoles.includes(user.tipoUsuario) && !isAdmin) {
     return <Navigate to="/" replace />;

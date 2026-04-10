@@ -19,7 +19,7 @@ export const MerchantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
-  const isAdmin = user?.email === 'lurgia18yuar@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user?.email === 'vvendiya@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
 
   useEffect(() => {
     if (isAdmin) {

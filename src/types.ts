@@ -29,6 +29,7 @@ export interface User {
     dni: string;
     licencia: string;
     tarjetaPropiedad: string;
+    soat?: string;
   };
   datosBancarios?: {
     banco: string;

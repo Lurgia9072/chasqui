@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,7 +37,7 @@ export const AdminDashboard = () => {
   const [payoutProofUrl, setPayoutProofUrl] = useState('');
 
   const isAdmin = user?.tipoUsuario === 'admin' || 
-                  user?.email === 'lurgia18yuar@gmail.com' || 
+                  user?.email === 'vvendiya@gmail.com' || 
                   user?.email === 'lurgiaalidayupa@gmail.com';
 
   // Fetch Platform Stats
@@ -48,7 +48,11 @@ export const AdminDashboard = () => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPlatformUsers(docs);
-      setStats(prev => ({ ...prev, totalUsers: snap.size }));
+      setStats(prev => ({ 
+        ...prev, 
+        totalUsers: snap.size,
+        pendingVerifications: docs.filter((u: any) => u.verificado === 'pendiente').length
+      }));
     });
 
     // Cargos Count
@@ -313,11 +317,11 @@ export const AdminDashboard = () => {
         </div>
         <div className={cn(
           "p-5 rounded-2xl border shadow-sm transition-colors",
-          stats.pendingPayouts > 0 ? "bg-emerald-50 border-emerald-200" : "bg-white border-gray-100"
+          (stats as any).pendingVerifications > 0 ? "bg-orange-50 border-orange-200" : "bg-white border-gray-100"
         )}>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reembolsos Pendientes</p>
-          <p className={cn("text-2xl font-black", stats.pendingPayouts > 0 ? "text-emerald-600" : "text-gray-900")}>{stats.pendingPayouts}</p>
-          <p className="text-[10px] text-gray-500 font-bold mt-1">Por pagar a transportistas</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Verificaciones Pendientes</p>
+          <p className={cn("text-2xl font-black", (stats as any).pendingVerifications > 0 ? "text-orange-600" : "text-gray-900")}>{(stats as any).pendingVerifications || 0}</p>
+          <p className="text-[10px] text-gray-500 font-bold mt-1">Usuarios esperando aprobación</p>
         </div>
       </div>
 
@@ -448,38 +452,95 @@ export const AdminDashboard = () => {
             ) : activeTab === 'users' ? (
               <div className="divide-y divide-gray-100">
                 {platformUsers.map((u) => (
-                  <div key={u.id} className="p-6 flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500 overflow-hidden border border-gray-200">
-                        {u.photoUrl ? (
-                          <img src={u.photoUrl} alt={u.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          u.nombre?.[0] || 'U'
+                  <div key={u.id} className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500 overflow-hidden border border-gray-200">
+                          {u.photoUrl ? (
+                            <img src={u.photoUrl} alt={u.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            u.nombre?.[0] || 'U'
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">{u.nombre}</p>
+                          <p className="text-xs text-gray-500">{u.email} • {u.tipoUsuario}</p>
+                          <p className="text-[10px] text-gray-400">ID: {u.id}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className={cn(
+                          "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                          u.verificado === 'verificado' ? "bg-green-100 text-green-700" :
+                          u.verificado === 'rechazado' ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"
+                        )}>
+                          {u.verificado || 'pendiente'}
+                        </span>
+                        <select 
+                          className="text-xs border rounded p-1 bg-white"
+                          value={u.verificado || 'pendiente'}
+                          onChange={(e) => handleUpdateUserStatus(u.id, e.target.value)}
+                        >
+                          <option value="pendiente">Pendiente</option>
+                          <option value="verificado">Verificado</option>
+                          <option value="rechazado">Rechazado</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Documentos del Usuario */}
+                    {u.documentosUrls && (Object.values(u.documentosUrls).some(url => !!url)) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-16">
+                        {u.documentosUrls.dni && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase">DNI / RUC</p>
+                            <div 
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => window.open(u.documentosUrls.dni, '_blank')}
+                            >
+                              <FileText className="h-6 w-6 text-blue-500" />
+                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                            </div>
+                          </div>
+                        )}
+                        {u.documentosUrls.licencia && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase">Licencia</p>
+                            <div 
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => window.open(u.documentosUrls.licencia, '_blank')}
+                            >
+                              <Truck className="h-6 w-6 text-purple-500" />
+                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                            </div>
+                          </div>
+                        )}
+                        {u.documentosUrls.tarjetaPropiedad && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase">Tarjeta Prop.</p>
+                            <div 
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => window.open(u.documentosUrls.tarjetaPropiedad, '_blank')}
+                            >
+                              <CreditCard className="h-6 w-6 text-emerald-500" />
+                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                            </div>
+                          </div>
+                        )}
+                        {u.documentosUrls.soat && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase">SOAT</p>
+                            <div 
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => window.open(u.documentosUrls.soat, '_blank')}
+                            >
+                              <ShieldCheck className="h-6 w-6 text-orange-500" />
+                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{u.nombre}</p>
-                        <p className="text-xs text-gray-500">{u.email} • {u.tipoUsuario}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={cn(
-                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
-                        u.verificado === 'verificado' ? "bg-green-100 text-green-700" :
-                        u.verificado === 'rechazado' ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"
-                      )}>
-                        {u.verificado || 'pendiente'}
-                      </span>
-                      <select 
-                        className="text-xs border rounded p-1"
-                        value={u.verificado || 'pendiente'}
-                        onChange={(e) => handleUpdateUserStatus(u.id, e.target.value)}
-                      >
-                        <option value="pendiente">Pendiente</option>
-                        <option value="verificado">Verificado</option>
-                        <option value="rechazado">Rechazado</option>
-                      </select>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>

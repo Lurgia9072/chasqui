@@ -1,10 +1,26 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Truck, Package, ShieldCheck, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useAuthStore } from '../store/useAuthStore';
 
 export const Home = () => {
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      if (user.tipoUsuario === 'admin') {
+        navigate('/admin');
+      } else if (user.tipoUsuario === 'comerciante') {
+        navigate('/merchant/dashboard');
+      } else if (user.tipoUsuario === 'transportista') {
+        navigate('/carrier/dashboard');
+      }
+    }
+  }, [user, navigate]);
+
   return (
     <div className="flex flex-col items-center justify-center space-y-20 py-12 px-4 sm:px-6 lg:px-8">
       {/* Hero Section */}

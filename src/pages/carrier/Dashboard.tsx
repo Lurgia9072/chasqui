@@ -1,4 +1,4 @@
-import { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, orderBy, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2, Navigation } from 'lucide-react';
+import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2, Navigation, FileText, Landmark } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -20,7 +20,7 @@ export const CarrierDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
-  const isAdmin = user?.email === 'lurgia18yuar@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user?.email === 'vvendiya@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
 
   useEffect(() => {
     if (isAdmin) {
@@ -205,54 +205,115 @@ export const CarrierDashboard = () => {
 
   if (user?.verificado !== 'verificado') {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-20 text-center space-y-8">
-        <div className="mx-auto h-20 w-20 bg-yellow-50 rounded-full flex items-center justify-center">
-          <ShieldCheck className="h-10 w-10 text-yellow-600" />
-        </div>
-        <div className="space-y-4">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {user?.verificado === 'pendiente' ? "Documentos en Revisión" : "Cuenta en Verificación"}
-          </h1>
-          <p className="text-lg text-gray-600">
-            {user?.verificado === 'pendiente' 
-              ? "Hemos recibido tus documentos. Nuestro equipo los validará en un plazo máximo de 24 horas."
-              : "Tu cuenta está siendo revisada por nuestro equipo. Una vez verificado, podrás empezar a ofertar por cargas."}
-          </p>
-          
-          <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-left">
-            <h3 className="font-bold text-blue-900 mb-2">Estado de documentos:</h3>
-            <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.dni || user?.documentosUrls?.dni) ? "bg-green-500" : "bg-blue-600")} /> 
-                DNI {(files.dni || user?.documentosUrls?.dni) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
-              </li>
-              <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.licencia || user?.documentosUrls?.licencia) ? "bg-green-500" : "bg-blue-600")} /> 
-                Licencia de Conducir {(files.licencia || user?.documentosUrls?.licencia) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
-              </li>
-              <li className="flex items-center">
-                <div className={cn("h-1.5 w-1.5 rounded-full mr-2", (files.tarjetaPropiedad || user?.documentosUrls?.tarjetaPropiedad) ? "bg-green-500" : "bg-blue-600")} /> 
-                Tarjeta de Propiedad {(files.tarjetaPropiedad || user?.documentosUrls?.tarjetaPropiedad) && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
-              </li>
-            </ul>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Banner de Verificación Pendiente */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-100 relative overflow-hidden"
+        >
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-4 text-center md:text-left">
+              <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold uppercase tracking-wider">
+                <Clock className="h-3 w-3 mr-2" />
+                Proceso de Verificación
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black">
+                {user?.verificado === 'pendiente' ? "Estamos validando tu cuenta" : "Completa tu perfil de Transportista"}
+              </h1>
+              <p className="text-blue-100 text-lg max-w-2xl">
+                {user?.verificado === 'pendiente' 
+                  ? "¡Excelente! Hemos recibido tus documentos. Nuestro equipo los está revisando minuciosamente. Este proceso suele demorar menos de 24 horas."
+                  : "Para empezar a recibir ofertas y ganar dinero, necesitamos verificar tu identidad y documentos del vehículo."}
+              </p>
+              {user?.verificado !== 'pendiente' && (
+                <Button 
+                  onClick={() => setShowUploadModal(true)}
+                  className="bg-white text-blue-600 hover:bg-blue-50 h-12 px-8 font-bold"
+                >
+                  Subir Documentos Ahora
+                </Button>
+              )}
+            </div>
+            <div className="shrink-0">
+              <div className="h-32 w-32 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20">
+                <ShieldCheck className="h-16 w-16 text-white" />
+              </div>
+            </div>
+          </div>
+          {/* Decorative circles */}
+          <div className="absolute -right-10 -top-10 h-40 w-40 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -left-10 -bottom-10 h-40 w-40 bg-blue-400/20 rounded-full blur-3xl" />
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+              <Truck className="h-6 w-6 mr-2 text-blue-600" />
+              Próximos Pasos
+            </h2>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <StepCard 
+                icon={<FileText className="h-6 w-6 text-blue-600" />}
+                title="Validación de Documentos"
+                description="Revisamos tu DNI, Licencia y Tarjeta de Propiedad."
+                status={user?.verificado === 'pendiente' ? 'in_progress' : 'pending'}
+              />
+              <StepCard 
+                icon={<Landmark className="h-6 w-6 text-emerald-600" />}
+                title="Datos Bancarios"
+                description="Configura dónde quieres recibir tus pagos."
+                status={user?.datosBancarios?.numeroCuenta ? 'completed' : 'pending'}
+              />
+            </div>
+
+            <Card className="border-dashed border-2 bg-gray-50/50">
+              <CardContent className="p-12 text-center space-y-4">
+                <div className="h-16 w-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm">
+                  <Clock className="h-8 w-8 text-gray-300" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-gray-900">Cargas Bloqueadas</h3>
+                  <p className="text-gray-500 max-w-sm mx-auto">
+                    Una vez que tu cuenta sea verificada (máx. 24 hrs), aquí aparecerán todas las cargas disponibles en tus zonas de operación.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            {user?.verificado !== 'pendiente' && (
-              <Button variant="outline" onClick={() => setShowUploadModal(true)}>Subir Documentos Ahora</Button>
-            )}
-            
-            {/* Botón de simulación para el dueño de la app */}
-            {user?.verificado === 'pendiente' && (
-              <div className="space-y-4 w-full">
-                <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-sm italic">
-                  Como eres el desarrollador, puedes usar este botón para simular la aprobación que haría un administrador.
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Estado de Verificación</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <DocStatusItem label="DNI / RUC" status={user?.documentosUrls?.dni ? 'uploaded' : 'missing'} />
+                  <DocStatusItem label="Licencia de Conducir" status={user?.documentosUrls?.licencia ? 'uploaded' : 'missing'} />
+                  <DocStatusItem label="Tarjeta de Propiedad" status={user?.documentosUrls?.tarjetaPropiedad ? 'uploaded' : 'missing'} />
                 </div>
-                <Button onClick={handleAdminApprove} isLoading={uploading} className="bg-orange-600 hover:bg-orange-700">
-                  Simular Aprobación (Admin)
-                </Button>
-              </div>
-            )}
+
+                {user?.verificado === 'pendiente' && (
+                  <div className="pt-4 border-t border-gray-100">
+                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl space-y-3">
+                      <p className="text-xs text-orange-800 italic">
+                        <strong>Modo Desarrollador:</strong> Puedes aprobar tu propia cuenta para probar el dashboard completo.
+                      </p>
+                      <Button 
+                        onClick={handleAdminApprove} 
+                        isLoading={uploading} 
+                        size="sm"
+                        className="w-full bg-orange-600 hover:bg-orange-700"
+                      >
+                        Aprobar mi cuenta ahora
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -636,3 +697,41 @@ export const CarrierDashboard = () => {
     </div>
   );
 };
+
+const StepCard = ({ icon, title, description, status }: { icon: React.ReactNode; title: string; description: string; status: 'completed' | 'in_progress' | 'pending' }) => (
+  <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
+    <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+      {icon}
+    </div>
+    <div className="flex-1">
+      <h4 className="text-sm font-bold text-gray-900">{title}</h4>
+      <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+      <div className="mt-3 flex items-center">
+        {status === 'completed' ? (
+          <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full uppercase">Completado</span>
+        ) : status === 'in_progress' ? (
+          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase">En Revisión</span>
+        ) : (
+          <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full uppercase">Pendiente</span>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+const DocStatusItem = ({ label, status }: { label: string; status: 'uploaded' | 'missing' }) => (
+  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+    <span className="text-xs font-medium text-gray-700">{label}</span>
+    {status === 'uploaded' ? (
+      <div className="flex items-center text-green-600 text-[10px] font-bold uppercase">
+        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+        Cargado
+      </div>
+    ) : (
+      <div className="flex items-center text-gray-400 text-[10px] font-bold uppercase">
+        <Clock className="h-3.5 w-3.5 mr-1" />
+        Pendiente
+      </div>
+    )}
+  </div>
+);
