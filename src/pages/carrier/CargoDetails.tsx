@@ -7,7 +7,7 @@ import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -18,7 +18,7 @@ export const CarrierCargoDetails = () => {
   const navigate = useNavigate();
   
   const [carga, setCarga] = useState<Cargo | null>(null);
-  const [merchantPhone, setMerchantPhone] = useState<string | null>(null);
+  const [merchantData, setMerchantData] = useState<any>(null);
   const [myOffer, setMyOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [offerPrice, setOfferPrice] = useState<number>(0);
@@ -36,14 +36,14 @@ export const CarrierCargoDetails = () => {
           setCarga(data);
           setOfferPrice(data.precioPropuesto);
 
-          // Fetch merchant phone
+          // Fetch merchant data
           try {
             const merchantDoc = await getDoc(doc(db, 'users', data.comercianteId));
             if (merchantDoc.exists()) {
-              setMerchantPhone(merchantDoc.data().telefono || null);
+              setMerchantData(merchantDoc.data());
             }
           } catch (err) {
-            console.warn('No se pudo obtener el teléfono del comerciante:', err);
+            console.warn('No se pudo obtener datos del comerciante:', err);
           }
         }
       } catch (err) {
@@ -181,12 +181,18 @@ export const CarrierCargoDetails = () => {
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Comerciante</span>
                   <p className="text-gray-900 font-medium">{carga.comercianteNombre}</p>
-                  {merchantPhone && (
-                    <p className="text-xs text-blue-600 font-bold flex items-center mt-1">
-                      <Phone className="h-3 w-3 mr-1" />
-                      {merchantPhone}
-                    </p>
-                  )}
+                  <div className="flex items-center space-x-2 mt-1">
+                    <div className="flex items-center text-yellow-500">
+                      <Star className="h-3 w-3 fill-current" />
+                      <span className="ml-1 text-xs font-bold">{(merchantData?.rating || 5.0).toFixed(1)}</span>
+                    </div>
+                    {merchantData?.telefono && (
+                      <p className="text-xs text-blue-600 font-bold flex items-center">
+                        <Phone className="h-3 w-3 mr-1" />
+                        {merchantData.telefono}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 

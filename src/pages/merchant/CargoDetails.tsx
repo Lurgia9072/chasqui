@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, Offer, Trip, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone, Truck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -20,7 +20,7 @@ export const MerchantCargoDetails = () => {
   
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [carrierPhones, setCarrierPhones] = useState<Record<string, string>>({});
+  const [carrierDataMap, setCarrierDataMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [isAccepting, setIsAccepting] = useState<string | null>(null);
 
@@ -44,21 +44,21 @@ export const MerchantCargoDetails = () => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
         setOffers(docs.sort((a, b) => a.precioOfertado - b.precioOfertado));
 
-        // Fetch carrier phones
-        const phones: Record<string, string> = { ...carrierPhones };
+        // Fetch carrier data
+        const newCarrierData = { ...carrierDataMap };
         for (const offer of docs) {
-          if (!phones[offer.transportistaId]) {
+          if (!newCarrierData[offer.transportistaId]) {
             try {
               const carrierDoc = await getDoc(doc(db, 'users', offer.transportistaId));
               if (carrierDoc.exists()) {
-                phones[offer.transportistaId] = carrierDoc.data().telefono || '';
+                newCarrierData[offer.transportistaId] = carrierDoc.data();
               }
             } catch (err) {
-              console.warn(`No se pudo obtener el teléfono del transportista ${offer.transportistaId}:`, err);
+              console.warn(`No se pudo obtener datos del transportista ${offer.transportistaId}:`, err);
             }
           }
         }
-        setCarrierPhones(phones);
+        setCarrierDataMap(newCarrierData);
       } catch (err) {
         console.error('Error procesando ofertas:', err);
       }
@@ -247,16 +247,19 @@ export const MerchantCargoDetails = () => {
                         </div>
                         <div className="space-y-1">
                           <h4 className="text-lg font-bold text-gray-900">{offer.transportistaNombre}</h4>
-                          <div className="flex items-center space-x-2">
-                            <div className="flex items-center text-yellow-500">
-                              <Star className="h-4 w-4 fill-current" />
-                              <span className="ml-1 text-sm font-bold">{offer.transportistaRating}</span>
+                          <div className="flex items-center space-x-3">
+                            <div className="flex items-center text-yellow-500 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
+                              <Star className="h-3.5 w-3.5 fill-current" />
+                              <span className="ml-1 text-xs font-bold">{(carrierDataMap[offer.transportistaId]?.rating || 5.0).toFixed(1)}</span>
                             </div>
-                            <span className="text-gray-300">|</span>
-                            {carrierPhones[offer.transportistaId] && (
-                              <p className="text-xs text-blue-600 font-bold flex items-center">
+                            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                              <Truck className="h-3.5 w-3.5" />
+                              <span className="ml-1 text-xs font-bold">{carrierDataMap[offer.transportistaId]?.completedTrips || 0} viajes</span>
+                            </div>
+                            {carrierDataMap[offer.transportistaId]?.telefono && (
+                              <p className="text-xs text-gray-500 font-medium flex items-center">
                                 <Phone className="h-3 w-3 mr-1" />
-                                {carrierPhones[offer.transportistaId]}
+                                {carrierDataMap[offer.transportistaId].telefono}
                               </p>
                             )}
                           </div>

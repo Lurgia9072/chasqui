@@ -74,6 +74,9 @@ export const Register = () => {
         email: data.email,
         verificado: data.tipoUsuario === 'comerciante' ? 'verificado' : 'pendiente',
         rating: 5.0,
+        totalRatings: 0,
+        sumRatings: 0,
+        completedTrips: 0,
         createdAt: Date.now(),
       };
 

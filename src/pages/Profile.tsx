@@ -1,18 +1,22 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, handleFirestoreError } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
-import { OperationType } from '../types';
+import { doc, updateDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { OperationType, Review } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark } from 'lucide-react';
+import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export const Profile = () => {
   const { user, setUser } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
@@ -26,6 +30,27 @@ export const Profile = () => {
   const [numeroCuenta, setNumeroCuenta] = useState(user?.datosBancarios?.numeroCuenta || '');
   const [cci, setCci] = useState(user?.datosBancarios?.cci || '');
   const [titular, setTitular] = useState(user?.datosBancarios?.titular || '');
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'reviews'),
+      where('targetUserId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
+      setReviews(docs);
+      setLoadingReviews(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reviews');
+      setLoadingReviews(false);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   const handlePhotoClick = () => {
     fileInputRef.current?.click();
@@ -256,25 +281,98 @@ export const Profile = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Reviews Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <MessageSquare className="h-5 w-5 mr-2 text-blue-600" />
+                Calificaciones y Reseñas
+              </CardTitle>
+              <CardDescription>Lo que otros usuarios dicen sobre ti.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {loadingReviews ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                </div>
+              ) : reviews.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 italic">
+                  Aún no has recibido calificaciones.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center space-x-2">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                            <User className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900">{review.reviewerNombre}</p>
+                            <p className="text-[10px] text-gray-500">
+                              {format(review.createdAt, "d 'de' MMMM, yyyy", { locale: es })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center text-yellow-500">
+                          {[...Array(5)].map((_, i) => (
+                            <Star 
+                              key={i} 
+                              className={cn("h-3 w-3", i < review.rating ? "fill-current" : "text-gray-300")} 
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 italic">"{review.comentario}"</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar Info */}
         <div className="space-y-6">
-          <Card className="bg-blue-600 text-white border-none">
-            <CardContent className="p-6 space-y-4">
-              <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <ShieldCheck className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg">Cuenta Verificada</h3>
-                <p className="text-sm text-blue-100">Tu identidad ha sido validada por nuestro equipo de seguridad.</p>
-              </div>
-              <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                <span className="text-xs font-medium text-blue-200 uppercase tracking-wider">Rating</span>
-                <div className="flex items-center font-bold">
-                  {user.rating.toFixed(1)} ★
+          <Card className="bg-blue-600 text-white border-none shadow-xl shadow-blue-200">
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <ShieldCheck className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">Estado</span>
+                  <p className="font-bold uppercase text-sm">{user.verificado}</p>
                 </div>
               </div>
+              
+              <div className="space-y-1">
+                <h3 className="font-bold text-lg">Nivel de Confianza</h3>
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center text-yellow-400">
+                    <Star className="h-5 w-5 fill-current" />
+                    <span className="ml-1 text-2xl font-black">{(user.rating || 5.0).toFixed(1)}</span>
+                  </div>
+                  <span className="text-blue-200 text-sm">/ 5.0</span>
+                </div>
+                <p className="text-xs text-blue-100">Basado en {user.totalRatings || 0} calificaciones</p>
+              </div>
+
+              {user.tipoUsuario === 'transportista' && (
+                <div className="pt-6 border-t border-white/10 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-medium">Viajes Completados</span>
+                    </div>
+                    <span className="text-xl font-bold">{user.completedTrips || 0}</span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
@@ -13,7 +13,7 @@ import { cn } from '../lib/utils';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
-
+import { useNotification } from '../components/ui/NotificationProvider';
 
 
 const containerStyle = {
@@ -31,6 +31,7 @@ export const TripDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const { addNotification } = useNotification();
   
   const [trip, setTrip] = useState<Trip | null>(null);
   const [carga, setCarga] = useState<Cargo | null>(null);
@@ -42,6 +43,17 @@ export const TripDetails = () => {
   const [isChatMinimized, setIsChatMinimized] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+
+  const showChatRef = useRef(showChat);
+  const isChatMinimizedRef = useRef(isChatMinimized);
+
+  useEffect(() => {
+    showChatRef.current = showChat;
+  }, [showChat]);
+
+  useEffect(() => {
+    isChatMinimizedRef.current = isChatMinimized;
+  }, [isChatMinimized]);
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
@@ -49,6 +61,9 @@ export const TripDetails = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
@@ -116,7 +131,7 @@ export const TripDetails = () => {
     });
 
     return () => unsubscribe();
-  }, [id, user, carga]);
+  }, [id, user]);
 
   useEffect(() => {
     if (trip?.transportistaId) {
@@ -146,22 +161,22 @@ export const TripDetails = () => {
       
       // Si el mensaje es del otro usuario y no es el primero que vemos en esta sesión
       if (lastMsg.senderId !== user.uid) {
-        if (lastMessageCount !== null) {
-          // Si el chat está cerrado o minimizado, marcar como no leído
-          if (!showChat || isChatMinimized) {
-            setHasUnread(true);
+        setLastMessageCount(prev => {
+          if (prev !== null) {
+            // Si el chat está cerrado o minimizado, marcar como no leído
+            if (!showChatRef.current || isChatMinimizedRef.current) {
+              setHasUnread(true);
+            }
           }
-          
-          // Opcional: Auto-abrir si el usuario lo prefiere (ya estaba implementado)
-          // setShowChat(true);
-          // setIsChatMinimized(false);
-        }
+          return snapshot.size;
+        });
+      } else {
+        setLastMessageCount(snapshot.size);
       }
-      setLastMessageCount(snapshot.size);
     });
 
     return () => unsubscribe();
-  }, [id, user, lastMessageCount, showChat, isChatMinimized]);
+  }, [id, user]);
 
   // Resetear notificaciones cuando el chat se abre y expande
   useEffect(() => {
@@ -185,7 +200,7 @@ export const TripDetails = () => {
       
       return () => clearInterval(interval);
     }
-  }, [trip?.estado, trip?.id, trip?.seguimiento, user?.tipoUsuario]);
+  }, [trip?.estado, trip?.id, user?.tipoUsuario]);
 
   const updateTripStatus = async (newStatus: TripStatus) => {
     if (!trip || !carga) return;
@@ -215,9 +230,20 @@ export const TripDetails = () => {
         
         // También actualizar el estado de la carga original
         await updateDoc(doc(db, 'cargas', trip.cargoId), { estado: 'completado' });
+
+        // Incrementar viajes completados para el transportista
+        await updateDoc(doc(db, 'users', trip.transportistaId), {
+          completedTrips: increment(1)
+        });
       }
 
       await updateDoc(doc(db, 'trips', trip.id), updates);
+
+      addNotification({
+        title: 'Estado Actualizado',
+        message: `El viaje ahora está en estado: ${getStatusLabel(newStatus)}`,
+        type: 'success'
+      });
 
       // Enviar notificación al otro usuario
       const recipientId = isCarrier ? trip.comercianteId : trip.transportistaId;
@@ -238,6 +264,15 @@ export const TripDetails = () => {
       setIsUpdating(false);
     }
   };
+
+  useEffect(() => {
+    if (trip?.estado === 'completado') {
+      const hasRated = isCarrier ? !!trip.ratingComerciante : !!trip.ratingTransportista;
+      if (!hasRated) {
+        setShowRatingModal(true);
+      }
+    }
+  }, [trip?.estado, isCarrier, trip?.ratingComerciante, trip?.ratingTransportista]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -363,6 +398,12 @@ export const TripDetails = () => {
         tiempoEstimado: '45 min para el recojo'
       });
 
+      addNotification({
+        title: 'Pago Verificado',
+        message: 'El pago ha sido confirmado exitosamente.',
+        type: 'success'
+      });
+
       // Notificar al transportista
       await addDoc(collection(db, 'notifications'), {
         userId: trip.transportistaId,
@@ -415,10 +456,91 @@ export const TripDetails = () => {
         createdAt: Date.now(),
       });
 
+      addNotification({
+        title: 'Pago Rechazado',
+        message: 'Se ha notificado al comerciante sobre el rechazo.',
+        type: 'info'
+      });
+
       setShowRejectModal(false);
       setRejectionReason('');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRate = async () => {
+    if (!trip || !user) return;
+    setIsUpdating(true);
+    try {
+      const tripRef = doc(db, 'trips', trip.id);
+      const targetUserId = isCarrier ? trip.comercianteId : trip.transportistaId;
+      const userRef = doc(db, 'users', targetUserId);
+
+      const updates: any = {};
+      if (isCarrier) {
+        updates.ratingComerciante = ratingValue;
+        updates.comentarioComerciante = ratingComment;
+      } else {
+        updates.ratingTransportista = ratingValue;
+        updates.comentarioTransportista = ratingComment;
+      }
+
+      // 1. Actualizar el viaje
+      console.log('Intentando actualizar viaje:', trip.id, updates);
+      await updateDoc(tripRef, updates);
+
+      // 2. Crear documento de reseña (opcional, no bloquea el flujo)
+      try {
+        await addDoc(collection(db, 'reviews'), {
+          tripId: trip.id,
+          reviewerId: user.uid,
+          reviewerNombre: user.nombre,
+          targetUserId: targetUserId,
+          rating: ratingValue,
+          comentario: ratingComment,
+          createdAt: Date.now(),
+        });
+      } catch (reviewErr) {
+        console.warn('Error al crear la reseña:', reviewErr);
+      }
+
+      // 3. Actualizar rating del usuario (opcional, no bloquea el flujo)
+      try {
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          const newTotalRatings = (userData.totalRatings || 0) + 1;
+          const newSumRatings = (userData.sumRatings || 0) + ratingValue;
+          const newRating = Number((newSumRatings / newTotalRatings).toFixed(1));
+
+          await updateDoc(userRef, {
+            totalRatings: newTotalRatings,
+            sumRatings: newSumRatings,
+            rating: newRating
+          });
+        }
+      } catch (userErr) {
+        console.warn('Error al actualizar el rating del usuario:', userErr);
+      }
+      
+      addNotification({
+        title: '¡Calificación enviada!',
+        message: 'Gracias por compartir tu experiencia.',
+        type: 'success'
+      });
+      setShowRatingModal(false);
+      setRatingComment('');
+    } catch (err) {
+      console.error('Error en handleRate:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `trips/${trip.id}`);
+      addNotification({
+        title: 'Error al calificar',
+        message: 'No se pudo enviar la calificación. Por favor intenta de nuevo.',
+        type: 'error'
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -1000,6 +1122,46 @@ export const TripDetails = () => {
 
               {trip.estado === 'completado' && (
                 <div className="space-y-4">
+                  {((isCarrier && !trip.ratingComerciante) || (!isCarrier && !trip.ratingTransportista)) && (
+                    <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-center space-y-4">
+                      <div className="flex justify-center space-x-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className="h-8 w-8 text-yellow-400 fill-current" />
+                        ))}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-blue-900">¡Califica tu experiencia!</h3>
+                        <p className="text-sm text-blue-700">Tu opinión ayuda a mejorar la comunidad de TransportaYa.</p>
+                      </div>
+                      <Button 
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                        onClick={() => setShowRatingModal(true)}
+                      >
+                        Calificar Ahora
+                      </Button>
+                    </div>
+                  )}
+
+                  {((isCarrier && trip.ratingComerciante) || (!isCarrier && trip.ratingTransportista)) && (
+                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 text-center space-y-2">
+                      <div className="flex justify-center space-x-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star 
+                            key={star} 
+                            className={cn(
+                              "h-5 w-5",
+                              star <= (isCarrier ? trip.ratingComerciante! : trip.ratingTransportista!) ? "text-yellow-400 fill-current" : "text-gray-300"
+                            )} 
+                          />
+                        ))}
+                      </div>
+                      <p className="text-sm font-bold text-gray-900">Ya has calificado este servicio</p>
+                      <p className="text-xs text-gray-500 italic">
+                        "{isCarrier ? trip.comentarioComerciante : trip.comentarioTransportista}"
+                      </p>
+                    </div>
+                  )}
+
                   <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-center space-y-2">
                     <CheckCircle className="h-10 w-10 text-green-600 mx-auto" />
                     <h3 className="text-lg font-bold text-green-900">Viaje Completado</h3>
@@ -1187,7 +1349,9 @@ export const TripDetails = () => {
                   </p>
                   <div className="flex items-center text-yellow-500">
                     <Star className="h-3 w-3 fill-current" />
-                    <span className="ml-1 text-xs font-bold">5.0</span>
+                    <span className="ml-1 text-xs font-bold">
+                      {isCarrier ? (merchantData?.rating?.toFixed(1) || '5.0') : (carrierData?.rating?.toFixed(1) || '5.0')}
+                    </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 flex items-center">
                     <Phone className="h-3 w-3 mr-1" />
@@ -1340,6 +1504,69 @@ export const TripDetails = () => {
                   isLoading={isUpdating}
                 >
                   Confirmar Rechazo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rating Modal */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900">Calificar Servicio</h3>
+              <button onClick={() => setShowRatingModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600">¿Cómo calificarías a {isCarrier ? trip.comercianteNombre : trip.transportistaNombre}?</p>
+                <div className="flex justify-center space-x-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRatingValue(star)}
+                      className="transition-transform hover:scale-110 active:scale-95"
+                    >
+                      <Star 
+                        className={cn(
+                          "h-10 w-10",
+                          star <= ratingValue ? "text-yellow-400 fill-current" : "text-gray-200"
+                        )} 
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Comentario (Opcional):</label>
+                <textarea 
+                  className="w-full h-24 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none text-sm"
+                  placeholder="Escribe tu experiencia..."
+                  value={ratingComment}
+                  onChange={(e) => setRatingComment(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setShowRatingModal(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  disabled={isUpdating}
+                  onClick={handleRate}
+                  isLoading={isUpdating}
+                >
+                  Enviar Calificación
                 </Button>
               </div>
             </div>

@@ -16,6 +16,9 @@ export interface User {
   photoUrl?: string;
   verificado: VerificationStatus;
   rating: number;
+  totalRatings: number;
+  sumRatings: number;
+  completedTrips: number;
   zonasOperacion?: string[];
   vehiculo?: {
     tipo: string;
@@ -106,6 +109,10 @@ export interface Trip {
     pagadoAt?: number;
     montoPagado?: number;
   };
+  ratingTransportista?: number;
+  comentarioTransportista?: string;
+  ratingComerciante?: number;
+  comentarioComerciante?: string;
   createdAt: number;
 }
 
@@ -128,6 +135,17 @@ export interface Notification {
   tipo: 'oferta_nueva' | 'oferta_aceptada' | 'oferta_rechazada' | 'viaje_actualizado';
   leido: boolean;
   link?: string;
+  createdAt: number;
+}
+
+export interface Review {
+  id: string;
+  tripId: string;
+  reviewerId: string;
+  reviewerNombre: string;
+  targetUserId: string;
+  rating: number;
+  comentario: string;
   createdAt: number;
 }
 
