@@ -51,6 +51,7 @@ export default function App() {
                   <Route path="/trip/:id" element={<TripDetails />} />
                   <Route path="/history" element={<History />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/profile/:id" element={<Profile />} />
                   <Route path="/admin" element={<AdminDashboard />} />
                 </Route>
 

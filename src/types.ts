@@ -143,6 +143,7 @@ export interface Review {
   tripId: string;
   reviewerId: string;
   reviewerNombre: string;
+  reviewerPhotoUrl?: string;
   targetUserId: string;
   rating: number;
   comentario: string;

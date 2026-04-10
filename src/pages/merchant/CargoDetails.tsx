@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, collection, query, onSnapshot, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -242,11 +242,17 @@ export const MerchantCargoDetails = () => {
                   <CardContent className="p-0">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 gap-6">
                       <div className="flex items-center space-x-4">
-                        <div className="h-14 w-14 bg-gray-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                          <User className="h-8 w-8 text-gray-400" />
-                        </div>
+                        <Link to={`/profile/${offer.transportistaId}`} className="h-14 w-14 bg-gray-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden hover:opacity-80 transition-opacity">
+                          {carrierDataMap[offer.transportistaId]?.photoUrl ? (
+                            <img src={carrierDataMap[offer.transportistaId].photoUrl} alt={offer.transportistaNombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <User className="h-8 w-8 text-gray-400" />
+                          )}
+                        </Link>
                         <div className="space-y-1">
-                          <h4 className="text-lg font-bold text-gray-900">{offer.transportistaNombre}</h4>
+                          <Link to={`/profile/${offer.transportistaId}`} className="text-lg font-bold text-gray-900 hover:text-blue-600 transition-colors">
+                            {offer.transportistaNombre}
+                          </Link>
                           <div className="flex items-center space-x-3">
                             <div className="flex items-center text-yellow-500 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
                               <Star className="h-3.5 w-3.5 fill-current" />

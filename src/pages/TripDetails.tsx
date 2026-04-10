@@ -16,6 +16,7 @@ import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
 
 
+
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -498,6 +499,7 @@ export const TripDetails = () => {
           tripId: trip.id,
           reviewerId: user.uid,
           reviewerNombre: user.nombre,
+          reviewerPhotoUrl: user.photoUrl || '',
           targetUserId: targetUserId,
           rating: ratingValue,
           comentario: ratingComment,
@@ -1328,7 +1330,10 @@ export const TripDetails = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center space-x-4">
-                <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border border-gray-200">
+                <Link 
+                  to={`/profile/${isCarrier ? trip.comercianteId : trip.transportistaId}`}
+                  className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border border-gray-200 hover:opacity-80 transition-opacity"
+                >
                   {isCarrier ? (
                     merchantData?.photoUrl ? (
                       <img src={merchantData.photoUrl} alt={carga.comercianteNombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
@@ -1342,11 +1347,14 @@ export const TripDetails = () => {
                       <User className="h-6 w-6 text-gray-400" />
                     )
                   )}
-                </div>
+                </Link>
                 <div className="flex-1">
-                  <p className="font-bold text-gray-900">
+                  <Link 
+                    to={`/profile/${isCarrier ? trip.comercianteId : trip.transportistaId}`}
+                    className="font-bold text-gray-900 hover:text-blue-600 transition-colors block"
+                  >
                     {isCarrier ? carga.comercianteNombre : (trip.transportistaNombre || 'Transportista Asignado')}
-                  </p>
+                  </Link>
                   <div className="flex items-center text-yellow-500">
                     <Star className="h-3 w-3 fill-current" />
                     <span className="ml-1 text-xs font-bold">

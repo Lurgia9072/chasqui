@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, collection, addDoc, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -180,7 +180,9 @@ export const CarrierCargoDetails = () => {
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Comerciante</span>
-                  <p className="text-gray-900 font-medium">{carga.comercianteNombre}</p>
+                  <Link to={`/profile/${carga.comercianteId}`} className="text-gray-900 font-medium hover:text-blue-600 transition-colors block">
+                    {carga.comercianteNombre}
+                  </Link>
                   <div className="flex items-center space-x-2 mt-1">
                     <div className="flex items-center text-yellow-500">
                       <Star className="h-3 w-3 fill-current" />
