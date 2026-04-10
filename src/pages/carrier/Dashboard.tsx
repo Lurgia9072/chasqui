@@ -295,11 +295,11 @@ export const CarrierDashboard = () => {
                   <DocStatusItem label="Tarjeta de Propiedad" status={user?.documentosUrls?.tarjetaPropiedad ? 'uploaded' : 'missing'} />
                 </div>
 
-                {user?.verificado === 'pendiente' && (
+                {user?.verificado === 'pendiente' && isAdmin && (
                   <div className="pt-4 border-t border-gray-100">
                     <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl space-y-3">
                       <p className="text-xs text-orange-800 italic">
-                        <strong>Modo Desarrollador:</strong> Puedes aprobar tu propia cuenta para probar el dashboard completo.
+                        <strong>Modo Administrador:</strong> Puedes aprobar esta cuenta para pruebas.
                       </p>
                       <Button 
                         onClick={handleAdminApprove} 
@@ -307,7 +307,7 @@ export const CarrierDashboard = () => {
                         size="sm"
                         className="w-full bg-orange-600 hover:bg-orange-700"
                       >
-                        Aprobar mi cuenta ahora
+                        Aprobar cuenta ahora
                       </Button>
                     </div>
                   </div>
