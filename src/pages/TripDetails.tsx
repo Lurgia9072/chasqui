@@ -16,7 +16,6 @@ import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
 
 
-
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -69,9 +68,7 @@ export const TripDetails = () => {
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
 
-  const isAdmin = user?.tipoUsuario === 'admin' || 
-                  user?.email === 'vvendiya@gmail.com' || 
-                  user?.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -1584,3 +1581,5 @@ export const TripDetails = () => {
     </div>
   );
 };
+
+

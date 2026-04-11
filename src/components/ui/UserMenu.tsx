@@ -2,6 +2,7 @@ import { LogOut, User, Settings, CreditCard, ShieldCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from './DropdownMenu';
 import { UserAvatar } from './UserAvatar';
 import { useAuthStore } from '../../store/useAuthStore';
+import { ADMIN_EMAILS } from '../../lib/constants';
 import { auth } from '../../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ export const UserMenu = () => {
 
   if (!user) return null;
 
-  const isAdmin = user.email === 'vvendiya@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
 
   return (
     <DropdownMenu>

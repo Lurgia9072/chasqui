@@ -14,7 +14,7 @@ service cloud.firestore {
     //   - email: string (required, format: email)
     //   - telefono: string (optional)
     //   - documento: string (optional)
-    //   - tipoUsuario: string (required, enum: ['comerciante', 'transportista'])
+    //   - tipoUsuario: string (required, enum: ['comerciante', 'transportista', 'admin'])
     //   - verificado: string (required, enum: ['pendiente', 'verificado', 'rechazado'])
     //   - rating: number (optional)
     //   - createdAt: number (required)
@@ -52,7 +52,7 @@ service cloud.firestore {
     //   - origen: string (required)
     //   - destino: string (required)
     //   - precioFinal: number (required)
-    //   - estado: string (required, enum: ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'completado', 'cancelado'])
+    //   - estado: string (required, enum: ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'])
     //   - seguimiento: map (optional)
     //   - tiempoEstimado: string (optional)
     //   - fechaRecojo: string (optional)
@@ -78,18 +78,25 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin' ||
-          request.auth.token.email == "vvendiya@gmail.com" ||
-          request.auth.token.email == "lurgiaalidayupa@gmail.com");
+      return isAuthenticated() && (
+      //  request.auth.token.email == "lurgia18yuar@gmail.com" ||
+        request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
+        request.auth.token.email == "vvendiya@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin')
+      );
     }
 
     function isMerchant() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'comerciante';
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'comerciante';
     }
 
     function isCarrier() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'transportista';
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'transportista';
     }
 
     function isValidEmail(email) {
@@ -188,6 +195,23 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidTrip(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
       allow delete: if isAdmin();
+
+      // Reglas para los mensajes del chat
+      match /messages/{messageId} {
+        function canChat() {
+          return isAuthenticated() && (
+            request.auth.uid == get(/databases/$(database)/documents/trips/$(tripId)).data.comercianteId || 
+            request.auth.uid == get(/databases/$(database)/documents/trips/$(tripId)).data.transportistaId ||
+            isAdmin()
+          );
+        }
+        
+        allow read: if canChat();
+        allow create: if canChat() && 
+                      request.resource.data.senderId == request.auth.uid &&
+                      (request.resource.data.type == 'text' || request.resource.data.type == 'audio') &&
+                      (request.resource.data.text is string || request.resource.data.audioUrl is string);
+      }
     }
 
     match /reviews/{reviewId} {
@@ -204,22 +228,8 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
     }
 
-    // Reglas para los mensajes del chat
-    match /trips/{tripId}/messages/{messageId} {
-      function canChat() {
-        let trip = get(/databases/$(database)/documents/trips/$(tripId)).data;
-        return isAuthenticated() && (request.auth.uid == trip.comercianteId || request.auth.uid == trip.transportistaId);
-      }
-      
-      allow read: if canChat();
-      allow create: if canChat() && 
-                    request.resource.data.senderId == request.auth.uid &&
-                    (request.resource.data.type == 'text' || request.resource.data.type == 'audio') &&
-                    (request.resource.data.text is string || request.resource.data.audioUrl is string);
-    }
-
     match /{path=**} {
       allow read, write: if false;
     }
-    }
-    }
+  }
+}

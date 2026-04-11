@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
+import { ADMIN_EMAILS } from '../lib/constants';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -36,9 +37,7 @@ export const AdminDashboard = () => {
   const [payoutFile, setPayoutFile] = useState<File | null>(null);
   const [payoutProofUrl, setPayoutProofUrl] = useState('');
 
-  const isAdmin = user?.tipoUsuario === 'admin' || 
-                  user?.email === 'vvendiya@gmail.com' || 
-                  user?.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
 
   // Fetch Platform Stats
   useEffect(() => {

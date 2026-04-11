@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
+import { ADMIN_EMAILS } from '../lib/constants';
 import { UserRole } from '../types';
 
 interface ProtectedRouteProps {
@@ -21,7 +22,7 @@ export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     return <Navigate to="/login" replace />;
   }
 
-  const isAdmin = user.email === 'vvendiya@gmail.com' || user.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
 
   if (allowedRoles && !allowedRoles.includes(user.tipoUsuario) && !isAdmin) {
     return <Navigate to="/" replace />;
