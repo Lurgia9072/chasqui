@@ -10,6 +10,7 @@ import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation, Sh
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { motion } from 'motion/react';
 
 export const MerchantDashboard = () => {
   const { user } = useAuthStore();
@@ -69,6 +70,36 @@ export const MerchantDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {user?.verificado !== 'verificado' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-100 relative overflow-hidden"
+        >
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-4 text-center md:text-left">
+              <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold uppercase tracking-wider">
+                <Clock className="h-3 w-3 mr-2" />
+                Proceso de Verificación
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black">
+                Estamos validando tu cuenta
+              </h1>
+              <p className="text-blue-100 text-lg max-w-2xl">
+                ¡Excelente! Hemos recibido tu DNI. Nuestro equipo lo está revisando para asegurar la seguridad de la plataforma. Este proceso suele demorar menos de 24 horas.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <div className="h-32 w-32 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20">
+                <ShieldCheck className="h-16 w-16 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="absolute -right-10 -top-10 h-40 w-40 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -left-10 -bottom-10 h-40 w-40 bg-blue-400/20 rounded-full blur-3xl" />
+        </motion.div>
+      )}
+
       {isAdmin && (
         <div className="bg-purple-600 rounded-2xl p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-purple-200">
           <div className="flex items-center space-x-4">

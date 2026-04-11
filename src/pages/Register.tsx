@@ -89,6 +89,11 @@ export const Register = () => {
         setError('Debes completar la información bancaria para continuar.');
         return;
       }
+    } else if (role === 'comerciante') {
+      if (!dniUrl) {
+        setError('Debes subir una foto de tu DNI para continuar.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -136,6 +141,9 @@ export const Register = () => {
         sumRatings: 0,
         completedTrips: 0,
         createdAt: Date.now(),
+        documentosUrls: {
+          dni: dniUrl || '',
+        }
       };
 
       if (data.tipoUsuario === 'transportista') {
@@ -147,7 +155,7 @@ export const Register = () => {
         newUser.zonasOperacion = data.zonas?.split(',').map(s => s.trim()) || [];
         
         newUser.documentosUrls = {
-          dni: dniUrl || '',
+          ...newUser.documentosUrls,
           licencia: licenciaUrl || '',
           tarjetaPropiedad: tarjetaPropiedadUrl || '',
           soat: soatUrl || '',
@@ -465,17 +473,44 @@ export const Register = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-8">
-                    <div className="flex justify-center mb-4">
-                      <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
-                        <User className="h-8 w-8 text-green-600" />
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <h3 className="text-xl font-bold">Verificación de Identidad</h3>
+                      <p className="text-sm text-gray-600">Sube una foto de tu DNI para validar tu cuenta de comerciante.</p>
+                    </div>
+                    
+                    <div className="flex justify-center">
+                      <div className="w-full max-w-xs space-y-2">
+                        <label className="text-xs font-bold text-gray-700">DNI / RUC</label>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileUpload(e, 'dni')}
+                            className="hidden"
+                            id="dni-upload-merchant"
+                          />
+                          <label
+                            htmlFor="dni-upload-merchant"
+                            className={cn(
+                              "flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-2xl cursor-pointer transition-all",
+                              dniUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
+                            )}
+                          >
+                            {dniUrl ? (
+                              <CheckCircle2 className="h-12 w-12 text-green-500" />
+                            ) : (
+                              <Upload className="h-12 w-12 text-gray-400" />
+                            )}
+                            <span className="text-sm mt-3 font-medium">Subir foto de DNI</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
-                    <h3 className="text-xl font-bold">¡Todo listo!</h3>
-                    <p className="text-gray-600 mt-2">Haz clic en finalizar para crear tu cuenta de comerciante.</p>
+
                     <div className="flex justify-between pt-8">
                       <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                      <Button type="submit" isLoading={isLoading}>Finalizar Registro</Button>
+                      <Button type="submit" isLoading={isLoading} disabled={!dniUrl}>Finalizar Registro</Button>
                     </div>
                   </div>
                 )}

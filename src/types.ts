@@ -27,8 +27,8 @@ export interface User {
   };
   documentosUrls?: {
     dni: string;
-    licencia: string;
-    tarjetaPropiedad: string;
+    licencia?: string;
+    tarjetaPropiedad?: string;
     soat?: string;
   };
   datosBancarios?: {
