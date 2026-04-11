@@ -113,11 +113,14 @@ export const Register = () => {
             user = userCredential.user;
             
             const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
+            const isAdminEmail = ADMIN_EMAILS.includes(data.email.toLowerCase());
+            
+            if (userDoc.exists() && !isAdminEmail) {
               setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
               setIsLoading(false);
               return;
             }
+            // Si es admin, permitimos continuar para que el setDoc de abajo actualice el rol
           } catch (signInErr: any) {
             setError('Este correo electrónico ya está registrado en el sistema de autenticación, pero no pudimos validar tu perfil. Por favor, contacta a soporte o usa otro correo.');
             setIsLoading(false);

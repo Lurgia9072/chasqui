@@ -33,6 +33,7 @@ export const AdminDashboard = () => {
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('revision');
   const [userFilter, setUserFilter] = useState<UserVerificationFilter>('todos');
+  const [viewingDoc, setViewingDoc] = useState<{ url: string, title: string } | null>(null);
   const [rejectingTrip, setRejectingTrip] = useState<Trip | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [payingTrip, setPayingTrip] = useState<Trip | null>(null);
@@ -263,6 +264,15 @@ export const AdminDashboard = () => {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  const handleViewDoc = (url: string, title: string) => {
+    if (!url) return;
+    if (url.startsWith('data:') || url === 'pdf_file_uploaded') {
+      setViewingDoc({ url, title });
+    } else {
+      window.open(url, '_blank');
     }
   };
 
@@ -528,11 +538,14 @@ export const AdminDashboard = () => {
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">DNI / RUC</p>
                             <div 
-                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={() => window.open(u.documentosUrls.dni, '_blank')}
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors overflow-hidden"
+                              onClick={() => handleViewDoc(u.documentosUrls.dni, `DNI - ${u.nombre}`)}
                             >
-                              <FileText className="h-6 w-6 text-blue-500" />
-                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                              {u.documentosUrls.dni.startsWith('data:') ? (
+                                <img src={u.documentosUrls.dni} alt="DNI" className="h-full w-full object-cover opacity-50 hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                              ) : (
+                                <FileText className="h-6 w-6 text-blue-500" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -540,11 +553,14 @@ export const AdminDashboard = () => {
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">Licencia</p>
                             <div 
-                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={() => window.open(u.documentosUrls.licencia, '_blank')}
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors overflow-hidden"
+                              onClick={() => handleViewDoc(u.documentosUrls.licencia, `Licencia - ${u.nombre}`)}
                             >
-                              <Truck className="h-6 w-6 text-purple-500" />
-                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                              {u.documentosUrls.licencia.startsWith('data:') ? (
+                                <img src={u.documentosUrls.licencia} alt="Licencia" className="h-full w-full object-cover opacity-50 hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                              ) : (
+                                <Truck className="h-6 w-6 text-purple-500" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -552,11 +568,14 @@ export const AdminDashboard = () => {
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">Tarjeta Prop.</p>
                             <div 
-                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={() => window.open(u.documentosUrls.tarjetaPropiedad, '_blank')}
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors overflow-hidden"
+                              onClick={() => handleViewDoc(u.documentosUrls.tarjetaPropiedad, `Tarjeta Propiedad - ${u.nombre}`)}
                             >
-                              <CreditCard className="h-6 w-6 text-emerald-500" />
-                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                              {u.documentosUrls.tarjetaPropiedad.startsWith('data:') ? (
+                                <img src={u.documentosUrls.tarjetaPropiedad} alt="Tarjeta" className="h-full w-full object-cover opacity-50 hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                              ) : (
+                                <CreditCard className="h-6 w-6 text-emerald-500" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -564,11 +583,14 @@ export const AdminDashboard = () => {
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">SOAT</p>
                             <div 
-                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={() => window.open(u.documentosUrls.soat, '_blank')}
+                              className="h-20 w-full bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors overflow-hidden"
+                              onClick={() => handleViewDoc(u.documentosUrls.soat, `SOAT - ${u.nombre}`)}
                             >
-                              <ShieldCheck className="h-6 w-6 text-orange-500" />
-                              <span className="text-[10px] ml-2 font-bold text-gray-600">Ver Doc</span>
+                              {u.documentosUrls.soat.startsWith('data:') ? (
+                                <img src={u.documentosUrls.soat} alt="SOAT" className="h-full w-full object-cover opacity-50 hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                              ) : (
+                                <ShieldCheck className="h-6 w-6 text-orange-500" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -714,14 +736,7 @@ export const AdminDashboard = () => {
                         <div className="w-full space-y-2">
                           <div 
                             className="relative h-24 w-full bg-gray-100 rounded-lg overflow-hidden border border-gray-200 cursor-pointer group flex items-center justify-center"
-                            onClick={() => {
-                              if (trip.pagoInfo?.comprobanteUrl && trip.pagoInfo.comprobanteUrl.startsWith('data:')) {
-                                const win = window.open();
-                                win?.document.write(`<img src="${trip.pagoInfo.comprobanteUrl}" style="max-width:100%">`);
-                              } else if (trip.pagoInfo?.comprobanteUrl !== 'pdf_file_uploaded') {
-                                window.open(trip.pagoInfo?.comprobanteUrl, '_blank');
-                              }
-                            }}
+                            onClick={() => handleViewDoc(trip.pagoInfo!.comprobanteUrl, `Comprobante - ${trip.tipoCarga}`)}
                           >
                             {trip.pagoInfo.comprobanteUrl === 'pdf_file_uploaded' ? (
                               <div className="flex flex-col items-center">
@@ -886,6 +901,43 @@ export const AdminDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Document Viewer Modal */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 bg-white/10 rounded-t-2xl backdrop-blur-md">
+              <h3 className="text-lg font-bold text-white">{viewingDoc.title}</h3>
+              <button 
+                onClick={() => setViewingDoc(null)}
+                className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 bg-black/40 rounded-b-2xl overflow-auto flex items-center justify-center p-4">
+              {viewingDoc.url === 'pdf_file_uploaded' ? (
+                <div className="text-center space-y-4 py-20">
+                  <FileText className="h-20 w-20 text-red-500 mx-auto" />
+                  <p className="text-white font-bold">Este es un archivo PDF. No se puede previsualizar directamente.</p>
+                  <Button variant="outline" className="text-white border-white hover:bg-white/10">
+                    Descargar PDF
+                  </Button>
+                </div>
+              ) : (
+                <img 
+                  src={viewingDoc.url} 
+                  alt={viewingDoc.title} 
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+            </div>
+          </div>
+          {/* Click outside to close */}
+          <div className="absolute inset-0 -z-10" onClick={() => setViewingDoc(null)} />
         </div>
       )}
     </div>

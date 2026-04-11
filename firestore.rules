@@ -79,7 +79,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-      //  request.auth.token.email == "lurgia18yuar@gmail.com" ||
+        request.auth.uid == "4RpsZPaoDSa1MxHlsMIftHc7Gk22" ||
         request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
         request.auth.token.email == "vvendiya@gmail.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
