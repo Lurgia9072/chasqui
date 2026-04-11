@@ -13,6 +13,7 @@ import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
 type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'payouts' | 'todos' | 'users' | 'cargas';
+type UserVerificationFilter = 'todos' | 'pendiente' | 'verificado' | 'rechazado';
 
 export const AdminDashboard = () => {
   const { user } = useAuthStore();
@@ -25,11 +26,13 @@ export const AdminDashboard = () => {
     totalTrips: 0,
     totalRevenue: 0,
     totalCommission: 0,
-    pendingPayouts: 0
+    pendingPayouts: 0,
+    pendingVerifications: 0
   });
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('revision');
+  const [userFilter, setUserFilter] = useState<UserVerificationFilter>('todos');
   const [rejectingTrip, setRejectingTrip] = useState<Trip | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [payingTrip, setPayingTrip] = useState<Trip | null>(null);
@@ -93,6 +96,10 @@ export const AdminDashboard = () => {
     
     if (activeTab === 'todos') {
       q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
+    } else if (activeTab === 'users' || activeTab === 'cargas') {
+      // No necesitamos cargar viajes si estamos en la pestaña de usuarios o cargas
+      setLoading(false);
+      return;
     } else {
       let statusFilter: TripStatus[] = [];
       if (activeTab === 'revision') statusFilter = ['pago_en_revision'];
@@ -314,12 +321,18 @@ export const AdminDashboard = () => {
           <p className="text-2xl font-black text-white">{stats.totalCommission.toLocaleString()}</p>
           <p className="text-[10px] text-purple-100 font-bold mt-1">Tu ganancia neta (10%)</p>
         </div>
-        <div className={cn(
-          "p-5 rounded-2xl border shadow-sm transition-colors",
-          (stats as any).pendingVerifications > 0 ? "bg-orange-50 border-orange-200" : "bg-white border-gray-100"
-        )}>
+        <div 
+          className={cn(
+            "p-5 rounded-2xl border shadow-sm transition-all cursor-pointer hover:scale-[1.02]",
+            stats.pendingVerifications > 0 ? "bg-orange-50 border-orange-200" : "bg-white border-gray-100"
+          )}
+          onClick={() => {
+            setActiveTab('users');
+            setUserFilter('pendiente');
+          }}
+        >
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Verificaciones Pendientes</p>
-          <p className={cn("text-2xl font-black", (stats as any).pendingVerifications > 0 ? "text-orange-600" : "text-gray-900")}>{(stats as any).pendingVerifications || 0}</p>
+          <p className={cn("text-2xl font-black", stats.pendingVerifications > 0 ? "text-orange-600" : "text-gray-900")}>{stats.pendingVerifications || 0}</p>
           <p className="text-[10px] text-gray-500 font-bold mt-1">Usuarios esperando aprobación</p>
         </div>
       </div>
@@ -450,7 +463,28 @@ export const AdminDashboard = () => {
               </div>
             ) : activeTab === 'users' ? (
               <div className="divide-y divide-gray-100">
-                {platformUsers.map((u) => (
+                <div className="p-4 bg-gray-50/50 flex items-center space-x-4 border-b border-gray-100">
+                  <span className="text-xs font-bold text-gray-500 uppercase">Filtrar por estado:</span>
+                  <div className="flex gap-2">
+                    {(['todos', 'pendiente', 'verificado', 'rechazado'] as UserVerificationFilter[]).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setUserFilter(f)}
+                        className={cn(
+                          "px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider transition-all",
+                          userFilter === f 
+                            ? "bg-purple-600 text-white shadow-md shadow-purple-100" 
+                            : "bg-white text-gray-500 border border-gray-200 hover:border-purple-300"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {platformUsers
+                  .filter(u => userFilter === 'todos' || (u.verificado || 'pendiente') === userFilter)
+                  .map((u) => (
                   <div key={u.id} className="p-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
