@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { ADMIN_EMAILS } from '@/src/lib/constants';
 
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
@@ -20,7 +21,7 @@ export const CarrierDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
-  const isAdmin = user?.email === 'vvendiya@gmail.com' || user?.email === 'lurgiaalidayupa@gmail.com';
+  const isAdmin = user && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
   useEffect(() => {
     if (isAdmin) {

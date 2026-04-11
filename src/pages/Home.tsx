@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Truck, Package, ShieldCheck, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuthStore } from '../store/useAuthStore';
+import { ADMIN_EMAILS } from '../lib/constants';
 
 export const Home = () => {
   const { user } = useAuthStore();
@@ -11,7 +12,8 @@ export const Home = () => {
 
   useEffect(() => {
     if (user) {
-      if (user.tipoUsuario === 'admin') {
+      const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
+      if (user.tipoUsuario === 'admin' || isAdmin) {
         navigate('/admin');
       } else if (user.tipoUsuario === 'comerciante') {
         navigate('/merchant/dashboard');

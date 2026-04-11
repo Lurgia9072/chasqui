@@ -13,6 +13,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Truck, AlertCircle, User, Briefcase, FileText, Mail, CheckCircle2, Upload, CreditCard, Landmark } from 'lucide-react';
 import { User as UserType, UserRole, AccountType } from '../types';
 import { cn } from '../lib/utils';
+import { ADMIN_EMAILS } from '../lib/constants';
 
 const registerSchema = z.object({
   nombre: z.string().min(3, 'Nombre demasiado corto'),
@@ -80,6 +81,8 @@ export const Register = () => {
   });
 
   const onSubmit: SubmitHandler<RegisterFormValues> = async (data) => {
+    const isAdminEmail = ADMIN_EMAILS.includes(data.email.toLowerCase());
+
     if (role === 'transportista') {
       if (!dniUrl || !licenciaUrl || !tarjetaPropiedadUrl) {
         setError('Debes subir todos los documentos requeridos para continuar.');
@@ -89,7 +92,7 @@ export const Register = () => {
         setError('Debes completar la información bancaria para continuar.');
         return;
       }
-    } else if (role === 'comerciante') {
+    } else if (role === 'comerciante' && !isAdminEmail) {
       if (!dniUrl) {
         setError('Debes subir una foto de tu DNI para continuar.');
         return;
@@ -130,12 +133,12 @@ export const Register = () => {
       const newUser: UserType = {
         uid: user.uid,
         nombre: data.nombre,
-        tipoUsuario: data.tipoUsuario as 'comerciante' | 'transportista',
+        tipoUsuario: isAdminEmail ? 'admin' : (data.tipoUsuario as 'comerciante' | 'transportista'),
         tipoCuenta: data.tipoCuenta as AccountType,
         documento: data.documento,
         telefono: data.telefono,
         email: data.email,
-        verificado: 'pendiente', 
+        verificado: isAdminEmail ? 'verificado' : 'pendiente', 
         rating: 0, 
         totalRatings: 0,
         sumRatings: 0,
@@ -475,42 +478,56 @@ export const Register = () => {
                 ) : (
                   <div className="space-y-6">
                     <div className="text-center space-y-2">
-                      <h3 className="text-xl font-bold">Verificación de Identidad</h3>
-                      <p className="text-sm text-gray-600">Sube una foto de tu DNI para validar tu cuenta de comerciante.</p>
+                      <h3 className="text-xl font-bold">
+                        {ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) ? 'Registro de Administrador' : 'Verificación de Identidad'}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) 
+                          ? 'Estás registrando una cuenta con privilegios de administrador.' 
+                          : 'Sube una foto de tu DNI para validar tu cuenta de comerciante.'}
+                      </p>
                     </div>
                     
-                    <div className="flex justify-center">
-                      <div className="w-full max-w-xs space-y-2">
-                        <label className="text-xs font-bold text-gray-700">DNI / RUC</label>
-                        <div className="relative">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, 'dni')}
-                            className="hidden"
-                            id="dni-upload-merchant"
-                          />
-                          <label
-                            htmlFor="dni-upload-merchant"
-                            className={cn(
-                              "flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-2xl cursor-pointer transition-all",
-                              dniUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                            )}
-                          >
-                            {dniUrl ? (
-                              <CheckCircle2 className="h-12 w-12 text-green-500" />
-                            ) : (
-                              <Upload className="h-12 w-12 text-gray-400" />
-                            )}
-                            <span className="text-sm mt-3 font-medium">Subir foto de DNI</span>
-                          </label>
+                    {!ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) && (
+                      <div className="flex justify-center">
+                        <div className="w-full max-w-xs space-y-2">
+                          <label className="text-xs font-bold text-gray-700">DNI / RUC</label>
+                          <div className="relative">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(e, 'dni')}
+                              className="hidden"
+                              id="dni-upload-merchant"
+                            />
+                            <label
+                              htmlFor="dni-upload-merchant"
+                              className={cn(
+                                "flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-2xl cursor-pointer transition-all",
+                                dniUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
+                              )}
+                            >
+                              {dniUrl ? (
+                                <CheckCircle2 className="h-12 w-12 text-green-500" />
+                              ) : (
+                                <Upload className="h-12 w-12 text-gray-400" />
+                              )}
+                              <span className="text-sm mt-3 font-medium">Subir foto de DNI</span>
+                            </label>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="flex justify-between pt-8">
                       <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                      <Button type="submit" isLoading={isLoading} disabled={!dniUrl}>Finalizar Registro</Button>
+                      <Button 
+                        type="submit" 
+                        isLoading={isLoading} 
+                        disabled={!dniUrl && !ADMIN_EMAILS.includes(watch('email')?.toLowerCase())}
+                      >
+                        Finalizar Registro
+                      </Button>
                     </div>
                   </div>
                 )}

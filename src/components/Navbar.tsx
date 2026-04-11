@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from './ui/Button';
-import { Truck, LogOut, User, Package, History } from 'lucide-react';
+import { Truck, LogOut, User, Package, History, ShieldAlert } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { NotificationBell } from './NotificationBell';
+import { ADMIN_EMAILS } from '../lib/constants';
 
 export const Navbar = () => {
   const { user, setUser } = useAuthStore();
@@ -20,6 +21,8 @@ export const Navbar = () => {
     }
   };
 
+  const isAdmin = user && ADMIN_EMAILS.includes(user.email.toLowerCase());
+
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -33,8 +36,17 @@ export const Navbar = () => {
         <div className="flex items-center space-x-4">
           {user ? (
             <>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="flex items-center space-x-1 text-sm font-bold text-purple-600 hover:text-purple-700"
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Admin</span>
+                </Link>
+              )}
               <Link
-                to={user.tipoUsuario === 'comerciante' ? '/merchant/dashboard' : '/carrier/dashboard'}
+                to={user.tipoUsuario === 'admin' ? '/admin' : (user.tipoUsuario === 'comerciante' ? '/merchant/dashboard' : '/carrier/dashboard')}
                 className="text-sm font-medium text-gray-600 hover:text-blue-600"
               >
                 Dashboard
@@ -52,7 +64,9 @@ export const Navbar = () => {
                   <Link to="/profile" className="text-xs font-semibold text-gray-900 hover:text-blue-600 transition-colors">
                     {user.nombre}
                   </Link>
-                  <span className="text-[10px] uppercase text-gray-500">{user.tipoUsuario}</span>
+                  <span className="text-[10px] uppercase font-bold text-gray-500">
+                    {isAdmin ? 'Administrador' : user.tipoUsuario}
+                  </span>
                 </div>
                 <Link to="/profile" className="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center hover:border-blue-300 transition-colors">
                   {user.photoUrl ? (

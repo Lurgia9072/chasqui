@@ -12,6 +12,7 @@ import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import { Truck, AlertCircle, Mail } from 'lucide-react';
 import { User } from '../types';
+import { ADMIN_EMAILS } from '../lib/constants';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -50,7 +51,9 @@ export const Login = () => {
         const userData = userDoc.data() as User;
         setUser(userData);
         
-        if (userData.tipoUsuario === 'comerciante') {
+        if (userData.tipoUsuario === 'admin' || ADMIN_EMAILS.includes(userData.email.toLowerCase())) {
+          navigate('/admin');
+        } else if (userData.tipoUsuario === 'comerciante') {
           navigate('/merchant/dashboard');
         } else {
           navigate('/carrier/dashboard');
