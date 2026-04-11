@@ -1,5 +1,5 @@
 import { useState, useEffect, ChangeEvent, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -68,7 +68,7 @@ export const TripDetails = () => {
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
 
-  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -1327,7 +1327,7 @@ export const TripDetails = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center space-x-4">
-                <Link 
+                <RouterLink 
                   to={`/profile/${isCarrier ? trip.comercianteId : trip.transportistaId}`}
                   className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border border-gray-200 hover:opacity-80 transition-opacity"
                 >
@@ -1344,14 +1344,14 @@ export const TripDetails = () => {
                       <User className="h-6 w-6 text-gray-400" />
                     )
                   )}
-                </Link>
+                </RouterLink>
                 <div className="flex-1">
-                  <Link 
+                  <RouterLink 
                     to={`/profile/${isCarrier ? trip.comercianteId : trip.transportistaId}`}
                     className="font-bold text-gray-900 hover:text-blue-600 transition-colors block"
                   >
                     {isCarrier ? carga.comercianteNombre : (trip.transportistaNombre || 'Transportista Asignado')}
-                  </Link>
+                  </RouterLink>
                   <div className="flex items-center text-yellow-500">
                     <Star className="h-3 w-3 fill-current" />
                     <span className="ml-1 text-xs font-bold">
