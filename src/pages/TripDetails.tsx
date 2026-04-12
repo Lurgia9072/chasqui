@@ -1,6 +1,6 @@
 import { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
-import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit, increment } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus } from '../types';
@@ -41,7 +41,7 @@ export const TripDetails = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
-  const [lastMessageCount, setLastMessageCount] = useState<number | null>(null);
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
 
   const showChatRef = useRef(showChat);
@@ -151,26 +151,23 @@ export const TripDetails = () => {
       orderBy('createdAt', 'desc'),
       limit(1)
     );
-
+ 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (snapshot.empty) return;
       
-      const lastMsg = snapshot.docs[0].data();
+      const lastMsgDoc = snapshot.docs[0];
+      const lastMsg = lastMsgDoc.data();
       
-      // Si el mensaje es del otro usuario y no es el primero que vemos en esta sesión
-      if (lastMsg.senderId !== user.uid) {
-        setLastMessageCount(prev => {
-          if (prev !== null) {
-            // Si el chat está cerrado o minimizado, marcar como no leído
-            if (!showChatRef.current || isChatMinimizedRef.current) {
-              setHasUnread(true);
-            }
+      setLastMessageId(prev => {
+        // Si no es el primer mensaje que vemos en esta sesión y es del otro usuario
+        if (prev !== null && prev !== lastMsgDoc.id && lastMsg.senderId !== user.uid) {
+          // Si el chat está cerrado o minimizado, marcar como no leído
+          if (!showChatRef.current || isChatMinimizedRef.current) {
+            setHasUnread(true);
           }
-          return snapshot.size;
-        });
-      } else {
-        setLastMessageCount(snapshot.size);
-      }
+        }
+        return lastMsgDoc.id;
+      });
     });
 
     return () => unsubscribe();
@@ -228,13 +225,13 @@ export const TripDetails = () => {
         
         // También actualizar el estado de la carga original
         await updateDoc(doc(db, 'cargas', trip.cargoId), { estado: 'completado' });
-
+ 
         // Incrementar viajes completados para el transportista
         await updateDoc(doc(db, 'users', trip.transportistaId), {
           completedTrips: increment(1)
         });
       }
-
+ 
       await updateDoc(doc(db, 'trips', trip.id), updates);
 
       addNotification({

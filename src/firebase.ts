@@ -1,13 +1,16 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, increment } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { OperationType, FirestoreErrorInfo } from './types';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
+export { increment };
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
