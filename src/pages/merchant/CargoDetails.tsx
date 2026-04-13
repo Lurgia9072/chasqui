@@ -6,11 +6,12 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, Offer, Trip, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone, Truck } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone, Truck, Navigation } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useNotification } from '../../components/ui/NotificationProvider';
+import { useJsApiLoader } from '@react-google-maps/api';
 
 export const MerchantCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,43 @@ export const MerchantCargoDetails = () => {
   const [carrierDataMap, setCarrierDataMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [isAccepting, setIsAccepting] = useState<string | null>(null);
+  const [etas, setEtas] = useState<Record<string, string>>({});
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+  });
+
+  useEffect(() => {
+    if (isLoaded && offers.length > 0 && carga && Object.keys(carrierDataMap).length > 0) {
+      const service = new google.maps.DistanceMatrixService();
+      const origins = offers.map(o => {
+        const carrier = carrierDataMap[o.transportistaId];
+        if (carrier?.currentLocation) {
+          return new google.maps.LatLng(carrier.currentLocation.lat, carrier.currentLocation.lng);
+        }
+        // Fallback to a random location near Lima if no current location
+        return new google.maps.LatLng(-12.046374 + (Math.random() - 0.5) * 0.1, -77.042793 + (Math.random() - 0.5) * 0.1);
+      });
+
+      service.getDistanceMatrix({
+        origins,
+        destinations: [carga.origen],
+        travelMode: google.maps.TravelMode.DRIVING,
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const newEtas: Record<string, string> = {};
+          response.rows.forEach((row, i) => {
+            const element = row.elements[0];
+            if (element.status === 'OK') {
+              newEtas[offers[i].id] = element.duration.text;
+            }
+          });
+          setEtas(newEtas);
+        }
+      });
+    }
+  }, [isLoaded, offers.length, carga?.origen, Object.keys(carrierDataMap).length]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -253,17 +291,29 @@ export const MerchantCargoDetails = () => {
                           <Link to={`/profile/${offer.transportistaId}`} className="text-lg font-bold text-gray-900 hover:text-blue-600 transition-colors">
                             {offer.transportistaNombre}
                           </Link>
-                          <div className="flex items-center space-x-3">
-                            <div className="flex items-center text-yellow-500 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center text-yellow-600 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
                               <Star className="h-3.5 w-3.5 fill-current" />
                               <span className="ml-1 text-xs font-bold">{(carrierDataMap[offer.transportistaId]?.rating || 5.0).toFixed(1)}</span>
                             </div>
-                            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100">
                               <Truck className="h-3.5 w-3.5" />
                               <span className="ml-1 text-xs font-bold">{carrierDataMap[offer.transportistaId]?.completedTrips || 0} viajes</span>
                             </div>
+                            {etas[offer.id] && (
+                              <div className="flex items-center text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                                <Navigation className="h-3.5 w-3.5" />
+                                <span className="ml-1 text-xs font-bold">Llega en {etas[offer.id]}</span>
+                              </div>
+                            )}
+                            {offer.tiempoRecojoEstimado && (
+                              <div className="flex items-center text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span className="ml-1 text-xs font-bold">Recojo: {offer.tiempoRecojoEstimado}</span>
+                              </div>
+                            )}
                             {carrierDataMap[offer.transportistaId]?.telefono && (
-                              <p className="text-xs text-gray-500 font-medium flex items-center">
+                              <p className="text-xs text-gray-500 font-medium flex items-center px-1">
                                 <Phone className="h-3 w-3 mr-1" />
                                 {carrierDataMap[offer.transportistaId].telefono}
                               </p>
@@ -272,10 +322,10 @@ export const MerchantCargoDetails = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-8 flex-1">
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Precio Ofertado</span>
-                          <span className="text-3xl font-extrabold text-blue-600">S/ {offer.precioOfertado}</span>
+                      <div className="flex flex-col sm:flex-row items-center justify-between sm:justify-end gap-6 flex-1 border-t sm:border-t-0 pt-6 sm:pt-0">
+                        <div className="flex flex-col items-center sm:items-end">
+                          <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest leading-none mb-1">Precio Ofertado</span>
+                          <span className="text-3xl font-black text-blue-600 leading-none">S/{offer.precioOfertado}</span>
                         </div>
                         
                         {carga.estado === 'disponible' ? (

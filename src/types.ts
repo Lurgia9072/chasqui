@@ -20,6 +20,11 @@ export interface User {
   sumRatings: number;
   completedTrips: number;
   zonasOperacion?: string[];
+  currentLocation?: {
+    lat: number;
+    lng: number;
+    updatedAt: number;
+  };
   vehiculo?: {
     tipo: string;
     placa: string;
@@ -63,6 +68,7 @@ export interface Offer {
   transportistaNombre: string;
   transportistaRating: number;
   precioOfertado: number;
+  tiempoRecojoEstimado?: string;
   estado: OfferStatus;
   createdAt: number;
 }

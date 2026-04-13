@@ -22,6 +22,7 @@ export const CarrierCargoDetails = () => {
   const [myOffer, setMyOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [offerPrice, setOfferPrice] = useState<number>(0);
+  const [pickupTime, setPickupTime] = useState<string>('30 min');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -97,6 +98,7 @@ export const CarrierCargoDetails = () => {
         transportistaNombre: user.nombre,
         transportistaRating: user.rating,
         precioOfertado: offerPrice,
+        tiempoRecojoEstimado: pickupTime,
         estado: 'pendiente',
         createdAt: Date.now(),
       });
@@ -105,7 +107,7 @@ export const CarrierCargoDetails = () => {
       await addDoc(collection(db, 'notifications'), {
         userId: carga.comercianteId,
         titulo: 'Nueva Oferta Recibida',
-        mensaje: `${user.nombre} ha enviado una oferta de S/ ${offerPrice} para tu carga de ${carga.tipoCarga}.`,
+        mensaje: `${user.nombre} ha enviado una oferta de S/ ${offerPrice} (Recojo en ${pickupTime}) para tu carga de ${carga.tipoCarga}.`,
         tipo: 'oferta_nueva',
         leido: false,
         link: `/merchant/cargo/${id}`,
@@ -215,10 +217,16 @@ export const CarrierCargoDetails = () => {
                 <CardDescription>Ya has enviado una oferta para esta carga.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-blue-100">
-                  <span className="text-sm font-medium text-gray-600">Precio Ofertado</span>
-                  <span className="text-2xl font-extrabold text-blue-700">S/ {myOffer.precioOfertado}</span>
+                <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-1">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Precio Ofertado</span>
+                  <p className="text-3xl font-black text-blue-700 leading-none">S/{myOffer.precioOfertado}</p>
                 </div>
+                {myOffer.tiempoRecojoEstimado && (
+                  <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-1">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tiempo de Recojo</span>
+                    <p className="text-xl font-bold text-gray-900 leading-none">{myOffer.tiempoRecojoEstimado}</p>
+                  </div>
+                )}
                 <div className={cn(
                   "flex items-center space-x-2 p-3 rounded-lg text-sm font-bold uppercase tracking-wider justify-center",
                   myOffer.estado === 'pendiente' ? "bg-yellow-100 text-yellow-700" :
@@ -252,9 +260,9 @@ export const CarrierCargoDetails = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Precio Sugerido</span>
-                    <span className="text-sm font-bold text-gray-900">S/ {carga.precioPropuesto}</span>
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Precio Sugerido</span>
+                    <span className="text-sm font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded-lg">S/ {carga.precioPropuesto}</span>
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">S/</span>
@@ -267,9 +275,23 @@ export const CarrierCargoDetails = () => {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Tiempo Estimado de Recojo</label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={pickupTime}
+                      onChange={(e) => setPickupTime(e.target.value)}
+                      placeholder="Ej: 30 min, 1 hora..."
+                      className="w-full h-12 pl-10 pr-4 rounded-xl border-2 border-blue-200 bg-white text-sm font-medium text-gray-900 focus:outline-none focus:border-blue-600 transition-colors"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Comisión chasquii (10%)</span>
+                    <span>Comisión TransportaYa (10%)</span>
                     <span>- S/ {(offerPrice * 0.1).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-bold text-green-600 pt-2 border-t border-gray-100">
