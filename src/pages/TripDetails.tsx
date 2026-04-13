@@ -642,7 +642,17 @@ export const TripDetails = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={() => navigate(-1)} 
+        className="hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Volver
+      </Button>
+
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
@@ -1097,9 +1107,9 @@ export const TripDetails = () => {
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
-           {/*      <p className="text-sm text-gray-600 italic">
+                <p className="text-sm text-gray-600 italic">
                   "Presentarse en la puerta 4 con el documento de identidad. Preguntar por el encargado de almacén."
-                </p> */}
+                </p>
                 
                 <div className="pt-3 border-t border-gray-100">
                   {trip.recojoRealAt ? (
@@ -1141,9 +1151,9 @@ export const TripDetails = () => {
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* <p className="text-sm text-gray-600 italic">
+                <p className="text-sm text-gray-600 italic">
                   "Entregar guía de remisión firmada. El horario de descarga es hasta las 6:00 PM."
-                </p> */}
+                </p>
 
                 <div className="pt-3 border-t border-gray-100">
                   {trip.entregaRealAt ? (

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, handleFirestoreError } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -7,13 +7,14 @@ import { OperationType, Review, User as UserType } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare, FileText, CheckCircle, XCircle, Upload, Clock } from 'lucide-react';
+import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare, FileText, CheckCircle, XCircle, Upload, Clock, ArrowLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export const Profile = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user: currentUser, setUser: setCurrentUser } = useAuthStore();
   const [profileUser, setProfileUser] = useState<UserType | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -244,7 +245,17 @@ export const Profile = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={() => navigate(-1)} 
+        className="hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Volver
+      </Button>
+
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
         <div className="flex items-center space-x-4">
           <div className="relative group">
