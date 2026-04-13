@@ -17,6 +17,15 @@
   }
 }
 
+@keyframes progress-slow {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-progress-slow {
+  animation: progress-slow 3s linear infinite;
+}
+
 /* Custom scrollbar for a cleaner look */
 ::-webkit-scrollbar {
   width: 8px;

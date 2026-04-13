@@ -17,6 +17,7 @@ import { useNotification } from '../components/ui/NotificationProvider';
 import { ADMIN_EMAILS } from '../lib/constants';
 
 
+
 const containerStyle = {
   width: '100%',
   height: '400px',
@@ -260,14 +261,16 @@ export const TripDetails = () => {
       // Actualizar tiempo estimado según el estado
       if (newStatus === 'recojo_completado') {
         updates.tiempoEstimado = 'En camino al destino';
+        updates.recojoRealAt = Date.now();
         notificationTitle = 'Carga Recogida';
         notificationMessage = `El transportista ha recogido tu carga de ${carga.tipoCarga} y está en camino al destino.`;
       } else if (newStatus === 'en_camino_a_destino') {
-        updates.tiempoEstimado = '1h 30min para la entrega';
+        updates.tiempoEstimado = 'Calculando tiempo...';
         notificationTitle = 'En Tránsito';
         notificationMessage = `Tu carga de ${carga.tipoCarga} está en camino al destino final.`;
       } else if (newStatus === 'entregado_pendiente_confirmacion') {
         updates.tiempoEstimado = 'Esperando confirmación';
+        updates.entregaRealAt = Date.now();
         notificationTitle = 'Carga Entregada';
         notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.tipoCarga}. Por favor, confirma la recepción.`;
       } else if (newStatus === 'completado') {
@@ -618,6 +621,24 @@ export const TripDetails = () => {
       case 'cancelado': return 'Cancelado';
       default: return status;
     }
+  };
+
+  const getArrivalTime = (durationStr: string) => {
+    if (!durationStr) return null;
+    const now = new Date();
+    let minutesToAdd = 0;
+    
+    // Parse common duration formats from Google Maps
+    const hourMatch = durationStr.match(/(\d+)\s*h/);
+    const minMatch = durationStr.match(/(\d+)\s*min/);
+    
+    if (hourMatch) minutesToAdd += parseInt(hourMatch[1]) * 60;
+    if (minMatch) minutesToAdd += parseInt(minMatch[1]);
+    
+    if (minutesToAdd === 0) return null;
+    
+    const arrivalDate = new Date(now.getTime() + minutesToAdd * 60000);
+    return arrivalDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -1063,24 +1084,91 @@ export const TripDetails = () => {
 
           {/* Instrucciones de Carga/Descarga */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <Card className="bg-gray-50/50">
-              <CardHeader className="pb-2">
+            <Card className={cn(
+              "transition-all duration-500",
+              trip.estado === 'en_camino_a_recojo' ? "ring-2 ring-blue-500 bg-blue-50/30" : "bg-gray-50/50"
+            )}>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Instrucciones de Recojo</CardTitle>
+                {trip.recojoRealAt ? (
+                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">RECOGIDO</span>
+                ) : trip.estado === 'en_camino_a_recojo' && (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold animate-pulse">EN CAMINO</span>
+                )}
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 italic">
+              <CardContent className="space-y-4">
+           {/*      <p className="text-sm text-gray-600 italic">
                   "Presentarse en la puerta 4 con el documento de identidad. Preguntar por el encargado de almacén."
-                </p>
+                </p> */}
+                
+                <div className="pt-3 border-t border-gray-100">
+                  {trip.recojoRealAt ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Recogido a las:</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {new Date(trip.recojoRealAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ) : trip.estado === 'en_camino_a_recojo' && etaInfo ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Llegada estimada:</span>
+                        <span className="text-sm font-bold text-blue-600">
+                          {getArrivalTime(etaInfo.duration) || '--:--'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-600 h-full animate-progress-slow" style={{ width: '60%' }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 italic">Esperando inicio de ruta...</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
-            <Card className="bg-gray-50/50">
-              <CardHeader className="pb-2">
+
+            <Card className={cn(
+              "transition-all duration-500",
+              trip.estado === 'en_camino_a_destino' ? "ring-2 ring-blue-500 bg-blue-50/30" : "bg-gray-50/50"
+            )}>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-gray-500">Instrucciones de Entrega</CardTitle>
+                {trip.entregaRealAt ? (
+                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">ENTREGADO</span>
+                ) : trip.estado === 'en_camino_a_destino' && (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold animate-pulse">EN TRÁNSITO</span>
+                )}
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 italic">
+              <CardContent className="space-y-4">
+                {/* <p className="text-sm text-gray-600 italic">
                   "Entregar guía de remisión firmada. El horario de descarga es hasta las 6:00 PM."
-                </p>
+                </p> */}
+
+                <div className="pt-3 border-t border-gray-100">
+                  {trip.entregaRealAt ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Entregado a las:</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {new Date(trip.entregaRealAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ) : trip.estado === 'en_camino_a_destino' && etaInfo ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Llegada estimada:</span>
+                        <span className="text-sm font-bold text-blue-600">
+                          {getArrivalTime(etaInfo.duration) || '--:--'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-600 h-full animate-progress-slow" style={{ width: '40%' }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 italic">Pendiente de recojo...</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1707,6 +1795,5 @@ export const TripDetails = () => {
     </div>
   );
 };
-
 
 

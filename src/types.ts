@@ -94,6 +94,8 @@ export interface Trip {
   tiempoEstimado?: string;
   fechaRecojo?: string;
   horaRecojo?: string;
+  recojoRealAt?: number;
+  entregaRealAt?: number;
   vehiculo?: {
     tipo: string;
     placa: string;
