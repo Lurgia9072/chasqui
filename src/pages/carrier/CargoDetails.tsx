@@ -7,10 +7,11 @@ import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star, Navigation, Map as MapIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { GoogleMap, useJsApiLoader, DirectionsService, DirectionsRenderer } from '@react-google-maps/api';
 
 export const CarrierCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,15 @@ export const CarrierCargoDetails = () => {
   const [offerPrice, setOfferPrice] = useState<number>(0);
   const [pickupTime, setPickupTime] = useState<string>('30 min');
   const [isLoading, setIsLoading] = useState(false);
+  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [pickupDirections, setPickupDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+  const [pickupInfo, setPickupInfo] = useState<{ distance: string; duration: string } | null>(null);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+  });
 
   useEffect(() => {
     if (!id || !user) return;
@@ -99,6 +109,8 @@ export const CarrierCargoDetails = () => {
         transportistaRating: user.rating,
         precioOfertado: offerPrice,
         tiempoRecojoEstimado: pickupTime,
+        distanciaEstimada: routeInfo?.distance,
+        duracionEstimada: routeInfo?.duration,
         estado: 'pendiente',
         createdAt: Date.now(),
       });
@@ -117,6 +129,36 @@ export const CarrierCargoDetails = () => {
       handleFirestoreError(err, OperationType.CREATE, `cargas/${id}/offers`);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const directionsCallback = (
+    result: google.maps.DirectionsResult | null,
+    status: google.maps.DirectionsStatus
+  ) => {
+    if (status === 'OK' && result && !directions) {
+      setDirections(result);
+      const route = result.routes[0].legs[0];
+      setRouteInfo({
+        distance: route.distance?.text || '',
+        duration: route.duration?.text || '',
+      });
+    }
+  };
+
+  const pickupDirectionsCallback = (
+    result: google.maps.DirectionsResult | null,
+    status: google.maps.DirectionsStatus
+  ) => {
+    if (status === 'OK' && result && !pickupDirections) {
+      setPickupDirections(result);
+      const route = result.routes[0].legs[0];
+      setPickupInfo({
+        distance: route.distance?.text || '',
+        duration: route.duration?.text || '',
+      });
+      // Update the pickup time input automatically if it's the first time
+      setPickupTime(route.duration?.text || '30 min');
     }
   };
 
@@ -153,6 +195,109 @@ export const CarrierCargoDetails = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-8">
+              {/* Mapa de la Ruta */}
+              {isLoaded && carga && (
+                <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-inner relative">
+                  <GoogleMap
+                    mapContainerStyle={{ width: '100%', height: '100%' }}
+                    center={{ lat: -12.046374, lng: -77.042793 }} // Lima default
+                    zoom={12}
+                    options={{
+                      disableDefaultUI: true,
+                      zoomControl: true,
+                      styles: [
+                        {
+                          featureType: 'poi',
+                          elementType: 'labels',
+                          stylers: [{ visibility: 'off' }],
+                        },
+                      ],
+                    }}
+                  >
+                    {/* Ruta de Viaje (Origen -> Destino) */}
+                    <DirectionsService
+                      options={{
+                        origin: carga.origen,
+                        destination: carga.destino,
+                        travelMode: google.maps.TravelMode.DRIVING,
+                      }}
+                      callback={directionsCallback}
+                    />
+                    {directions && (
+                      <DirectionsRenderer
+                        options={{
+                          directions: directions,
+                          suppressMarkers: false,
+                          polylineOptions: {
+                            strokeColor: '#2563eb',
+                            strokeWeight: 5,
+                            strokeOpacity: 0.8,
+                          },
+                        }}
+                      />
+                    )}
+
+                    {/* Ruta de Recojo (Tu ubicación -> Origen) */}
+                    {user?.currentLocation && (
+                      <>
+                        <DirectionsService
+                          options={{
+                            origin: new google.maps.LatLng(user.currentLocation.lat, user.currentLocation.lng),
+                            destination: carga.origen,
+                            travelMode: google.maps.TravelMode.DRIVING,
+                          }}
+                          callback={pickupDirectionsCallback}
+                        />
+                        {pickupDirections && (
+                          <DirectionsRenderer
+                            options={{
+                              directions: pickupDirections,
+                              suppressMarkers: true, // Don't show markers for pickup to avoid confusion
+                              polylineOptions: {
+                                strokeColor: '#94a3b8',
+                                strokeWeight: 4,
+                                strokeOpacity: 0.6,
+                                strokeDasharray: [10, 5],
+                              },
+                            }}
+                          />
+                        )}
+                      </>
+                    )}
+                  </GoogleMap>
+                  
+                  <div className="absolute bottom-4 left-4 right-4 flex flex-col gap-2">
+                    {pickupInfo && (
+                      <div className="bg-slate-800/90 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-slate-700 flex justify-around items-center text-white">
+                        <div className="flex items-center space-x-2">
+                          <div className="h-2 w-2 rounded-full bg-slate-400 animate-pulse" />
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Distancia al Origen</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-bold">{pickupInfo.distance}</span>
+                          <span className="mx-2 text-slate-500">|</span>
+                          <span className="text-sm font-bold text-emerald-400">{pickupInfo.duration}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {routeInfo && (
+                      <div className="bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg border border-blue-100 flex justify-around items-center">
+                        <div className="text-center">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">Distancia de Carga</span>
+                          <span className="text-sm font-bold text-blue-600">{routeInfo.distance}</span>
+                        </div>
+                        <div className="h-8 w-px bg-gray-100" />
+                        <div className="text-center">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">Tiempo de Viaje</span>
+                          <span className="text-sm font-bold text-blue-600">{routeInfo.duration}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Ruta Visual */}
               <div className="relative space-y-6 pl-8 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
                 <div className="relative">
@@ -219,7 +364,7 @@ export const CarrierCargoDetails = () => {
               <CardContent className="space-y-4">
                 <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-1">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Precio Ofertado</span>
-                  <p className="text-3xl font-black text-blue-700 leading-none">S/{myOffer.precioOfertado}</p>
+                  <p className="text-3xl font-black text-blue-700 leading-none">S/ {myOffer.precioOfertado}</p>
                 </div>
                 {myOffer.tiempoRecojoEstimado && (
                   <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-1">
