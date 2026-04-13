@@ -19,7 +19,7 @@ export const Footer = ({ className }: FooterProps) => {
           <div className="space-y-6">
             <div className="flex items-center space-x-2">
               <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl">T</div>
-              <Heading level={4} className="text-blue-600">TransportaYa</Heading>
+              <Heading level={4} className="text-blue-600">chasquii</Heading>
             </div>
             <Text variant="muted">
               La plataforma líder en transporte de carga en Perú. Conectamos comerciantes con transportistas de confianza.
@@ -65,7 +65,7 @@ export const Footer = ({ className }: FooterProps) => {
               </li>
               <li className="flex items-center space-x-3 text-sm text-gray-500">
                 <Mail className="h-5 w-5 text-blue-600 shrink-0" />
-                <span>contacto@transportaya.pe</span>
+                <span>contacto@chasquii.pe</span>
               </li>
             </ul>
           </div>
@@ -73,7 +73,7 @@ export const Footer = ({ className }: FooterProps) => {
 
         <div className="mt-16 pt-8 border-t border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
           <Text variant="small">
-            © {currentYear} TransportaYa. Todos los derechos reservados.
+            © {currentYear} chasquii. Todos los derechos reservados.
           </Text>
           <div className="flex items-center space-x-6">
             <Link to="/terminos" variant="default" className="text-xs">Términos</Link>

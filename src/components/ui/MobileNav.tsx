@@ -67,7 +67,7 @@ export const MobileNav = () => {
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg">T</div>
-                  <span className="text-lg font-extrabold text-blue-600">TransportaYa</span>
+                  <span className="text-lg font-extrabold text-blue-600">chasquii</span>
                 </div>
                 <button
                   onClick={() => setIsOpen(false)}

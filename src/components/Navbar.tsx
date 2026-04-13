@@ -27,9 +27,9 @@ export const Navbar = () => {
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center space-x-2">
-          <Truck className="h-8 w-8 text-blue-600" />
+          <Truck className="h-8 w-8 text-blue-600 text-gray-900" />
           <span className="text-xl font-bold tracking-tight text-gray-900">
-            transporta<span className="text-blue-600">ya</span>
+            chasqui
           </span>
         </Link>
 

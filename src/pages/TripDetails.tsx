@@ -652,7 +652,7 @@ export const TripDetails = () => {
                         </div>
                         <div>
                           <p className="text-xs font-bold">987 654 321</p>
-                          <p className="text-[10px] text-gray-500">A nombre de: TransportaYa SAC</p>
+                          <p className="text-[10px] text-gray-500">A nombre de: chasquii SAC</p>
                         </div>
                       </div>
                       <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
@@ -1127,7 +1127,7 @@ export const TripDetails = () => {
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-blue-900">¡Califica tu experiencia!</h3>
-                        <p className="text-sm text-blue-700">Tu opinión ayuda a mejorar la comunidad de TransportaYa.</p>
+                        <p className="text-sm text-blue-700">Tu opinión ayuda a mejorar la comunidad de chasquii.</p>
                       </div>
                       <Button 
                         className="w-full bg-blue-600 hover:bg-blue-700"
