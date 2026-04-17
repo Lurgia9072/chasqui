@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, FormEvent } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,7 +12,7 @@ import { OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, Info, ArrowLeft, Truck, X, Search, Navigation } from 'lucide-react';
+import { Package, MapPin, DollarSign, Info, ArrowLeft, Truck, X, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -122,37 +122,25 @@ export const PostCargo = () => {
     setTempLocation(null);
   };
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ', Peru')}`);
-      const data = await response.json();
-      if (data && data.length > 0) {
-        const { lat, lon, display_name } = data[0];
-        const newLat = parseFloat(lat);
-        const newLng = parseFloat(lon);
-        setTempLocation({ lat: newLat, lng: newLng });
-        // We'll need a way to move the map. Let's add a MapController component inside MapContainer.
-      } else {
-        alert('No se encontró la ubicación');
-      }
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
   const MapController = ({ center }: { center: { lat: number; lng: number } }) => {
     const map = useMap();
     useEffect(() => {
-      map.setView([center.lat, center.lng], 15);
+      map.setView([center.lat, center.lng], map.getZoom());
     }, [center, map]);
+    
+    // Fix for blank map in modals: invalidate size after animation
+    useEffect(() => {
+      // Small delay to let the modal open
+      const t1 = setTimeout(() => map.invalidateSize(), 300);
+      // Second check to be sure after any potential layout shifts
+      const t2 = setTimeout(() => map.invalidateSize(), 1000);
+      
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }, [map]);
+
     return null;
   };
 
@@ -399,12 +387,12 @@ export const PostCargo = () => {
       {/* Map Modal */}
       <AnimatePresence>
         {showMapModal.show && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-none"
+              className="bg-white sm:rounded-3xl shadow-2xl w-full h-full sm:h-auto sm:max-w-3xl overflow-hidden flex flex-col"
             >
               <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                 <div className="flex items-center gap-3">
@@ -417,42 +405,18 @@ export const PostCargo = () => {
                   </div>
                 </div>
                 <button 
-                  onClick={() => { setShowMapModal({ show: false, field: 'origen' }); setSearchQuery(''); }} 
+                  onClick={() => setShowMapModal({ show: false, field: 'origen' })} 
                   className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                 >
                   <X className="h-5 w-5 text-gray-500" />
                 </button>
               </div>
 
-              {/* Search Bar */}
-              <div className="p-4 bg-white border-b border-gray-100 shrink-0">
-                <form onSubmit={handleSearch} className="relative flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input 
-                      type="text"
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm outline-none transition-all"
-                      placeholder="Buscar por distrito, región o nombre..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <Button 
-                    type="submit" 
-                    size="sm" 
-                    className="shrink-0 h-11 px-4 lg:px-6"
-                    isLoading={isSearching}
-                  >
-                    Buscar
-                  </Button>
-                </form>
-              </div>
-              
-              <div className="relative flex-1 min-h-[300px] h-[50vh] sm:h-[450px]">
+              <div className="relative w-full h-[50vh] sm:h-[500px] overflow-hidden bg-gray-100 border-t border-gray-100">
                 <MapContainer 
                   center={[-12.046374, -77.042793]} 
                   zoom={13} 
-                  style={{ height: '100%', width: '100%' }}
+                  style={{ height: '100%', width: '100%', zIndex: 1 }}
                 >
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -462,7 +426,7 @@ export const PostCargo = () => {
                     initialPos={tempLocation ? [tempLocation.lat, tempLocation.lng] : [-12.046374, -77.042793]} 
                     onLocationSelect={(lat, lng) => setTempLocation({ lat, lng })}
                   />
-                  {tempLocation && <MapController center={tempLocation} />}
+                  <MapController center={tempLocation || { lat: -12.046374, lng: -77.042793 }} />
                 </MapContainer>
                 
                 {tempLocation && (
