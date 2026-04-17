@@ -51,7 +51,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <NotificationProvider>
-        <Router>
+        <Router basename={import.meta.env.BASE_URL}>
           <div className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
             <Navbar />
             <main>
