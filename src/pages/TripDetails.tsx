@@ -10,13 +10,57 @@ import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCi
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
-import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
 import { ADMIN_EMAILS } from '../lib/constants';
+import L from 'leaflet';
 
 
+// Fix Leaflet default icon issue
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+const carrierIcon = L.divIcon({
+  html: `<div class="w-10 h-10 bg-blue-600 rounded-2xl border-2 border-white shadow-xl flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-2.235-2.977a1 1 0 0 0-.796-.383H15v4.5"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+        </div>`,
+  className: '',
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+});
+
+const originIcon = L.divIcon({
+  html: `<div class="w-8 h-8 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <div class="w-2 h-2 bg-white rounded-full"></div>
+        </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const destinationIcon = L.divIcon({
+  html: `<div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <div class="w-2 h-2 bg-white rounded-full"></div>
+        </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const MapController = ({ center }: { center: [number, number] }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+};
 
 const containerStyle = {
   width: '100%',
@@ -66,20 +110,18 @@ export const TripDetails = () => {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [originCoords, setOriginCoords] = useState<google.maps.LatLngLiteral | null>(null);
-  const [destinationCoords, setDestinationCoords] = useState<google.maps.LatLngLiteral | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [fullRouteCoords, setFullRouteCoords] = useState<[number, number][]>([]);
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaInfo, setEtaInfo] = useState<{ distance: string; duration: string } | null>(null);
+  const [isGpsActive, setIsGpsActive] = useState(false);
+  const [autoCenter, setAutoCenter] = useState(true);
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
-
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '', // El usuario deberá configurar esto
-  });
 
   useEffect(() => {
     if (!id || !user) return;
@@ -186,69 +228,158 @@ export const TripDetails = () => {
     }
   }, [showChat, isChatMinimized]);
 
-  // Geocodificación de origen y destino
+  // Geocodificación de origen y destino (si no están en la carga)
   useEffect(() => {
-    if (isLoaded && carga) {
-      const geocoder = new google.maps.Geocoder();
-      
-      geocoder.geocode({ address: carga.origen }, (results, status) => {
-        if (status === 'OK' && results?.[0]) {
-          setOriginCoords({
-            lat: results[0].geometry.location.lat(),
-            lng: results[0].geometry.location.lng()
+    if (carga) {
+      if (carga.origenCoords) {
+        setOriginCoords(carga.origenCoords);
+      } else {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(carga.origen)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data?.[0]) {
+              setOriginCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+            }
           });
-        }
-      });
+      }
 
-      geocoder.geocode({ address: carga.destino }, (results, status) => {
-        if (status === 'OK' && results?.[0]) {
-          setDestinationCoords({
-            lat: results[0].geometry.location.lat(),
-            lng: results[0].geometry.location.lng()
+      if (carga.destinoCoords) {
+        setDestinationCoords(carga.destinoCoords);
+      } else {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(carga.destino)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data?.[0]) {
+              setDestinationCoords({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+            }
           });
-        }
-      });
+      }
     }
-  }, [isLoaded, carga?.origen, carga?.destino]);
+  }, [carga?.origen, carga?.destino, carga?.origenCoords, carga?.destinoCoords]);
 
-  // Simulación de movimiento del transportista mejorada
+  // Calcular ruta completa (Origen -> Destino)
+  useEffect(() => {
+    if (originCoords && destinationCoords) {
+      fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lng},${originCoords.lat};${destinationCoords.lng},${destinationCoords.lat}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes?.[0]) {
+            const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+            setFullRouteCoords(coords);
+          }
+        });
+    }
+  }, [originCoords, destinationCoords]);
+
+  // Seguimiento GPS Real del Transportista
   useEffect(() => {
     const activeStatuses: TripStatus[] = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino'];
-    if (trip && activeStatuses.includes(trip.estado) && user?.tipoUsuario === 'transportista' && originCoords && destinationCoords) {
-      const interval = setInterval(async () => {
-        let targetLat = destinationCoords.lat;
-        let targetLng = destinationCoords.lng;
+    let watchId: number | null = null;
 
-        if (trip.estado === 'en_camino_a_recojo') {
-          targetLat = originCoords.lat;
-          targetLng = originCoords.lng;
-        }
-
-        const currentLat = trip.seguimiento?.lat || center.lat;
-        const currentLng = trip.seguimiento?.lng || center.lng;
-
-        // Mover un poco hacia el objetivo
-        const step = 0.0005;
-        const dLat = targetLat - currentLat;
-        const dLng = targetLng - currentLng;
-        const distance = Math.sqrt(dLat * dLat + dLng * dLng);
-
-        if (distance < step) {
-          // Ya llegó o está muy cerca
-          return;
-        }
-
-        const newLat = currentLat + (dLat / distance) * step;
-        const newLng = currentLng + (dLng / distance) * step;
-        
-        await updateDoc(doc(db, 'trips', trip.id), {
-          seguimiento: { lat: newLat, lng: newLng, updatedAt: Date.now() }
+    if (trip && activeStatuses.includes(trip.estado) && user?.tipoUsuario === 'transportista') {
+      if ("geolocation" in navigator) {
+        setIsGpsActive(true);
+        watchId = navigator.geolocation.watchPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            
+            // Solo actualizar si ha pasado un tiempo prudente (ej: 15 segundos) o cambio significativo
+            // Para este demo usaremos un intervalo de tiempo para asegurar fluidez en la vista del comerciante
+            const lastUpdate = trip.seguimiento?.updatedAt || 0;
+            const now = Date.now();
+            
+            if (now - lastUpdate > 15000) { 
+              try {
+                await updateDoc(doc(db, 'trips', trip.id), {
+                  seguimiento: { 
+                    lat: latitude, 
+                    lng: longitude, 
+                    updatedAt: now 
+                  }
+                });
+              } catch (err) {
+                console.error("Error actualizando ubicación GPS:", err);
+              }
+            }
+          },
+          (error) => {
+            console.error("Error obteniendo ubicación GPS:", error);
+            setIsGpsActive(false);
+            addNotification({
+              title: 'Error de GPS',
+              message: 'No se pudo obtener tu ubicación. Asegúrate de tener el GPS activado y dar permisos.',
+              type: 'error'
+            });
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 10000,
+            timeout: 10000
+          }
+        );
+      } else {
+        addNotification({
+          title: 'GPS no disponible',
+          message: 'Tu navegador no soporta geolocalización.',
+          type: 'error'
         });
-      }, 5000);
-      
-      return () => clearInterval(interval);
+      }
     }
-  }, [trip?.estado, trip?.id, user?.tipoUsuario, originCoords, destinationCoords]);
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [trip?.estado, trip?.id, user?.tipoUsuario]);
+
+  // Calcular ruta activa (Transportista -> Objetivo) y ETA
+  useEffect(() => {
+    const tracking = trip?.seguimiento;
+    const target = trip?.estado === 'en_camino_a_recojo' ? originCoords : destinationCoords;
+
+    if (tracking?.lat !== undefined && tracking?.lng !== undefined && target?.lat !== undefined && target?.lng !== undefined) {
+      fetch(`https://router.project-osrm.org/route/v1/driving/${tracking.lng},${tracking.lat};${target.lng},${target.lat}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes?.[0]) {
+            const route = data.routes[0];
+            const coords = route.geometry.coordinates.map((c: any) => [c[1], c[0]] as [number, number]);
+            setRouteCoords(coords);
+            
+            const distanceKm = (route.distance / 1000).toFixed(1);
+            const durationMin = Math.round(route.duration / 60);
+            const durationText = durationMin > 60 
+              ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}min` 
+              : `${durationMin} min`;
+
+            setEtaInfo({
+              distance: `${distanceKm} km`,
+              duration: durationText
+            });
+            
+            // Actualizar tiempo estimado en Firebase si es transportista
+            if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
+              updateDoc(doc(db, 'trips', trip?.id), {// doc ningun sobrecarga coicide con esta llamada . la sobrecarga 1 de 3
+                tiempoEstimado: durationText
+              });
+            }
+          }
+        })
+        .catch(err => console.error('Error fetching route:', err));
+    }
+  }, [trip?.seguimiento?.lat, trip?.seguimiento?.lng, trip?.estado, originCoords, destinationCoords]);
+
+  // Auto-centrar mapa en el transportista
+  const MapAutoCenter = ({ pos }: { pos: { lat: number, lng: number } }) => {
+    const map = useMap();
+    useEffect(() => {
+      if (autoCenter) {
+        map.panTo([pos.lat, pos.lng]);
+      }
+    }, [pos.lat, pos.lng, map]);
+    return null;
+  };
 
   const updateTripStatus = async (newStatus: TripStatus) => {
     if (!trip || !carga) return;
@@ -965,93 +1096,92 @@ export const TripDetails = () => {
                 )}
               </div>
             </div>
-            <div className="p-0">
-              {isLoaded ? (
-                <GoogleMap
-                  mapContainerStyle={containerStyle}
-                  center={trip.seguimiento || center}
-                  zoom={13}
-                >
-                  {trip.seguimiento && (
-                    <Marker 
-                      position={trip.seguimiento} 
-                      icon={{
-                        url: 'https://cdn-icons-png.flaticon.com/512/744/744465.png',
-                        scaledSize: new window.google.maps.Size(40, 40),
-                        anchor: new window.google.maps.Point(20, 20)
-                      }} 
-                      title="Transportista"
+            <div className="p-0 relative">
+              <div style={containerStyle}>
+                {(trip?.seguimiento?.lat !== undefined) ? (
+                  <MapContainer 
+                    center={[trip.seguimiento.lat, trip.seguimiento.lng]} 
+                    zoom={13} 
+                    style={{ height: '100%', width: '100%' }}
+                    zoomControl={false}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     />
-                  )}
+                    
+                    {trip?.seguimiento?.lat !== undefined && <MapAutoCenter pos={trip.seguimiento} />}
+
+                    {trip?.seguimiento?.lat !== undefined && trip?.seguimiento?.lng !== undefined && (
+                      <Marker 
+                        position={[trip.seguimiento.lat, trip.seguimiento.lng]} 
+                        icon={carrierIcon}
+                      >
+                        <Popup>Transportista</Popup>
+                      </Marker>
+                    )}
 
                   {originCoords && (
                     <Marker 
-                      position={originCoords} 
-                      icon={{
-                        url: 'https://cdn-icons-png.flaticon.com/512/1673/1673188.png',
-                        scaledSize: new window.google.maps.Size(30, 30)
-                      }}
-                      title="Punto de Recojo"
-                    />
+                      position={[originCoords.lat, originCoords.lng]} 
+                      icon={originIcon}
+                    >
+                      <Popup>Punto de Recojo</Popup>
+                    </Marker>
                   )}
 
                   {destinationCoords && (
                     <Marker 
-                      position={destinationCoords} 
-                      icon={{
-                        url: 'https://cdn-icons-png.flaticon.com/512/1673/1673221.png',
-                        scaledSize: new window.google.maps.Size(30, 30)
-                      }}
-                      title="Punto de Entrega"
+                      position={[destinationCoords.lat, destinationCoords.lng]} 
+                      icon={destinationIcon}
+                    >
+                      <Popup>Punto de Entrega</Popup>
+                    </Marker>
+                  )}
+
+                  {fullRouteCoords.length > 0 && (
+                    <Polyline 
+                      positions={fullRouteCoords} 
+                      pathOptions={{ color: '#94a3b8', weight: 4, dashArray: '10, 10', opacity: 0.6 }} 
                     />
                   )}
 
-                  {isLoaded && trip.seguimiento && (trip.estado === 'en_camino_a_recojo' ? originCoords : destinationCoords) && (
-                    <DirectionsService
-                      options={{
-                        destination: trip.estado === 'en_camino_a_recojo' ? originCoords! : destinationCoords!,
-                        origin: trip.seguimiento,
-                        travelMode: google.maps.TravelMode.DRIVING
-                      }}
-                      callback={(result, status) => {
-                        if (status === 'OK' && result) {
-                          setDirections(result);
-                          const route = result.routes[0].legs[0];
-                          setEtaInfo({
-                            distance: route.distance?.text || '',
-                            duration: route.duration?.text || ''
-                          });
-                          
-                          // Actualizar tiempo estimado en Firebase si es transportista
-                          if (isCarrier && route.duration?.text && trip.tiempoEstimado !== route.duration.text) {
-                            updateDoc(doc(db, 'trips', trip.id), {
-                              tiempoEstimado: route.duration.text
-                            });
-                          }
-                        }
-                      }}
+                  {routeCoords.length > 0 && (
+                    <Polyline 
+                      positions={routeCoords} 
+                      pathOptions={{ color: '#2563eb', weight: 6, opacity: 0.8 }} 
                     />
                   )}
+                </MapContainer>
+                ) : (
+                  <div className="h-full w-full bg-slate-100 flex flex-col items-center justify-center space-y-3">
+                    <div className="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm font-medium text-slate-500">Esperando ubicación del transportista...</p>
+                  </div>
+                )}
+              </div>
 
-                  {directions && (
-                    <DirectionsRenderer
-                      options={{
-                        directions: directions,
-                        suppressMarkers: true,
-                        polylineOptions: {
-                          strokeColor: '#3b82f6',
-                          strokeWeight: 5,
-                          strokeOpacity: 0.8
-                        }
-                      }}
-                    />
-                  )}
-                </GoogleMap>
-              ) : (
-                <div className="h-[400px] bg-gray-100 flex items-center justify-center">
-                  <p className="text-gray-500 italic">Cargando mapa...</p>
-                </div>
-              )}
+              {/* Map Controls */}
+              <div className="absolute bottom-4 right-4 flex flex-col space-y-2 z-[1000]">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className={cn("shadow-lg", autoCenter ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-white")}
+                  onClick={() => setAutoCenter(!autoCenter)}
+                >
+                  <Navigation className={cn("h-4 w-4 mr-2", autoCenter && "animate-pulse")} />
+                  {autoCenter ? 'Auto-centrado ON' : 'Auto-centrado OFF'}
+                </Button>
+                {isCarrier && (
+                  <div className={cn(
+                    "flex items-center px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg",
+                    isGpsActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  )}>
+                    <div className={cn("h-2 w-2 rounded-full mr-2", isGpsActive ? "bg-green-500 animate-ping" : "bg-red-500")} />
+                    GPS {isGpsActive ? 'Activo' : 'Inactivo'}
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
 
@@ -1805,5 +1935,3 @@ export const TripDetails = () => {
     </div>
   );
 };
-
-

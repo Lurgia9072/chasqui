@@ -9,9 +9,10 @@ export const useTripLocation = (tripId: string | undefined) => {
   useEffect(() => {
     if (!tripId) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'viajes', tripId), (snapshot) => {
+    const unsubscribe = onSnapshot(doc(db, 'trips', tripId), (snapshot) => {
       if (snapshot.exists()) {
-        setLocation(snapshot.data().ubicacionActual);
+        const data = snapshot.data();
+        setLocation(data.seguimiento || null);
       }
       setLoading(false);
     }, (error) => {

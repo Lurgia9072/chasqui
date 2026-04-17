@@ -11,7 +11,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useNotification } from '../../components/ui/NotificationProvider';
-import { useJsApiLoader } from '@react-google-maps/api';
 
 export const MerchantCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -26,41 +25,52 @@ export const MerchantCargoDetails = () => {
   const [isAccepting, setIsAccepting] = useState<string | null>(null);
   const [etas, setEtas] = useState<Record<string, string>>({});
 
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-  });
-
   useEffect(() => {
-    if (isLoaded && offers.length > 0 && carga && Object.keys(carrierDataMap).length > 0) {
-      const service = new google.maps.DistanceMatrixService();
-      const origins = offers.map(o => {
-        const carrier = carrierDataMap[o.transportistaId];
-        if (carrier?.currentLocation) {
-          return new google.maps.LatLng(carrier.currentLocation.lat, carrier.currentLocation.lng);
-        }
-        // Fallback to a random location near Lima if no current location
-        return new google.maps.LatLng(-12.046374 + (Math.random() - 0.5) * 0.1, -77.042793 + (Math.random() - 0.5) * 0.1);
-      });
+    if (offers.length > 0 && carga && Object.keys(carrierDataMap).length > 0) {
+      // Usar OSRM Table Service para obtener ETAs de múltiples transportistas al origen de la carga
+      const carriersWithLocation = offers.filter(o => carrierDataMap[o.transportistaId]?.currentLocation);
+      
+      if (carriersWithLocation.length === 0) return;
 
-      service.getDistanceMatrix({
-        origins,
-        destinations: [carga.origen],
-        travelMode: google.maps.TravelMode.DRIVING,
-      }, (response, status) => {
-        if (status === 'OK' && response) {
-          const newEtas: Record<string, string> = {};
-          response.rows.forEach((row, i) => {
-            const element = row.elements[0];
-            if (element.status === 'OK') {
-              newEtas[offers[i].id] = element.duration.text;
-            }
-          });
-          setEtas(newEtas);
+      const cargoOriginPromise = (async () => {
+        if (carga.origenCoords) return carga.origenCoords;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(carga.origen)}`);
+        const data = await res.json();
+        return data?.[0] ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
+      })();
+
+      cargoOriginPromise.then(async (originCoords) => {
+        if (!originCoords) return;
+
+        // Limitar a máximo 25 para evitar URLs gigantescas
+        const limitedCarriers = carriersWithLocation.slice(0, 25);
+        const coordinates = limitedCarriers.map(o => {
+          const loc = carrierDataMap[o.transportistaId].currentLocation;
+          return `${loc.lng},${loc.lat}`;
+        }).join(';');
+
+        const url = `https://router.project-osrm.org/table/v1/driving/${coordinates};${originCoords.lng},${originCoords.lat}?sources=${limitedCarriers.map((_, i) => i).join(',')}&destinations=${limitedCarriers.length}`;
+        
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.durations) {
+            const newEtas: Record<string, string> = {};
+            data.durations.forEach((durationRow: any, i: number) => {
+              const seconds = durationRow[0];
+              if (seconds !== null) {
+                const mins = Math.round(seconds / 60);
+                newEtas[limitedCarriers[i].id] = mins > 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins} min`;
+              }
+            });
+            setEtas(newEtas);
+          }
+        } catch (err) {
+          console.error("Error fetching ETAs from OSRM:", err);
         }
       });
     }
-  }, [isLoaded, offers.length, carga?.origen, Object.keys(carrierDataMap).length]);
+  }, [offers.length, carga?.origen, Object.keys(carrierDataMap).length]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -325,7 +335,7 @@ export const MerchantCargoDetails = () => {
                       <div className="flex flex-col sm:flex-row items-center justify-between sm:justify-end gap-6 flex-1 border-t sm:border-t-0 pt-6 sm:pt-0">
                         <div className="flex flex-col items-center sm:items-end">
                           <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest leading-none mb-1">Precio Ofertado</span>
-                          <span className="text-3xl font-black text-blue-600 leading-none">S/{offer.precioOfertado}</span>
+                          <span className="text-3xl font-black text-blue-600 leading-none">S/ {offer.precioOfertado}</span>
                         </div>
                         
                         {carga.estado === 'disponible' ? (

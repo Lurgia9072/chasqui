@@ -10,7 +10,7 @@ export const useTripAllInfo = (tripId: string | undefined) => {
   useEffect(() => {
     if (!tripId) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'viajes', tripId), (snapshot) => {
+    const unsubscribe = onSnapshot(doc(db, 'trips', tripId), (snapshot) => {
       if (snapshot.exists()) {
         setTrip({ id: snapshot.id, ...snapshot.data() } as Trip);
       } else {

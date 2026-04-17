@@ -11,7 +11,52 @@ import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, Alert
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
-import { GoogleMap, useJsApiLoader, DirectionsService, DirectionsRenderer } from '@react-google-maps/api';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+
+// Fix Leaflet default icon issue
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+const carrierIcon = L.divIcon({
+  html: `<div class="w-8 h-8 bg-slate-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <div class="w-2 h-2 bg-white rounded-full"></div>
+        </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const originIcon = L.divIcon({
+  html: `<div class="w-8 h-8 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <div class="w-2 h-2 bg-white rounded-full"></div>
+        </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const destinationIcon = L.divIcon({
+  html: `<div class="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+          <div class="w-2 h-2 bg-white rounded-full"></div>
+        </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const MapController = ({ center }: { center: [number, number] }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+};
 
 export const CarrierCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,15 +70,12 @@ export const CarrierCargoDetails = () => {
   const [offerPrice, setOfferPrice] = useState<number>(0);
   const [pickupTime, setPickupTime] = useState<string>('30 min');
   const [isLoading, setIsLoading] = useState(false);
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [pickupDirections, setPickupDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [pickupCoords, setPickupCoords] = useState<[number, number][]>([]);
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [pickupInfo, setPickupInfo] = useState<{ distance: string; duration: string } | null>(null);
-
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-  });
 
   useEffect(() => {
     if (!id || !user) return;
@@ -132,38 +174,75 @@ export const CarrierCargoDetails = () => {
     }
   };
 
-  const directionsCallback = (
-    result: google.maps.DirectionsResult | null,
-    status: google.maps.DirectionsStatus
-  ) => {
-    if (status === 'OK' && result && !directions) {
-      setDirections(result);
-      const route = result.routes[0].legs[0];
-      setRouteInfo({
-        distance: route.distance?.text || '',
-        duration: route.duration?.text || '',
-      });
-    }
-  };
+  // Estimación de Ruta Completa y Recojo
+  useEffect(() => {
+    if (carga) {
+      // 1. Geocodificar si no hay coordenadas
+      const getCoords = async (address: string) => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+          const data = await res.json();
+          if (data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        } catch (err) { console.error(err); }
+        return null;
+      };
 
-  const pickupDirectionsCallback = (
-    result: google.maps.DirectionsResult | null,
-    status: google.maps.DirectionsStatus
-  ) => {
-    if (status === 'OK' && result && !pickupDirections) {
-      setPickupDirections(result);
-      const route = result.routes[0].legs[0];
-      setPickupInfo({
-        distance: route.distance?.text || '',
-        duration: route.duration?.text || '',
-      });
-      // Update the pickup time input automatically if it's the first time
-      setPickupTime(route.duration?.text || '30 min');
+      const initCoords = async () => {
+        let o = carga.origenCoords;
+        let d = carga.destinoCoords;
+
+        if (!o) o = await getCoords(carga.origen);
+        if (!d) d = await getCoords(carga.destino);
+
+        if (o) setOriginCoords(o);
+        if (d) setDestinationCoords(d);
+      };
+
+      initCoords();
     }
-  };
+  }, [carga]);
+
+  useEffect(() => {
+    if (originCoords && destinationCoords) {
+      // Ruta de Carga
+      fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lng},${originCoords.lat};${destinationCoords.lng},${destinationCoords.lat}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes?.[0]) {
+            const route = data.routes[0];
+            setRouteCoords(route.geometry.coordinates.map((c: any) => [c[1], c[0]]));
+            setRouteInfo({
+              distance: `${(route.distance / 1000).toFixed(1)} km`,
+              duration: `${Math.round(route.duration / 60)} min`
+            });
+          }
+        });
+    }
+
+    if (user?.currentLocation && originCoords) {
+      // Ruta de Recojo
+      fetch(`https://router.project-osrm.org/route/v1/driving/${user.currentLocation.lng},${user.currentLocation.lat};${originCoords.lng},${originCoords.lat}?overview=full&geometries=geojson`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.routes?.[0]) {
+            const route = data.routes[0];
+            setPickupCoords(route.geometry.coordinates.map((c: any) => [c[1], c[0]]));
+            const duration = Math.round(route.duration / 60);
+            const durationText = `${duration} min`;
+            setPickupInfo({
+              distance: `${(route.distance / 1000).toFixed(1)} km`,
+              duration: durationText
+            });
+            setPickupTime(durationText);
+          }
+        });
+    }
+  }, [originCoords, destinationCoords, user?.currentLocation]);
 
   if (loading) return <div className="flex justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" /></div>;
   if (!carga) return <div className="text-center py-20">Carga no encontrada</div>;
+
+  const centerDefault: [number, number] = (user?.currentLocation?.lat !== undefined) ? [user.currentLocation.lat, user.currentLocation.lng] : [-12.046374, -77.042793];
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
@@ -196,75 +275,47 @@ export const CarrierCargoDetails = () => {
             </CardHeader>
             <CardContent className="space-y-8">
               {/* Mapa de la Ruta */}
-              {isLoaded && carga && (
+              {carga && (
                 <div className="h-[400px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-inner relative">
-                  <GoogleMap
-                    mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={{ lat: -12.046374, lng: -77.042793 }} // Lima default
-                    zoom={12}
-                    options={{
-                      disableDefaultUI: true,
-                      zoomControl: true,
-                      styles: [
-                        {
-                          featureType: 'poi',
-                          elementType: 'labels',
-                          stylers: [{ visibility: 'off' }],
-                        },
-                      ],
-                    }}
+                  <MapContainer 
+                    center={centerDefault} 
+                    zoom={12} 
+                    style={{ height: '100%', width: '100%' }}
+                    zoomControl={false}
                   >
-                    {/* Ruta de Viaje (Origen -> Destino) */}
-                    <DirectionsService
-                      options={{
-                        origin: carga.origen,
-                        destination: carga.destino,
-                        travelMode: google.maps.TravelMode.DRIVING,
-                      }}
-                      callback={directionsCallback}
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     />
-                    {directions && (
-                      <DirectionsRenderer
-                        options={{
-                          directions: directions,
-                          suppressMarkers: false,
-                          polylineOptions: {
-                            strokeColor: '#2563eb',
-                            strokeWeight: 5,
-                            strokeOpacity: 0.8,
-                          },
-                        }}
-                      />
+                    
+                    <MapController center={centerDefault} />
+
+                    {user?.currentLocation?.lat !== undefined && (
+                      <Marker position={[user.currentLocation.lat, user.currentLocation.lng]} icon={carrierIcon}>
+                        <Popup>Tu ubicación</Popup>
+                      </Marker>
                     )}
 
-                    {/* Ruta de Recojo (Tu ubicación -> Origen) */}
-                    {user?.currentLocation && (
-                      <>
-                        <DirectionsService
-                          options={{
-                            origin: new google.maps.LatLng(user.currentLocation.lat, user.currentLocation.lng),
-                            destination: carga.origen,
-                            travelMode: google.maps.TravelMode.DRIVING,
-                          }}
-                          callback={pickupDirectionsCallback}
-                        />
-                        {pickupDirections && (
-                          <DirectionsRenderer
-                            options={{
-                              directions: pickupDirections,
-                              suppressMarkers: true, // Don't show markers for pickup to avoid confusion
-                              polylineOptions: {
-                                strokeColor: '#94a3b8',
-                                strokeWeight: 4,
-                                strokeOpacity: 0.6,
-                                strokeDasharray: [10, 5],
-                              },
-                            }}
-                          />
-                        )}
-                      </>
+                    {originCoords?.lat !== undefined && (
+                      <Marker position={[originCoords.lat, originCoords.lng]} icon={originIcon}>
+                        <Popup>Origen</Popup>
+                      </Marker>
                     )}
-                  </GoogleMap>
+
+                    {destinationCoords?.lat !== undefined && (
+                      <Marker position={[destinationCoords.lat, destinationCoords.lng]} icon={destinationIcon}>
+                        <Popup>Destino</Popup>
+                      </Marker>
+                    )}
+
+                    {routeCoords.length > 0 && (
+                      <Polyline positions={routeCoords} pathOptions={{ color: '#2563eb', weight: 5, opacity: 0.8 }} />
+                    )}
+
+                    {pickupCoords.length > 0 && (
+                      <Polyline positions={pickupCoords} pathOptions={{ color: '#94a3b8', weight: 4, dashArray: '10, 5', opacity: 0.6 }} />
+                    )}
+                  </MapContainer>
                   
                   <div className="absolute bottom-4 left-4 right-4 flex flex-col gap-2">
                     {pickupInfo && (

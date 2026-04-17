@@ -12,7 +12,7 @@ export const useTrips = (userId: string | undefined, role: 'comerciante' | 'tran
 
     const field = role === 'comerciante' ? 'comercianteId' : 'transportistaId';
     const q = query(
-      collection(db, 'viajes'),
+      collection(db, 'trips'),
       where(field, '==', userId),
       orderBy('createdAt', 'desc')
     );

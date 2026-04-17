@@ -11,7 +11,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { ADMIN_EMAILS } from '@/src/lib/constants';
+import { ADMIN_EMAILS } from '../../lib/constants';
+import { NearbyCargoMap } from '../../components/NearbyCargoMap';
 
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
@@ -29,6 +30,7 @@ export const CarrierDashboard = () => {
     }
   }, [isAdmin, navigate]);
   const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
@@ -493,6 +495,26 @@ export const CarrierDashboard = () => {
           <p className="text-gray-600">Encuentra fletes en tus zonas de operación y haz tu oferta.</p>
         </div>
         <div className="flex items-center space-x-3">
+          <div className="flex bg-gray-100 p-1 rounded-xl mr-2">
+            <button 
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                viewMode === 'list' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Lista
+            </button>
+            <button 
+              onClick={() => setViewMode('map')}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                viewMode === 'map' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Mapa
+            </button>
+          </div>
           <div className="hidden sm:flex items-center space-x-2 bg-green-50 px-3 py-1.5 rounded-full border border-green-100">
             <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
             <span className="text-xs font-bold text-green-700 uppercase tracking-wider">En Línea</span>
@@ -542,6 +564,14 @@ export const CarrierDashboard = () => {
             </div>
           </CardContent>
         </Card>
+      ) : viewMode === 'map' ? (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full"
+        >
+          <NearbyCargoMap cargas={cargas} />
+        </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cargas.map((carga) => (

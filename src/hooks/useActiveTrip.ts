@@ -12,7 +12,7 @@ export const useActiveTrip = (userId: string | undefined, role: 'comerciante' | 
 
     const field = role === 'comerciante' ? 'comercianteId' : 'transportistaId';
     const q = query(
-      collection(db, 'viajes'),
+      collection(db, 'trips'),
       where(field, '==', userId),
       where('estado', '==', 'activo'),
       limit(1)

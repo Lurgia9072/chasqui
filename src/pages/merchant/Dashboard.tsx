@@ -6,18 +6,22 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation, ShieldCheck } from 'lucide-react';
+import { Plus, Package, MapPin, Clock, ChevronRight, AlertCircle, Navigation, ShieldCheck, Truck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { motion } from 'motion/react';
 import { ADMIN_EMAILS } from '../../lib/constants';
+import { NearbyCarriersMap } from '../../components/NearbyCarriersMap';
+import { User } from '../../types';
 
 export const MerchantDashboard = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [cargas, setCargas] = useState<Cargo[]>([]);
   const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
+  const [carriers, setCarriers] = useState<User[]>([]);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
@@ -63,9 +67,21 @@ export const MerchantDashboard = () => {
       setLoadingTrips(false);
     });
 
+    const qCarriers = query(
+      collection(db, 'users'),
+      where('tipoUsuario', '==', 'transportista'),
+      where('verificado', '==', 'verificado')
+    );
+
+    const unsubscribeCarriers = onSnapshot(qCarriers, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User));
+      setCarriers(docs);
+    });
+
     return () => {
       unsubscribeCargas();
       unsubscribeTrips();
+      unsubscribeCarriers();
     };
   }, [user]);
 
@@ -199,12 +215,34 @@ export const MerchantDashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900">Mis Cargas</h1>
           <p className="text-gray-600">Gestiona tus envíos y revisa las ofertas recibidas.</p>
         </div>
-        <Link to="/merchant/post-cargo">
-          <Button className="h-12 px-6 shadow-lg shadow-blue-200">
-            <Plus className="h-5 w-5 mr-2" />
-            Publicar Nueva Carga
-          </Button>
-        </Link>
+        <div className="flex items-center space-x-3">
+          <div className="flex bg-gray-100 p-1 rounded-xl mr-2">
+            <button 
+              onClick={() => setViewMode('list')}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                viewMode === 'list' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Lista
+            </button>
+            <button 
+              onClick={() => setViewMode('map')}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                viewMode === 'map' ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Mapa
+            </button>
+          </div>
+          <Link to="/merchant/post-cargo">
+            <Button className="h-12 px-6 shadow-lg shadow-blue-200">
+              <Plus className="h-5 w-5 mr-2" />
+              Publicar Nueva Carga
+            </Button>
+          </Link>
+        </div>
       </header>
 
       {loading ? (
@@ -226,6 +264,28 @@ export const MerchantDashboard = () => {
             </Link>
           </CardContent>
         </Card>
+      ) : viewMode === 'map' ? (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full space-y-6"
+        >
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center">
+                <Truck className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-blue-900">Transportistas Cercanos</h3>
+                <p className="text-xs text-blue-700">Explora los transportistas disponibles en tu área.</p>
+              </div>
+            </div>
+            <span className="bg-white px-3 py-1 rounded-full text-xs font-bold text-blue-600 border border-blue-200">
+              {carriers.length} Activos
+            </span>
+          </div>
+          <NearbyCarriersMap carriers={carriers} />
+        </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cargas.map((carga) => (

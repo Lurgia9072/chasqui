@@ -52,6 +52,14 @@ export interface Cargo {
   comercianteNombre: string;
   origen: string;
   destino: string;
+  origenCoords?: {
+    lat: number;
+    lng: number;
+  };
+  destinoCoords?: {
+    lat: number;
+    lng: number;
+  };
   tipoCarga: string;
   peso: string;
   capacidadRequerida: string;

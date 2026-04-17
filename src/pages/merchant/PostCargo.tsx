@@ -57,6 +57,7 @@ export const PostCargo = () => {
   const navigate = useNavigate();
   const [showMapModal, setShowMapModal] = useState<{ show: boolean; field: 'origen' | 'destino' }>({ show: false, field: 'origen' });
   const [tempLocation, setTempLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<{ origen?: { lat: number; lng: number }; destino?: { lat: number; lng: number } }>({});
 
   const {
     register,
@@ -76,6 +77,8 @@ export const PostCargo = () => {
       const path = 'cargas';
       const docRef = await addDoc(collection(db, path), {
         ...data,
+        origenCoords: coords.origen,
+        destinoCoords: coords.destino,
         comercianteId: user.uid,
         comercianteNombre: user.nombre,
         estado: 'disponible',
@@ -101,6 +104,12 @@ export const PostCargo = () => {
       } else {
         setValue(showMapModal.field, `${tempLocation.lat.toFixed(6)}, ${tempLocation.lng.toFixed(6)}`, { shouldValidate: true });
       }
+      
+      // Guardar coordenadas
+      setCoords(prev => ({
+        ...prev,
+        [showMapModal.field]: tempLocation
+      }));
     } catch (error) {
       console.error("Geocoding failed:", error);
       setValue(showMapModal.field, `${tempLocation.lat.toFixed(6)}, ${tempLocation.lng.toFixed(6)}`, { shouldValidate: true });
