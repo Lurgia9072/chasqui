@@ -416,18 +416,61 @@ export const TripDetails = () => {
       }
     }
 
-    const checkpoint: Checkpoint = {
+    const checkpoint: any = {
       id: Math.random().toString(36).substr(2, 9),
       estado: newStatus,
       timestamp: Date.now(),
       location: location,
       mensaje: mensaje,
       automatico: true,
-      evidenciaUrl: evidenceUrl
     };
+
+    if (evidenceUrl) {
+      checkpoint.evidenciaUrl = evidenceUrl;
+    }
 
     const updatedCheckpoints = [...(trip.checkpoints || []), checkpoint];
     return updatedCheckpoints;
+  };
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimensions reduced to fit more images in 1MB doc
+          const MAX_WIDTH = 600;
+          const MAX_HEIGHT = 600;
+          
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Quality 0.4 is enough for evidence and keeps Base64 strings small (approx 30-50KB)
+          resolve(canvas.toDataURL('image/jpeg', 0.4));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleEvidenceUpload = async (type: 'recojo' | 'entrega') => {
@@ -435,18 +478,18 @@ export const TripDetails = () => {
     setIsUploadingEvidence(true);
     
     try {
-      // In this demo, we use DataURL as fake storage URL
-      const reader = new FileReader();
-      const evidenceUrl = await new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(evidenceFile);
-      });
+      // Compress image before storage to avoid Firestore 1MB limit
+      const evidenceUrl = await compressImage(evidenceFile);
 
+      // For general status messages, we don't need to duplicate the large evidence URL in every checkpoint
+      // if it's already stored in the main evidence fields. 
+      // This saves massive space in the document.
+      const checkpointMsg = type === 'recojo' ? 'Evidencia de recojo cargada con foto' : 'Evidencia de entrega cargada con foto';
+      const refId = type === 'recojo' ? 'recojo_ref' : 'entrega_ref';
+      
+      const newCheckpoints = await createCheckpoint(trip.estado, checkpointMsg, refId);
+      
       const updates: any = {};
-      const msg = type === 'recojo' ? 'Evidencia de recojo cargada con foto' : 'Evidencia de entrega cargada con foto';
-      
-      const newCheckpoints = await createCheckpoint(trip.estado, msg, evidenceUrl);
-      
       if (type === 'recojo') {
         updates['evidencia.recojoUrl'] = evidenceUrl;
         updates['evidencia.recojoTimestamp'] = Date.now();
@@ -596,21 +639,22 @@ export const TripDetails = () => {
     setUploadProgress(10);
 
     try {
-      // Usar la data URL local del archivo seleccionado
+      // Si hay archivo de pago y es imagen, lo comprimimos
       let finalUrl = paymentProofUrl;
       
       if (paymentFile) {
         // Simular progreso de subida
-        for (let i = 20; i <= 90; i += 20) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+        for (let i = 20; i <= 60; i += 20) {
+          await new Promise(resolve => setTimeout(resolve, 100));
           setUploadProgress(i);
         }
         
-        // Si es PDF, no tenemos preview de imagen, así que mantenemos una URL descriptiva o vacía
-        // Si es imagen, paymentProofUrl ya contiene la DataURL (base64)
-        if (paymentFile.type === 'application/pdf') {
+        if (paymentFile.type.startsWith('image/')) {
+          finalUrl = await compressImage(paymentFile);
+        } else if (paymentFile.type === 'application/pdf') {
           finalUrl = 'pdf_file_uploaded'; 
         }
+        setUploadProgress(90);
       }
 
       await updateDoc(doc(db, 'trips', trip.id), {
@@ -1477,7 +1521,25 @@ export const TripDetails = () => {
                                   </p>
                                   {cp.evidenciaUrl && (
                                     <div className="mt-2">
-                                      <img src={cp.evidenciaUrl} alt="Evidencia" className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" onClick={() => window.open(cp.evidenciaUrl)} />
+                                      {(() => {
+                                        let displayUrl = cp.evidenciaUrl;
+                                        if (cp.evidenciaUrl === 'recojo_ref' || (cp.evidenciaUrl === 'REFERENCIA_A_EVIDENCIA_PRINCIPAL' && cp.mensaje.toLowerCase().includes('recojo'))) {
+                                          displayUrl = trip?.evidencia?.recojoUrl;
+                                        } else if (cp.evidenciaUrl === 'entrega_ref' || (cp.evidenciaUrl === 'REFERENCIA_A_EVIDENCIA_PRINCIPAL' && cp.mensaje.toLowerCase().includes('entrega'))) {
+                                          displayUrl = trip?.evidencia?.entregaUrl;
+                                        }
+
+                                        if (!displayUrl) return null;
+
+                                        return (
+                                          <img 
+                                            src={displayUrl} 
+                                            alt="Evidencia" 
+                                            className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" 
+                                            onClick={() => window.open(displayUrl)} 
+                                          />
+                                        );
+                                      })()}
                                     </div>
                                   )}
                                 </div>
@@ -1702,13 +1764,19 @@ export const TripDetails = () => {
                       )}
 
                       <Button 
-                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
+                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
                         isLoading={isUpdating}
+                        disabled={!trip.evidencia?.entregaUrl}
                       >
                         <CheckCircle className="h-5 w-5 mr-2" />
                         Confirmar Entrega Final
                       </Button>
+                      {!trip.evidencia?.entregaUrl && (
+                        <p className="text-[10px] text-red-500 font-bold text-center animate-pulse">
+                          * Debes subir la foto de entrega antes de confirmar
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -2208,3 +2276,4 @@ export const TripDetails = () => {
     </div>
   );
 };
+

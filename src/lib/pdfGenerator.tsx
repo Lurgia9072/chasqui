@@ -92,10 +92,10 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
   // 3. Trazabilidad de Eventos (Checkpoints)
   y = sectionTitle('HISTORIAL DE EVENTOS (AUDITORÍA DIGITAL)', y);
   
-  const tableRows = trip.checkpoints?.map(cp => [
+  const tableRows = trip.checkpoints?.sort((a,b) => b.timestamp - a.timestamp).map(cp => [
     dateFnsFormat(cp.timestamp, 'dd/MM HH:mm', { locale: es }),
     cp.estado.replace(/_/g, ' ').toUpperCase(),
-    cp.mensaje,
+    cp.mensaje + (cp.evidenciaUrl ? ' (Con evidencia)' : ''),
     `${cp.location.lat.toFixed(4)}, ${cp.location.lng.toFixed(4)}`,
     cp.automatico ? 'SISTEMA' : 'MANUAL'
   ]) || [];
