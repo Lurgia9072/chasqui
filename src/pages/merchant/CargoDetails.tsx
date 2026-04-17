@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, Offer, Trip, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone, Truck, Navigation } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, Star, CheckCircle, AlertCircle, ChevronRight, Phone, Truck, Navigation, ShieldCheck, Thermometer } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -136,6 +136,7 @@ export const MerchantCargoDetails = () => {
         comision: offer.precioOfertado * 0.1,
         estado: 'pendiente_pago',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
+        checkpoints: [],
         tiempoEstimado: 'Esperando pago del flete',
         fechaRecojo: new Date().toLocaleDateString('es-PE'),
         horaRecojo: '14:30', // Mocked
@@ -238,18 +239,32 @@ export const MerchantCargoDetails = () => {
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
                 <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Categoría</span>
+                  <p className="text-xs text-gray-900 font-bold capitalize">{carga.categoria || 'General'}</p>
+                </div>
+                <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
                   <p className="text-sm text-gray-900 font-medium">{carga.peso}</p>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
-                  <p className="text-sm text-gray-900 font-medium">{carga.capacidadRequerida}</p>
+                  <p className="text-sm text-gray-900 font-medium whitespace-nowrap overflow-hidden text-ellipsis">{carga.capacidadRequerida}</p>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Propuesta</span>
                   <p className="text-sm text-blue-600 font-bold">S/ {carga.precioPropuesto}</p>
                 </div>
               </div>
+
+              {carga.temperaturaRequerida && (
+                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-blue-700">
+                    <Thermometer className="h-4 w-4" />
+                    <span className="text-[10px] font-bold uppercase">Cadena de Frío</span>
+                  </div>
+                  <span className="text-xs font-black text-blue-600">{carga.temperaturaRequerida}</span>
+                </div>
+              )}
 
               <div className="space-y-2 pt-4 border-t border-gray-50">
                 <span className="text-[10px] uppercase font-bold text-gray-400">Descripción</span>
@@ -306,7 +321,11 @@ export const MerchantCargoDetails = () => {
                               <Star className="h-3.5 w-3.5 fill-current" />
                               <span className="ml-1 text-xs font-bold">{(carrierDataMap[offer.transportistaId]?.rating || 5.0).toFixed(1)}</span>
                             </div>
-                            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100">
+                            <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 shadow-sm">
+                              <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                              <span className="text-xs font-bold uppercase tracking-tighter">TRUST: {carrierDataMap[offer.transportistaId]?.indiceConfiabilidad || '95'}%</span>
+                            </div>
+                            <div className="flex items-center text-gray-600 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
                               <Truck className="h-3.5 w-3.5" />
                               <span className="ml-1 text-xs font-bold">{carrierDataMap[offer.transportistaId]?.completedTrips || 0} viajes</span>
                             </div>

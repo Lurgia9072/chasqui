@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isToday } from 'date-fns';
+import { format as dateFnsFormat, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isToday } from 'date-fns';
 
 interface CalendarProps {
   selected?: Date;
@@ -18,7 +18,7 @@ export const Calendar = ({ selected, onSelect, className }: CalendarProps) => {
   const renderHeader = () => (
     <div className="flex items-center justify-between px-2 py-4">
       <h2 className="text-sm font-semibold text-gray-900">
-        {format(currentMonth, 'MMMM yyyy')}
+        {dateFnsFormat(currentMonth, 'MMMM yyyy')}
       </h2>
       <div className="flex space-x-1">
         <button
@@ -74,7 +74,7 @@ export const Calendar = ({ selected, onSelect, className }: CalendarProps) => {
               isToday(day) && !isSameDay(day, selected || new Date(0)) && 'text-blue-600 font-bold'
             )}
           >
-            {format(day, 'd')}
+            {dateFnsFormat(day, 'd')}
           </div>
         );
         day = addDays(day, 1);

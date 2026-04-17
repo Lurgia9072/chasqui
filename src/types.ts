@@ -5,6 +5,22 @@ export type CargoStatus = 'disponible' | 'en_negociacion' | 'asignado' | 'comple
 export type OfferStatus = 'pendiente' | 'aceptada' | 'rechazada';
 export type TripStatus = 'pendiente_pago' | 'pago_en_revision' | 'pago_rechazado' | 'en_camino_a_recojo' | 'recojo_completado' | 'en_camino_a_destino' | 'entregado_pendiente_confirmacion' | 'completado' | 'cancelado';
 
+export interface Location {
+  lat: number;
+  lng: number;
+  updatedAt?: number;
+}
+
+export interface Checkpoint {
+  id: string;
+  estado: TripStatus;
+  timestamp: number;
+  location: Location;
+  mensaje: string;
+  evidenciaUrl?: string;
+  automatico: boolean;
+}
+
 export interface User {
   uid: string;
   nombre: string;
@@ -19,16 +35,19 @@ export interface User {
   totalRatings: number;
   sumRatings: number;
   completedTrips: number;
-  zonasOperacion?: string[];
-  currentLocation?: {
-    lat: number;
-    lng: number;
-    updatedAt: number;
+  indiceConfiabilidad: number; // 0-100 index
+  metricasLogistica?: {
+    puntualidad: number;
+    entregasExitosas: number;
+    tasaCancelacion: number;
   };
+  zonasOperacion?: string[];
+  currentLocation?: Location;
   vehiculo?: {
     tipo: string;
     placa: string;
     capacidad: string;
+    sensorTemperatura?: boolean;
   };
   documentosUrls?: {
     dni: string;
@@ -52,15 +71,12 @@ export interface Cargo {
   comercianteNombre: string;
   origen: string;
   destino: string;
-  origenCoords?: {
-    lat: number;
-    lng: number;
-  };
-  destinoCoords?: {
-    lat: number;
-    lng: number;
-  };
+  origenCoords?: Location;
+  destinoCoords?: Location;
   tipoCarga: string;
+  categoria: 'general' | 'perecible' | 'fragil' | 'peligrosa';
+  temperaturaRequerida?: string;
+  cuidadoEspecial?: string;
   peso: string;
   capacidadRequerida: string;
   descripcion: string;
@@ -75,6 +91,7 @@ export interface Offer {
   transportistaId: string;
   transportistaNombre: string;
   transportistaRating: number;
+  indiceConfiabilidad?: number;
   precioOfertado: number;
   tiempoRecojoEstimado?: string;
   estado: OfferStatus;
@@ -85,6 +102,9 @@ export interface Trip {
   id: string;
   cargoId: string;
   tipoCarga?: string;
+  categoria?: string;
+  temperaturaActual?: string;
+  cuidadoEspecial?: string;
   comercianteId: string;
   comercianteNombre?: string;
   transportistaId: string;
@@ -94,12 +114,23 @@ export interface Trip {
   precioFinal: number;
   comision: number;
   estado: TripStatus;
-  seguimiento?: {
-    lat: number;
-    lng: number;
-    updatedAt: number;
+  seguimiento?: Location;
+  checkpoints: Checkpoint[];
+  alertas?: {
+    desvioRuta: boolean;
+    retrasoCritico: boolean;
+    paradaNoAutorizada: boolean;
+  };
+  evidencia?: {
+    recojoUrl?: string;
+    recojoTimestamp?: number;
+    recojoLocation?: Location;
+    entregaUrl?: string;
+    entregaTimestamp?: number;
+    entregaLocation?: Location;
   };
   tiempoEstimado?: string;
+  distanciaRestante?: string;
   fechaRecojo?: string;
   horaRecojo?: string;
   recojoRealAt?: number;

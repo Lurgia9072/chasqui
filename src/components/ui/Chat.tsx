@@ -7,8 +7,8 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { Send, Mic, Square, Play, Pause, User, Truck } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { format as dateFnsFormat } from 'date-fns';
 
 interface AudioPlayerProps {
   url: string;
@@ -291,7 +291,7 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
                   )}
                 </div>
                 <span className="text-[8px] text-gray-400 mt-0.5 px-1">
-                  {format(msg.createdAt, 'HH:mm', { locale: es })}
+                  {dateFnsFormat(msg.createdAt, 'HH:mm', { locale: es })}
                 </span>
               </div>
             </div>

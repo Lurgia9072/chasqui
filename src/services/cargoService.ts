@@ -31,6 +31,7 @@ export const cargoService = {
       comision: offer.precioOfertado * 0.1,
       estado: 'en_camino_a_recojo',
       seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() },
+      checkpoints: [],
       tiempoEstimado: '45 min para el recojo',
       createdAt: Date.now(),
     };

@@ -20,6 +20,9 @@ const cargoSchema = z.object({
   origen: z.string().min(5, 'Dirección de origen inválida'),
   destino: z.string().min(5, 'Dirección de destino inválida'),
   tipoCarga: z.string().min(3, 'Tipo de carga inválido'),
+  categoria: z.enum(['general', 'perecible', 'fragil', 'peligrosa']),
+  temperaturaRequerida: z.string().optional(),
+  cuidadoEspecial: z.string().optional(),
   peso: z.string().min(1, 'Peso requerido'),
   capacidadRequerida: z.string().min(1, 'Capacidad requerida'),
   descripcion: z.string().min(10, 'Descripción demasiado corta'),
@@ -195,20 +198,69 @@ export const PostCargo = () => {
             </div>
 
             {/* Detalles de Carga */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Carga</label>
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Mercancía</label>
                 <Input
-                  placeholder="Ej: Alimentos"
+                  placeholder="Ej: Arándanos, Motores, Vidrio"
                   {...register('tipoCarga')}
                   error={errors.tipoCarga?.message}
                   className="h-12"
                 />
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Categoría Logística</label>
+                <select
+                  className={cn(
+                    "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium",
+                    errors.categoria ? "border-red-500 shadow-sm shadow-red-50" : "border-gray-200"
+                  )}
+                  {...register('categoria')}
+                >
+                  <option value="general">Carga General</option>
+                  <option value="perecible">Perecible (Alimentos/Fármacos)</option>
+                  <option value="fragil">Frágil / Delicado</option>
+                  <option value="peligrosa">Material Peligroso (MATPEL)</option>
+                </select>
+                {errors.categoria && (
+                  <p className="text-[10px] font-bold text-red-500 uppercase">{errors.categoria.message}</p>
+                )}
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {watch('categoria') === 'perecible' && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100"
+                >
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-blue-800 uppercase tracking-wider">Temperatura Requerida (°C)</label>
+                    <Input
+                      placeholder="Ej: -18°C a -20°C"
+                      {...register('temperaturaRequerida')}
+                      className="h-12 border-blue-200"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-blue-800 uppercase tracking-wider">Protocolo de Cadena de Frío</label>
+                    <Input
+                      placeholder="Ej: Monitoreo cada 30 min"
+                      {...register('cuidadoEspecial')}
+                      className="h-12 border-blue-200"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Peso Aprox.</label>
                 <Input
-                  placeholder="Ej: 500kg"
+                  placeholder="Ej: 5 Toneladas"
                   {...register('peso')}
                   error={errors.peso?.message}
                   className="h-12"
@@ -218,20 +270,34 @@ export const PostCargo = () => {
                 <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Capacidad Requerida</label>
                 <select
                   className={cn(
-                    "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all",
-                    errors.capacidadRequerida ? "border-red-500" : "border-gray-200"
+                    "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium",
+                    errors.capacidadRequerida ? "border-red-500 shadow-sm shadow-red-50" : "border-gray-200"
                   )}
                   {...register('capacidadRequerida')}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Pequeño (Furgón)">Pequeño (Furgón)</option>
-                  <option value="Mediano (Camión 5-10T)">Mediano (Camión 5-10T)</option>
-                  <option value="Grande (Trailer/Semiremolque)">Grande (Trailer/Semiremolque)</option>
-                  <option value="Especial (Cama baja/Refrigerado)">Especial (Cama baja/Refrigerado)</option>
+                  <option value="Furgón Cerrado">Furgón Cerrado</option>
+                  <option value="Camión Baranda">Camión Baranda</option>
+                  <option value="Cámara Frigorífica">Cámara Frigorífica</option>
+                  <option value="Plataforma">Plataforma</option>
+                  <option value="Cisterna">Cisterna</option>
                 </select>
                 {errors.capacidadRequerida && (
                   <p className="text-[10px] font-bold text-red-500 uppercase">{errors.capacidadRequerida.message}</p>
                 )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tratamiento Especial</label>
+                <select
+                  className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                  {...register('cuidadoEspecial')}
+                >
+                  <option value="Ninguno">Ninguno</option>
+                  <option value="Requiere Estiba">Requiere Estiba</option>
+                  <option value="Solo de Día">Solo de Día</option>
+                  <option value="Custodia">Requiere Custodia</option>
+                  <option value="Urgente">Prioridad Máxima</option>
+                </select>
               </div>
             </div>
 

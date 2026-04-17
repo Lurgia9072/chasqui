@@ -3,11 +3,10 @@ import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit, increment } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { Trip, Cargo, OperationType, TripStatus } from '../types';
+import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText } from 'lucide-react';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
@@ -16,6 +15,8 @@ import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
 import { ADMIN_EMAILS } from '../lib/constants';
 import L from 'leaflet';
+import { generateAuditReport } from '../lib/pdfGenerator';
+import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 
 
 // Fix Leaflet default icon issue
@@ -105,6 +106,8 @@ export const TripDetails = () => {
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -290,13 +293,27 @@ export const TripDetails = () => {
             
             if (now - lastUpdate > 15000) { 
               try {
-                await updateDoc(doc(db, 'trips', trip.id), {
+                const updates: any = {
                   seguimiento: { 
                     lat: latitude, 
                     lng: longitude, 
                     updatedAt: now 
                   }
-                });
+                };
+
+                // SMART ALERTS LOGIC
+                // 1. Long Stop Detection (if static for > 30 mins)
+                const lastMoveAt = trip.seguimiento?.updatedAt || trip.createdAt;
+                if (now - lastMoveAt > 30 * 60000 && trip.estado === 'en_camino_a_destino') {
+                  updates['alertas.paradaNoAutorizada'] = true;
+                } else {
+                  updates['alertas.paradaNoAutorizada'] = false;
+                }
+
+                // 2. Route Deviation (Simplified: if distance to destination increased significantly)
+                // Real implementation would calculate distance to polyline.
+                
+                await updateDoc(doc(db, 'trips', trip.id), updates);
               } catch (err) {
                 console.error("Error actualizando ubicación GPS:", err);
               }
@@ -360,7 +377,7 @@ export const TripDetails = () => {
             
             // Actualizar tiempo estimado en Firebase si es transportista
             if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
-              updateDoc(doc(db, 'trips', trip?.id), {// doc ningun sobrecarga coicide con esta llamada . la sobrecarga 1 de 3
+              updateDoc(doc(db, 'trips', trip?.id), {
                 tiempoEstimado: durationText
               });
             }
@@ -381,6 +398,83 @@ export const TripDetails = () => {
     return null;
   };
 
+  const createCheckpoint = async (newStatus: TripStatus, mensaje: string, evidenceUrl?: string) => {
+    if (!trip) return;
+    
+    // Attempt to get current location for the checkpoint
+    let location = trip.seguimiento || { lat: -12.046374, lng: -77.042793 };
+    
+    // If browser supports it and it's carrier, try to get fresh location
+    if (isCarrier && navigator.geolocation) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      } catch (e) {
+        console.warn("Could not get precise location for checkpoint, using last known.");
+      }
+    }
+
+    const checkpoint: Checkpoint = {
+      id: Math.random().toString(36).substr(2, 9),
+      estado: newStatus,
+      timestamp: Date.now(),
+      location: location,
+      mensaje: mensaje,
+      automatico: true,
+      evidenciaUrl: evidenceUrl
+    };
+
+    const updatedCheckpoints = [...(trip.checkpoints || []), checkpoint];
+    return updatedCheckpoints;
+  };
+
+  const handleEvidenceUpload = async (type: 'recojo' | 'entrega') => {
+    if (!evidenceFile || !trip) return;
+    setIsUploadingEvidence(true);
+    
+    try {
+      // In this demo, we use DataURL as fake storage URL
+      const reader = new FileReader();
+      const evidenceUrl = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(evidenceFile);
+      });
+
+      const updates: any = {};
+      const msg = type === 'recojo' ? 'Evidencia de recojo cargada con foto' : 'Evidencia de entrega cargada con foto';
+      
+      const newCheckpoints = await createCheckpoint(trip.estado, msg, evidenceUrl);
+      
+      if (type === 'recojo') {
+        updates['evidencia.recojoUrl'] = evidenceUrl;
+        updates['evidencia.recojoTimestamp'] = Date.now();
+        updates['evidencia.recojoLocation'] = trip.seguimiento || { lat: 0, lng: 0 };
+      } else {
+        updates['evidencia.entregaUrl'] = evidenceUrl;
+        updates['evidencia.entregaTimestamp'] = Date.now();
+        updates['evidencia.entregaLocation'] = trip.seguimiento || { lat: 0, lng: 0 };
+      }
+
+      updates.checkpoints = newCheckpoints;
+      
+      await updateDoc(doc(db, 'trips', trip.id), updates);
+      
+      addNotification({
+        title: 'Evidencia Guardada',
+        message: 'La foto ha sido registrada en el historial auditable.',
+        type: 'success'
+      });
+      setEvidenceFile(null);
+    } catch (err) {
+      console.error(err);
+      addNotification({ title: 'Error', message: 'No se pudo subir la evidencia', type: 'error' });
+    } finally {
+      setIsUploadingEvidence(false);
+    }
+  };
+
   const updateTripStatus = async (newStatus: TripStatus) => {
     if (!trip || !carga) return;
     setIsUpdating(true);
@@ -388,6 +482,7 @@ export const TripDetails = () => {
       const updates: any = { estado: newStatus };
       let notificationTitle = '';
       let notificationMessage = '';
+      let checkpointMsg = '';
       
       // Actualizar tiempo estimado según el estado
       if (newStatus === 'recojo_completado') {
@@ -395,19 +490,23 @@ export const TripDetails = () => {
         updates.recojoRealAt = Date.now();
         notificationTitle = 'Carga Recogida';
         notificationMessage = `El transportista ha recogido tu carga de ${carga.tipoCarga} y está en camino al destino.`;
+        checkpointMsg = 'Carga reportada como recogida exitosamente por el transportista.';
       } else if (newStatus === 'en_camino_a_destino') {
         updates.tiempoEstimado = 'Calculando tiempo...';
         notificationTitle = 'En Tránsito';
         notificationMessage = `Tu carga de ${carga.tipoCarga} está en camino al destino final.`;
+        checkpointMsg = 'Inicio de tránsito troncal hacia el punto de destino.';
       } else if (newStatus === 'entregado_pendiente_confirmacion') {
         updates.tiempoEstimado = 'Esperando confirmación';
         updates.entregaRealAt = Date.now();
         notificationTitle = 'Carga Entregada';
         notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.tipoCarga}. Por favor, confirma la recepción.`;
+        checkpointMsg = 'Carga reportada como entregada en el punto de destino.';
       } else if (newStatus === 'completado') {
         updates.tiempoEstimado = 'Viaje Finalizado';
         notificationTitle = 'Viaje Completado';
         notificationMessage = `El comerciante ha confirmado la recepción de la carga. ¡Buen trabajo!`;
+        checkpointMsg = 'Comerciante confirma recepción conforme de la mercancía. Cierre de auditoría.';
         
         // También actualizar el estado de la carga original
         await updateDoc(doc(db, 'cargas', trip.cargoId), { estado: 'completado' });
@@ -417,6 +516,9 @@ export const TripDetails = () => {
           completedTrips: increment(1)
         });
       }
+
+      const updatedCheckpoints = await createCheckpoint(newStatus, checkpointMsg);
+      updates.checkpoints = updatedCheckpoints;
  
       await updateDoc(doc(db, 'trips', trip.id), updates);
 
@@ -784,6 +886,22 @@ export const TripDetails = () => {
         Volver
       </Button>
 
+      {/* ALERTAS SMART */}
+      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada) && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="text-sm font-bold text-red-900">ALERTA DE SEGURIDAD LOGÍSTICA</p>
+              <p className="text-xs text-red-700">
+                {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
+                {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
@@ -798,6 +916,15 @@ export const TripDetails = () => {
           <p className="text-gray-600">ID de Viaje: {trip.id}</p>
         </div>
         <div className="flex items-center space-x-3">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="hidden md:flex bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={() => generateAuditReport(trip, carga, merchantData, carrierData)}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Reporte de Trazabilidad (PDF)
+          </Button>
           <Button variant="outline" size="sm" onClick={handleCall}>
             <Phone className="h-4 w-4 mr-2" />
             Llamar
@@ -1313,6 +1440,68 @@ export const TripDetails = () => {
             </Card>
           </div>
 
+          {/* Trazabilidad Auditable (Historical Checkpoints) */}
+          <Card className="border-blue-100 bg-blue-50/30">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-bold text-blue-900">Historial de Auditoría GPS</CardTitle>
+                <CardDescription className="text-blue-600">Eventos grabados automáticamente con timestamp y ubicación.</CardDescription>
+              </div>
+              <ShieldCheck className="h-6 w-6 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {trip.checkpoints && trip.checkpoints.length > 0 ? (
+                  <div className="flow-root">
+                    <ul role="list" className="-mb-8">
+                      {trip.checkpoints.sort((a,b) => b.timestamp - a.timestamp).map((cp, cpIdx) => (
+                        <li key={cp.id}>
+                          <div className="relative pb-8">
+                            {cpIdx !== trip.checkpoints.length - 1 ? (
+                              <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />
+                            ) : null}
+                            <div className="relative flex space-x-3">
+                              <div>
+                                <span className={cn(
+                                  "h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white",
+                                  cp.automatico ? "bg-blue-100 text-blue-600" : "bg-purple-100 text-purple-600"
+                                )}>
+                                  {cp.automatico ? <CheckCircle className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                                </span>
+                              </div>
+                              <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                                <div>
+                                  <p className="text-sm text-gray-800 font-medium">{cp.mensaje}</p>
+                                  <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                    LOC: {cp.location.lat.toFixed(4)}, {cp.location.lng.toFixed(4)}
+                                  </p>
+                                  {cp.evidenciaUrl && (
+                                    <div className="mt-2">
+                                      <img src={cp.evidenciaUrl} alt="Evidencia" className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" onClick={() => window.open(cp.evidenciaUrl)} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-right text-xs whitespace-nowrap text-gray-500">
+                                  <time dateTime={new Date(cp.timestamp).toISOString()}>
+                                    {dateFnsFormat(cp.timestamp, 'HH:mm', { locale: es })}
+                                  </time>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-400 italic text-sm">
+                    No hay checkpoints registrados aún para este viaje.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Línea de tiempo del viaje */}
           <Card>
             <CardHeader>
@@ -1422,25 +1611,105 @@ export const TripDetails = () => {
                   )}
                   
                   {trip.estado === 'recojo_completado' && (
-                    <Button 
-                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
-                      onClick={() => updateTripStatus('en_camino_a_destino')}
-                      isLoading={isUpdating}
-                    >
-                      <Navigation className="h-5 w-5 mr-2" />
-                      Iniciar Ruta a Destino
-                    </Button>
+                    <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-xs font-bold text-gray-500 uppercase">Evidencia de Recojo</p>
+                      {trip.evidencia?.recojoUrl ? (
+                         <div className="flex items-center space-x-3">
+                            <img src={trip.evidencia.recojoUrl} className="h-16 w-16 object-cover rounded-lg border shadow-sm" alt="Recojo" />
+                            <div className="text-xs text-green-600 font-bold flex items-center">
+                               <CheckCircle className="h-4 w-4 mr-1" /> FOTO CARGADA
+                            </div>
+                         </div>
+                      ) : (
+                        <div className="flex flex-col space-y-2">
+                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-white hover:bg-gray-50 transition-colors">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-500">
+                               <Package className="h-6 w-6 mb-2" />
+                               <p className="text-xs font-medium">Click para foto de carga</p>
+                            </div>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) setEvidenceFile(file);
+                              }}
+                            />
+                          </label>
+                          {evidenceFile && (
+                            <Button 
+                              size="sm" 
+                              className="w-full"
+                              onClick={() => handleEvidenceUpload('recojo')}
+                              isLoading={isUploadingEvidence}
+                            >
+                              Subir Foto de Recojo
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      
+                      <Button 
+                        className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                        onClick={() => updateTripStatus('en_camino_a_destino')}
+                        isLoading={isUpdating}
+                      >
+                        <Navigation className="h-5 w-5 mr-2" />
+                        Iniciar Ruta a Destino
+                      </Button>
+                    </div>
                   )}
 
                   {trip.estado === 'en_camino_a_destino' && (
-                    <Button 
-                      className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
-                      onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
-                      isLoading={isUpdating}
-                    >
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                      Confirmar Entrega
-                    </Button>
+                    <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                       <p className="text-xs font-bold text-gray-500 uppercase">Evidencia de Entrega</p>
+                       {trip.evidencia?.entregaUrl ? (
+                         <div className="flex items-center space-x-3">
+                            <img src={trip.evidencia.entregaUrl} className="h-16 w-16 object-cover rounded-lg border shadow-sm" alt="Entrega" />
+                            <div className="text-xs text-green-600 font-bold flex items-center">
+                               <CheckCircle className="h-4 w-4 mr-1" /> FOTO CARGADA
+                            </div>
+                         </div>
+                      ) : (
+                        <div className="flex flex-col space-y-2">
+                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-white hover:bg-gray-50 transition-colors">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-500">
+                               <Navigation className="h-6 w-6 mb-2" />
+                               <p className="text-xs font-medium">Click para foto de entrega</p>
+                            </div>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) setEvidenceFile(file);
+                              }}
+                            />
+                          </label>
+                          {evidenceFile && (
+                            <Button 
+                              size="sm" 
+                              className="w-full"
+                              onClick={() => handleEvidenceUpload('entrega')}
+                              isLoading={isUploadingEvidence}
+                            >
+                              Subir Foto de Entrega
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
+                      <Button 
+                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
+                        onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
+                        isLoading={isUpdating}
+                      >
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        Confirmar Entrega Final
+                      </Button>
+                    </div>
                   )}
 
                   {trip.estado === 'entregado_pendiente_confirmacion' && (
@@ -1711,6 +1980,10 @@ export const TripDetails = () => {
                     <span className="ml-1 text-xs font-bold">
                       {isCarrier ? (merchantData?.rating?.toFixed(1) || '5.0') : (carrierData?.rating?.toFixed(1) || '5.0')}
                     </span>
+                    <div className="ml-3 flex items-center bg-blue-50 px-2 py-0.5 rounded text-[10px] font-bold text-blue-600 border border-blue-100">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      TRUST: {isCarrier ? '98%' : (carrierData?.indiceConfiabilidad || '95')}%
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 flex items-center">
                     <Phone className="h-3 w-3 mr-1" />
@@ -1824,7 +2097,7 @@ export const TripDetails = () => {
 
       {/* Rejection Modal for Admin */}
       {showRejectModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="text-xl font-bold text-gray-900">Rechazar Pago</h3>
@@ -1872,7 +2145,7 @@ export const TripDetails = () => {
 
       {/* Rating Modal */}
       {showRatingModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="text-xl font-bold text-gray-900">Calificar Servicio</h3>

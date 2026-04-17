@@ -7,7 +7,7 @@ import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star, Navigation, Map as MapIcon } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star, Navigation, Map as MapIcon, Thermometer } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -367,34 +367,34 @@ export const CarrierCargoDetails = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Categoría</span>
+                  <p className="text-gray-900 font-bold capitalize">{carga.categoria || 'General'}</p>
+                </div>
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
                   <p className="text-gray-900 font-medium">{carga.peso}</p>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad Requerida</span>
-                  <p className="text-gray-900 font-medium">{carga.capacidadRequerida}</p>
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
+                  <p className="text-gray-900 font-medium text-xs">{carga.capacidadRequerida}</p>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Comerciante</span>
-                  <Link to={`/profile/${carga.comercianteId}`} className="text-gray-900 font-medium hover:text-blue-600 transition-colors block">
-                    {carga.comercianteNombre}
-                  </Link>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <div className="flex items-center text-yellow-500">
-                      <Star className="h-3 w-3 fill-current" />
-                      <span className="ml-1 text-xs font-bold">{(merchantData?.rating || 5.0).toFixed(1)}</span>
-                    </div>
-                    {merchantData?.telefono && (
-                      <p className="text-xs text-blue-600 font-bold flex items-center">
-                        <Phone className="h-3 w-3 mr-1" />
-                        {merchantData.telefono}
-                      </p>
-                    )}
-                  </div>
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Cuidado</span>
+                  <p className="text-gray-900 font-medium text-xs">{carga.cuidadoEspecial || 'Normal'}</p>
                 </div>
               </div>
+
+              {carga.temperaturaRequerida && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between">
+                  <div className="flex items-center space-x-3 text-blue-700">
+                    <Thermometer className="h-5 w-5" />
+                    <span className="text-sm font-bold">Cadena de Frío Requerida</span>
+                  </div>
+                  <span className="bg-blue-600 text-white px-3 py-1 rounded-lg font-black text-sm">{carga.temperaturaRequerida}</span>
+                </div>
+              )}
 
               <div className="space-y-2 pt-4 border-t border-gray-50">
                 <span className="text-[10px] uppercase font-bold text-gray-400">Descripción</span>

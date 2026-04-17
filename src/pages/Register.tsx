@@ -146,6 +146,7 @@ export const Register = () => {
         totalRatings: 0,
         sumRatings: 0,
         completedTrips: 0,
+        indiceConfiabilidad: 100, // Starts with 100% reliability
         createdAt: Date.now(),
         documentosUrls: {
           dni: dniUrl || '',
@@ -310,6 +311,9 @@ export const Register = () => {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <Card className="w-full max-w-2xl">
         <CardHeader className="space-y-1 text-center">
+          <div className="flex justify-center mb-6">
+            
+          </div>
           <CardTitle className="text-3xl font-bold">Crea tu cuenta</CardTitle>
           <CardDescription>
             Únete a la red de transporte de carga más grande del Perú
