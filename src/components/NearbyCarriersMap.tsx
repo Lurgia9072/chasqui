@@ -107,7 +107,7 @@ export const NearbyCarriersMap: React.FC<NearbyCarriersMapProps> = ({ carriers }
   }, [userLocation, carriers]);
 
   return (
-    <div className="relative h-[600px] w-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
+    <div className="relative h-[400px] sm:h-[600px] lg:h-[70vh] w-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
       {userLocation ? (
         <MapContainer 
           center={userLocation} 

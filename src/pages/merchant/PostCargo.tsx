@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
@@ -120,6 +120,40 @@ export const PostCargo = () => {
     
     setShowMapModal({ show: false, field: 'origen' });
     setTempLocation(null);
+  };
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ', Peru')}`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        const { lat, lon, display_name } = data[0];
+        const newLat = parseFloat(lat);
+        const newLng = parseFloat(lon);
+        setTempLocation({ lat: newLat, lng: newLng });
+        // We'll need a way to move the map. Let's add a MapController component inside MapContainer.
+      } else {
+        alert('No se encontró la ubicación');
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const MapController = ({ center }: { center: { lat: number; lng: number } }) => {
+    const map = useMap();
+    useEffect(() => {
+      map.setView([center.lat, center.lng], 15);
+    }, [center, map]);
+    return null;
   };
 
   return (
@@ -365,32 +399,56 @@ export const PostCargo = () => {
       {/* Map Modal */}
       <AnimatePresence>
         {showMapModal.show && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-none"
             >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center">
                     <MapPin className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">Seleccionar {showMapModal.field === 'origen' ? 'Origen' : 'Destino'}</h2>
-                    <p className="text-xs text-gray-500">Haz clic en el mapa para marcar la ubicación exacta.</p>
+                    <h2 className="text-base sm:text-xl font-bold text-gray-900 leading-tight">Ubicación de {showMapModal.field === 'origen' ? 'Origen' : 'Destino'}</h2>
+                    <p className="hidden sm:block text-xs text-gray-500">Haz clic en el mapa o busca por nombre.</p>
                   </div>
                 </div>
                 <button 
-                  onClick={() => setShowMapModal({ show: false, field: 'origen' })} 
+                  onClick={() => { setShowMapModal({ show: false, field: 'origen' }); setSearchQuery(''); }} 
                   className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                 >
                   <X className="h-5 w-5 text-gray-500" />
                 </button>
               </div>
+
+              {/* Search Bar */}
+              <div className="p-4 bg-white border-b border-gray-100 shrink-0">
+                <form onSubmit={handleSearch} className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input 
+                      type="text"
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm outline-none transition-all"
+                      placeholder="Buscar por distrito, región o nombre..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    size="sm" 
+                    className="shrink-0 h-11 px-4 lg:px-6"
+                    isLoading={isSearching}
+                  >
+                    Buscar
+                  </Button>
+                </form>
+              </div>
               
-              <div className="relative h-[400px]">
+              <div className="relative flex-1 min-h-[300px] h-[50vh] sm:h-[450px]">
                 <MapContainer 
                   center={[-12.046374, -77.042793]} 
                   zoom={13} 
@@ -401,18 +459,19 @@ export const PostCargo = () => {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
                   <MapPicker 
-                    initialPos={[-12.046374, -77.042793]} 
+                    initialPos={tempLocation ? [tempLocation.lat, tempLocation.lng] : [-12.046374, -77.042793]} 
                     onLocationSelect={(lat, lng) => setTempLocation({ lat, lng })}
                   />
+                  {tempLocation && <MapController center={tempLocation} />}
                 </MapContainer>
                 
                 {tempLocation && (
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4 z-[1000]">
+                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[200px] sm:max-w-xs px-4 z-[1000]">
                     <Button 
                       className="w-full h-12 shadow-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
                       onClick={confirmLocation}
                     >
-                      Confirmar Ubicación
+                      Confirmar
                     </Button>
                   </div>
                 )}

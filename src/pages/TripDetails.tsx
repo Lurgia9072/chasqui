@@ -19,6 +19,7 @@ import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 
 
+
 // Fix Leaflet default icon issue
 // @ts-ignore
 delete L.Icon.Default.prototype._getIconUrl;
@@ -61,12 +62,6 @@ const MapController = ({ center }: { center: [number, number] }) => {
     map.setView(center, map.getZoom());
   }, [center, map]);
   return null;
-};
-
-const containerStyle = {
-  width: '100%',
-  height: '400px',
-  borderRadius: '1rem',
 };
 
 const center = {
@@ -306,12 +301,13 @@ export const TripDetails = () => {
                 const lastMoveAt = trip.seguimiento?.updatedAt || trip.createdAt;
                 if (now - lastMoveAt > 30 * 60000 && trip.estado === 'en_camino_a_destino') {
                   updates['alertas.paradaNoAutorizada'] = true;
-                } else {
-                  updates['alertas.paradaNoAutorizada'] = false;
                 }
-
-                // 2. Route Deviation (Simplified: if distance to destination increased significantly)
-                // Real implementation would calculate distance to polyline.
+                
+                // 2. Retraso (Demo trigger: only if already flagged or automatic simple logic)
+                // Real implementation would compare ETA with threshold.
+                
+                // 3. Route Deviation (Simplified: if distance to destination increased significantly)
+                // Real implementation calculates distance to polyline.
                 
                 await updateDoc(doc(db, 'trips', trip.id), updates);
               } catch (err) {
@@ -376,8 +372,8 @@ export const TripDetails = () => {
             });
             
             // Actualizar tiempo estimado en Firebase si es transportista
-            if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
-              updateDoc(doc(db, 'trips', trip?.id), {
+            if (isCarrier && durationText && trip.tiempoEstimado !== durationText) {
+              updateDoc(doc(db, 'trips', trip.id), {
                 tiempoEstimado: durationText
               });
             }
@@ -931,15 +927,16 @@ export const TripDetails = () => {
       </Button>
 
       {/* ALERTAS SMART */}
-      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada) && (
+      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retraso) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
           <div className="flex items-center space-x-3">
-            <AlertCircle className="h-6 w-6 text-red-600" />
+            <AlertCircle className="h-6 w-6 text-red-600 animate-pulse" />
             <div>
               <p className="text-sm font-bold text-red-900">ALERTA DE SEGURIDAD LOGÍSTICA</p>
               <p className="text-xs text-red-700">
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
-                {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada."}
+                {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
+                {trip.alertas.retraso && "Se detectó un retraso atípico en el tiempo de entrega estimado."}
               </p>
             </div>
           </div>
@@ -1268,7 +1265,9 @@ export const TripDetails = () => {
               </div>
             </div>
             <div className="p-0 relative">
-              <div style={containerStyle}>
+              <div 
+                className="w-full h-[300px] sm:h-[500px] lg:h-[600px] rounded-2xl overflow-hidden"
+              >
                 {(trip?.seguimiento?.lat !== undefined) ? (
                   <MapContainer 
                     center={[trip.seguimiento.lat, trip.seguimiento.lng]} 
@@ -2077,6 +2076,62 @@ export const TripDetails = () => {
         </div>
       </div>
 
+      {/* Simulator Section for Testing Alerts */}
+      {isCarrier && !['completado', 'cancelado'].includes(trip.estado) && (
+        <Card className="border-dashed border-2 border-amber-200 bg-amber-50/30">
+          <CardHeader className="py-3">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <CardTitle className="text-sm font-bold text-amber-800">Simulador de Alertas de Seguridad</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="py-3">
+            <p className="text-xs text-amber-700 mb-4">Usa estos controles para probar la respuesta del sistema ante incidencias reales en ruta.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Button 
+                size="sm" 
+                variant={trip.alertas?.desvioRuta ? "destructive" : "outline"}
+                className={cn("h-10 text-[11px]", trip.alertas?.desvioRuta && "animate-pulse")}
+                onClick={async () => {
+                  await updateDoc(doc(db, 'trips', trip.id), {
+                    'alertas.desvioRuta': !trip.alertas?.desvioRuta
+                  });
+                }}
+              >
+                <Navigation className="h-3 w-3 mr-2" />
+                {trip.alertas?.desvioRuta ? 'Detener Alerta Desvío' : 'Simular Desvío Ruta'}
+              </Button>
+              <Button 
+                size="sm" 
+                variant={trip.alertas?.paradaNoAutorizada ? "destructive" : "outline"}
+                className={cn("h-10 text-[11px]", trip.alertas?.paradaNoAutorizada && "animate-pulse")}
+                onClick={async () => {
+                  await updateDoc(doc(db, 'trips', trip.id), {
+                    'alertas.paradaNoAutorizada': !trip.alertas?.paradaNoAutorizada
+                  });
+                }}
+              >
+                <Clock className="h-3 w-3 mr-2" />
+                {trip.alertas?.paradaNoAutorizada ? 'Detener Alerta Parada' : 'Simular Parada Larga'}
+              </Button>
+              <Button 
+                size="sm" 
+                variant={trip.alertas?.retraso ? "destructive" : "outline"}
+                className={cn("h-10 text-[11px]", trip.alertas?.retraso && "animate-pulse")}
+                onClick={async () => {
+                  await updateDoc(doc(db, 'trips', trip.id), {
+                    'alertas.retraso': !trip.alertas?.retraso
+                  });
+                }}
+              >
+                <AlertCircle className="h-3 w-3 mr-2" />
+                {trip.alertas?.retraso ? 'Detener Alerta Retraso' : 'Simular Retraso'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Floating Chat Window (Facebook Style) */}
       <div className="fixed bottom-0 right-0 z-50 p-4 pointer-events-none w-full max-w-md">
         <div className="flex flex-col items-end space-y-2 pointer-events-auto">
@@ -2276,4 +2331,5 @@ export const TripDetails = () => {
     </div>
   );
 };
+
 

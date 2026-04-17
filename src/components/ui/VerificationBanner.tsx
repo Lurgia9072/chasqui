@@ -1,4 +1,4 @@
-import { ShieldCheck, ShieldAlert, ShieldQuestion, ArrowRight } from 'lucide-react';
+import { ShieldCheck, AlertCircle, ShieldQuestion, ArrowRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './Button';
 import { useNavigate } from 'react-router-dom';
@@ -30,7 +30,7 @@ export const VerificationBanner = ({ status, className }: VerificationBannerProp
       action: null,
     },
     rechazado: {
-      icon: <ShieldAlert className="h-5 w-5" />,
+      icon: <AlertCircle className="h-5 w-5" />,
       title: 'Cuenta rechazada',
       description: 'Hubo un problema con tu verificación. Por favor, revisa tus documentos.',
       color: 'bg-red-50 text-red-900 border-red-200',

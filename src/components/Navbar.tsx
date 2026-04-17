@@ -1,15 +1,18 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from './ui/Button';
-import { Truck, LogOut, User, Package, History, ShieldAlert } from 'lucide-react';
+import { Truck, LogOut, User, Package, History, AlertCircle, Menu, X } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { NotificationBell } from './NotificationBell';
 import { ADMIN_EMAILS } from '../lib/constants';
+import { cn } from '../lib/utils';
 
 export const Navbar = () => {
   const { user, setUser } = useAuthStore();
   const navigate = useNavigate();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -26,14 +29,11 @@ export const Navbar = () => {
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center space-x-2">
-          <Truck className="h-8 w-8 text-blue-600 text-gray-900" />
-          <span className="text-xl font-bold tracking-tight text-gray-900">
-            chasqui
-          </span>
+        <Link to="/" className="flex items-center shrink-0">
         </Link>
 
-        <div className="flex items-center space-x-4">
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center space-x-4">
           {user ? (
             <>
               {isAdmin && (
@@ -41,7 +41,7 @@ export const Navbar = () => {
                   to="/admin"
                   className="flex items-center space-x-1 text-sm font-bold text-purple-600 hover:text-purple-700"
                 >
-                  <ShieldAlert className="h-4 w-4" />
+                  <AlertCircle className="h-4 w-4" />
                   <span>Admin</span>
                 </Link>
               )}
@@ -56,7 +56,7 @@ export const Navbar = () => {
                 className="flex items-center space-x-1 text-sm font-medium text-gray-600 hover:text-blue-600"
               >
                 <History className="h-4 w-4" />
-                <span className="hidden sm:inline">Historial</span>
+                <span>Historial</span>
               </Link>
               <NotificationBell />
               <div className="flex items-center space-x-2 border-l border-gray-200 pl-4">
@@ -91,7 +91,102 @@ export const Navbar = () => {
             </>
           )}
         </div>
+
+        {/* Mobile Controls */}
+        <div className="flex md:hidden items-center space-x-3">
+          {user && <NotificationBell />}
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
       </div>
+
+      {/* Mobile Menu Overlay */}
+      {isMenuOpen && (
+        <div className="md:hidden border-t border-gray-100 bg-white animate-in slide-in-from-top duration-200">
+          <div className="space-y-1 p-4">
+            {user ? (
+              <>
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-2xl mb-4">
+                   <div className="h-10 w-10 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                    {user.photoUrl ? (
+                      <img src={user.photoUrl} alt={user.nombre} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <User className="h-5 w-5 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{user.nombre}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-black">{isAdmin ? 'Administrador' : user.tipoUsuario}</p>
+                  </div>
+                </div>
+
+                <Link 
+                  to={user.tipoUsuario === 'admin' ? '/admin' : (user.tipoUsuario === 'comerciante' ? '/merchant/dashboard' : '/carrier/dashboard')}
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 p-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium"
+                >
+                  <Package className="h-5 w-5" />
+                  <span>Dashboard</span>
+                </Link>
+
+                <Link 
+                  to="/history"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 p-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium"
+                >
+                   <History className="h-5 w-5" />
+                  <span>Historial</span>
+                </Link>
+
+                {isAdmin && (
+                  <Link 
+                    to="/admin"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center space-x-3 p-3 text-purple-600 hover:bg-purple-50 rounded-xl font-bold"
+                  >
+                    <AlertCircle className="h-5 w-5" />
+                    <span>Panel Admin</span>
+                  </Link>
+                )}
+
+                <Link 
+                  to="/profile"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center space-x-3 p-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-xl font-medium"
+                >
+                  <User className="h-5 w-5" />
+                  <span>Mi Perfil</span>
+                </Link>
+
+                <div className="pt-4 mt-4 border-t border-gray-100">
+                  <button 
+                    onClick={() => { handleLogout(); setIsMenuOpen(false); }}
+                    className="flex items-center space-x-3 w-full p-3 text-red-600 hover:bg-red-50 rounded-xl font-bold"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span>Cerrar Sesión</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 pb-2">
+                <Link to="/login" onClick={() => setIsMenuOpen(false)}>
+                  <Button variant="outline" className="w-full">Ingresar</Button>
+                </Link>
+                <Link to="/register" onClick={() => setIsMenuOpen(false)}>
+                  <Button className="w-full">Registrarse</Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 };
