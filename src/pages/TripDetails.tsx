@@ -128,8 +128,42 @@ export const TripDetails = () => {
   const [payoutRef, setPayoutRef] = useState('');
   const [showGpsEnforcement, setShowGpsEnforcement] = useState(false);
   const [gpsErrorCount, setGpsErrorCount] = useState(0);
+  const [signalStatus, setSignalStatus] = useState<'excelente' | 'pobre' | 'perdida'>('excelente');
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
+
+  // Helper para calcular distancia entre dos coordenadas (Haversine)
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // Radio de la tierra en metros
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distancia en metros
+  };
+
+  // Helper para detectar desviación de ruta (distancia mínima a la polilínea)
+  const isDeviatedFromRoute = (lat: number, lng: number, polyline: [number, number][]) => {
+    if (polyline.length === 0) return false;
+    
+    // Umbral de desviación: 800 metros (ajustable según zona rural/urbana)
+    const THRESHOLD = 800; 
+    
+    let minDistance = Infinity;
+    for (const point of polyline) {
+      const d = getDistance(lat, lng, point[0], point[1]);
+      if (d < minDistance) minDistance = d;
+      if (d < THRESHOLD) return false; // Está lo suficientemente cerca de al menos un punto
+    }
+    
+    return true; // No está cerca de ningún punto de la ruta
+  };
 
   useEffect(() => {
     if (!id || !user) return;
@@ -290,12 +324,11 @@ export const TripDetails = () => {
         watchId = navigator.geolocation.watchPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
-            setShowGpsEnforcement(false); // GPS is working
+            setShowGpsEnforcement(false); 
             setGpsErrorCount(0);
             setIsGpsActive(true);
+            setSignalStatus('excelente');
             
-            // Solo actualizar si ha pasado un tiempo prudente (ej: 15 segundos) o cambio significativo
-            // Para este demo usaremos un intervalo de tiempo para asegurar fluidez en la vista del comerciante
             const lastUpdate = trip.seguimiento?.updatedAt || 0;
             const now = Date.now();
             
@@ -306,7 +339,8 @@ export const TripDetails = () => {
                     lat: latitude, 
                     lng: longitude, 
                     updatedAt: now 
-                  }
+                  },
+                  'alertas.perdidaSignal': false // Si llega señal, reseteamos alerta
                 };
 
                 // SMART ALERTS LOGIC
@@ -316,11 +350,21 @@ export const TripDetails = () => {
                   updates['alertas.paradaNoAutorizada'] = true;
                 }
                 
-                // 2. Retraso (Demo trigger: only if already flagged or automatic simple logic)
-                // Real implementation would compare ETA with threshold.
-                
-                // 3. Route Deviation (Simplified: if distance to destination increased significantly)
-                // Real implementation calculates distance to polyline.
+                // 2. Ruta Deviation Detection
+                if (fullRouteCoords.length > 0) {
+                  const deviated = isDeviatedFromRoute(latitude, longitude, fullRouteCoords);
+                  if (deviated) {
+                    updates['alertas.desvioRuta'] = true;
+                    // Auto-mensaje en el chat para el comerciante recordado
+                    await addDoc(collection(db, 'trips', trip.id, 'messages'), {
+                      text: "⚠️ SISTEMA: Se ha detectado un posible desvío de la ruta establecida por parte del transportista.",
+                      senderId: 'system',
+                      senderNombre: 'Seguridad Chasqui',
+                      createdAt: Date.now(),
+                      readBy: [user.uid]
+                    });
+                  }
+                }
                 
                 await updateDoc(doc(db, 'trips', trip.id), updates);
               } catch (err) {
@@ -398,6 +442,32 @@ export const TripDetails = () => {
         .catch(err => console.error('Error fetching route:', err));
     }
   }, [trip?.seguimiento?.lat, trip?.seguimiento?.lng, trip?.estado, originCoords, destinationCoords]);
+
+  // Monitorización de Perdida de Señal (Background check)
+  useEffect(() => {
+    const activeStatuses: TripStatus[] = ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino'];
+    if (!trip || !activeStatuses.includes(trip.estado)) return;
+
+    const checkSignal = setInterval(async () => {
+      const now = Date.now();
+      const lastUpdate = trip.seguimiento?.updatedAt || trip.createdAt;
+      const diffMinutes = (now - lastUpdate) / 60000;
+
+      if (diffMinutes > 15 && !trip.alertas?.perdidaSignal) {
+        setSignalStatus('perdida');
+        // El administrador y el comerciante deben saber si el GPS dejó de reportar
+        await updateDoc(doc(db, 'trips', trip.id), {
+          'alertas.perdidaSignal': true
+        });
+      } else if (diffMinutes > 5) {
+        setSignalStatus('pobre');
+      } else {
+        setSignalStatus('excelente');
+      }
+    }, 30000); // Revisar cada 30 segundos
+
+    return () => clearInterval(checkSignal);
+  }, [trip?.seguimiento?.updatedAt, trip?.id, trip?.estado, trip?.alertas?.perdidaSignal]);
 
   // Auto-centrar mapa en el transportista
   const MapAutoCenter = ({ pos }: { pos: { lat: number, lng: number } }) => {
@@ -1325,8 +1395,27 @@ export const TripDetails = () => {
             </div>
             <div className="p-0 relative">
               <div 
-                className="w-full h-[300px] sm:h-[500px] lg:h-[600px] rounded-2xl overflow-hidden"
+                className="w-full h-[300px] sm:h-[500px] lg:h-[600px] rounded-2xl overflow-hidden relative group"
               >
+                <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2 transition-transform group-hover:scale-105 duration-300">
+                  <div className="bg-white/90 backdrop-blur-md px-3 py-2 rounded-2xl shadow-xl border border-blue-100 flex items-center space-x-2">
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    <span className="text-[10px] font-bold text-gray-700">RUTA PROTEGIDA POR CHASQUI AI</span>
+                  </div>
+                  {trip?.alertas?.desvioRuta && (
+                    <div className="bg-red-600 text-white px-3 py-2 rounded-2xl shadow-xl flex items-center space-x-2 animate-pulse">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-[10px] font-bold text-white">DESVÍO DETECTADO</span>
+                    </div>
+                  )}
+                  {trip?.alertas?.perdidaSignal && (
+                    <div className="bg-orange-600 text-white px-3 py-2 rounded-2xl shadow-xl flex items-center space-x-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-[10px] font-bold text-white">SEÑAL GPS INESTABLE / PÉRDIDA</span>
+                    </div>
+                  )}
+                </div>
+
                 {(trip?.seguimiento?.lat !== undefined) ? (
                   <MapContainer 
                     center={[trip.seguimiento.lat, trip.seguimiento.lng]} 
@@ -1407,7 +1496,7 @@ export const TripDetails = () => {
                     isGpsActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   )}>
                     <div className={cn("h-2 w-2 rounded-full mr-2", isGpsActive ? "bg-green-500 animate-ping" : "bg-red-500")} />
-                    GPS {isGpsActive ? 'Activo' : 'Inactivo'}
+                    GPS {isGpsActive ? 'Activo' : 'Inactivo'} | SEÑAL: {signalStatus.toUpperCase()}
                   </div>
                 )}
               </div>
@@ -2391,5 +2480,6 @@ export const TripDetails = () => {
   </div>
   );
 };
+
 
 
