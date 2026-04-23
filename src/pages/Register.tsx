@@ -12,7 +12,6 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import { Truck, AlertCircle, User, Briefcase, FileText, Mail, CheckCircle2, Upload, CreditCard, Landmark, Eye, EyeOff } from 'lucide-react';
-import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User as UserType, UserRole, AccountType } from '../types';
 import { cn } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
@@ -321,7 +320,7 @@ export const Register = () => {
       <Card className="w-full max-w-2xl">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-6">
-            <ChasquiLogo />
+            chasqui
           </div>
           <CardTitle className="text-3xl font-bold">Crea tu cuenta</CardTitle>
           <CardDescription>
