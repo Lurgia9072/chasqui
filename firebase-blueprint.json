@@ -156,6 +156,32 @@
         "createdAt": { "type": "number" }
       },
       "required": ["tripId", "reviewerId", "revieweeId", "rating", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Support case for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "topic": { "type": "string", "enum": ["consulta", "fallo", "queja"] },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "topic", "status", "createdAt"]
+    },
+    "SupportChat": {
+      "title": "SupportChat",
+      "description": "Real-time support messages",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "text", "senderId", "createdAt"]
     }
   },
   "firestore": {
@@ -178,6 +204,14 @@
     "/reviews/{reviewId}": {
       "schema": "Review",
       "description": "User reviews"
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "User support tickets"
+    },
+    "/support_chats/{chatId}": {
+      "schema": "SupportChat",
+      "description": "Support chat messages"
     }
   }
 }

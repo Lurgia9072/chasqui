@@ -20,6 +20,7 @@ import { History } from './pages/History';
 import { Profile } from './pages/Profile';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
+import { SupportWidget } from './pages/Support';
 
 export default function App() {
   useAuth();
@@ -54,6 +55,7 @@ export default function App() {
         <Router basename={import.meta.env.BASE_URL}>
           <div className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
             <Navbar />
+            <SupportWidget />
             <main>
               <Routes>
                 <Route path="/" element={<Home />} />

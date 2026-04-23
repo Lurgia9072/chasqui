@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from './ui/Button';
-import { Truck, LogOut, User, Package, History, AlertCircle, Menu, X } from 'lucide-react';
+import { History, AlertCircle, Menu, X, LifeBuoy, User, LogOut, Package } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { NotificationBell } from './NotificationBell';
@@ -30,6 +30,7 @@ export const Navbar = () => {
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center shrink-0">
+          chasqui
         </Link>
 
         {/* Desktop Navigation */}
@@ -106,8 +107,8 @@ export const Navbar = () => {
 
       {/* Mobile Menu Overlay */}
       {isMenuOpen && (
-        <div className="md:hidden border-t border-gray-100 bg-white animate-in slide-in-from-top duration-200">
-          <div className="space-y-1 p-4">
+        <div className="md:hidden border-t border-gray-100 bg-white animate-in slide-in-from-top duration-200 overflow-y-auto max-h-[calc(100vh-4rem)]">
+          <div className="space-y-1 p-4 pb-10">
             {user ? (
               <>
                 <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-2xl mb-4">
