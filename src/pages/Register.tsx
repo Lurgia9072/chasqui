@@ -1,16 +1,18 @@
+import { AnimatePresence } from 'motion/react';
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, AlertCircle, User, Briefcase, FileText, Mail, CheckCircle2, Upload, CreditCard, Landmark } from 'lucide-react';
+import { Truck, AlertCircle, User, Briefcase, FileText, Mail, CheckCircle2, Upload, CreditCard, Landmark, Eye, EyeOff } from 'lucide-react';
+import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User as UserType, UserRole, AccountType } from '../types';
 import { cn } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
@@ -61,6 +63,7 @@ export const Register = () => {
   const [licenciaUrl, setLicenciaUrl] = useState<string | null>(null);
   const [tarjetaPropiedadUrl, setTarjetaPropiedadUrl] = useState<string | null>(null);
   const [soatUrl, setSoatUrl] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
@@ -179,9 +182,15 @@ export const Register = () => {
 
       await setDoc(doc(db, 'users', user.uid), newUser);
       
-      // Set user in store and navigate to home/profile
-      setUser(newUser);
-      navigate('/');
+      // Enforce email verification
+      if (!isAdminEmail) {
+        await sendEmailVerification(user);
+        setIsRegistered(true);
+      } else {
+        // Admins are auto-verified in this logic or we just let them in
+        setUser(newUser);
+        navigate('/');
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Ocurrió un error al registrar la cuenta.');
@@ -312,7 +321,7 @@ export const Register = () => {
       <Card className="w-full max-w-2xl">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-6">
-            
+            <ChasquiLogo />
           </div>
           <CardTitle className="text-3xl font-bold">Crea tu cuenta</CardTitle>
           <CardDescription>
@@ -419,11 +428,20 @@ export const Register = () => {
                   />
                   <Input
                     label="Contraseña"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
                     placeholder="••••••••"
                     {...register('password')}
                     error={errors.password?.message}
+                    suffix={
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    }
                   />
                 </div>
                 {role === 'comerciante' && (

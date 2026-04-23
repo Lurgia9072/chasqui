@@ -3,14 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword, sendEmailVerification, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, AlertCircle, Mail } from 'lucide-react';
+import { Truck, AlertCircle, Mail, Eye, EyeOff, CheckCircle2, X } from 'lucide-react';
 import { User } from '../types';
 import { ADMIN_EMAILS } from '../lib/constants';
 
@@ -26,6 +26,10 @@ export const Login = () => {
   const [info, setInfo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [unverifiedUser, setUnverifiedUser] = useState<any>(null);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
 
@@ -45,6 +49,14 @@ export const Login = () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
       
+      // Check for email verification
+      if (!userCredential.user.emailVerified) {
+        setUnverifiedUser(userCredential.user);
+        setError('Debes verificar tu correo electrónico antes de iniciar sesión.');
+        await signOut(auth);
+        return;
+      }
+
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       
       if (userDoc.exists()) {
@@ -91,13 +103,25 @@ export const Login = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetEmail) return;
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      setResetSent(true);
+    } catch (err: any) {
+      setError('Error al enviar el enlace de recuperación. Verifica el correo.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-6">
             chasqui
-            {/* <Truck className="h-12 w-12 text-blue-600" /> */}
           </div>
           <CardTitle className="text-2xl font-bold">Bienvenido de nuevo</CardTitle>
           <CardDescription>
@@ -138,11 +162,29 @@ export const Login = () => {
             />
             <Input
               label="Contraseña"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="••••••••"
               {...register('password')}
               error={errors.password?.message}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              }
             />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(true)}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" isLoading={isLoading}>
@@ -157,6 +199,67 @@ export const Login = () => {
           </CardFooter>
         </form>
       </Card>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="text-xl font-bold text-gray-900">Recuperar Contraseña</h3>
+              <button onClick={() => setShowForgotModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {resetSent ? (
+                <div className="text-center space-y-4 py-4">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h4 className="text-lg font-bold">Correo enviado</h4>
+                  <p className="text-sm text-gray-600">
+                    Hemos enviado un enlace para restablecer tu contraseña a <strong>{resetEmail}</strong>. 
+                    Por favor, revisa tu bandeja de entrada.
+                  </p>
+                  <Button className="w-full mt-4" onClick={() => setShowForgotModal(false)}>
+                    Entendido
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Ingresa tu correo electrónico y te enviaremos un enlace para que puedas cambiar tu contraseña.
+                  </p>
+                  <Input 
+                    label="Correo Electrónico"
+                    placeholder="tu@correo.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                  />
+                  <div className="flex gap-3 pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => setShowForgotModal(false)}
+                      disabled={isLoading}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      className="flex-1"
+                      onClick={handleResetPassword}
+                      isLoading={isLoading}
+                      disabled={!resetEmail}
+                    >
+                      Enviar Enlace
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
