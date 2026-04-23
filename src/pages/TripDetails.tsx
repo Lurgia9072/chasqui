@@ -17,7 +17,7 @@ import { ADMIN_EMAILS } from '../lib/constants';
 import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
-
+import { motion, AnimatePresence } from 'motion/react';
 
 
 // Fix Leaflet default icon issue
@@ -61,6 +61,14 @@ const MapController = ({ center }: { center: [number, number] }) => {
   useEffect(() => {
     map.setView(center, map.getZoom());
   }, [center, map]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [map]);
+
   return null;
 };
 
@@ -118,6 +126,8 @@ export const TripDetails = () => {
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
+  const [showGpsEnforcement, setShowGpsEnforcement] = useState(false);
+  const [gpsErrorCount, setGpsErrorCount] = useState(0);
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
 
@@ -280,6 +290,9 @@ export const TripDetails = () => {
         watchId = navigator.geolocation.watchPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
+            setShowGpsEnforcement(false); // GPS is working
+            setGpsErrorCount(0);
+            setIsGpsActive(true);
             
             // Solo actualizar si ha pasado un tiempo prudente (ej: 15 segundos) o cambio significativo
             // Para este demo usaremos un intervalo de tiempo para asegurar fluidez en la vista del comerciante
@@ -318,9 +331,12 @@ export const TripDetails = () => {
           (error) => {
             console.error("Error obteniendo ubicación GPS:", error);
             setIsGpsActive(false);
+            setShowGpsEnforcement(true); // Trigger enforcement UI
+            setGpsErrorCount(prev => prev + 1);
+            
             addNotification({
-              title: 'Error de GPS',
-              message: 'No se pudo obtener tu ubicación. Asegúrate de tener el GPS activado y dar permisos.',
+              title: 'GPS Requerido',
+              message: 'Es obligatorio mantener el GPS activo durante el viaje para el seguimiento.',
               type: 'error'
             });
           },
@@ -915,7 +931,50 @@ export const TripDetails = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+    <div className="min-h-screen bg-gray-50">
+      {/* GPS Enforcement Overlay */}
+      <AnimatePresence>
+        {isCarrier && showGpsEnforcement && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[10005] bg-red-600 flex flex-col items-center justify-center p-6 text-white text-center sm:px-12"
+          >
+            <div className="bg-white p-6 rounded-full mb-6">
+              <Navigation className="h-12 w-12 text-red-600 animate-pulse" />
+            </div>
+            <h2 className="text-3xl font-black mb-4 uppercase tracking-tighter">GPS DESACTIVADO</h2>
+            <p className="text-xl mb-8 font-medium leading-tight max-w-md">
+              Es <span className="underline decoration-white underline-offset-4">OBLIGATORIO</span> mantener tu ubicación activa para continuar con el viaje. 
+              Sin GPS, el comerciante no puede ver tu progreso y el seguro del viaje queda invalidado.
+            </p>
+            
+            <div className="space-y-4 w-full max-w-sm">
+              <Button 
+                onClick={() => window.location.reload()}
+                className="w-full bg-white text-red-600 hover:bg-gray-100 font-bold h-14 text-lg"
+              >
+                REINTENTAR ACTIVAR GPS
+              </Button>
+              
+              <div className="bg-red-700/50 p-4 rounded-2xl text-sm border border-red-400/30">
+                <p className="font-bold flex items-center justify-center gap-2 mb-2">
+                  <AlertCircle className="h-4 w-4" /> INSTRUCCIONES:
+                </p>
+                <ol className="text-left list-decimal pl-4 space-y-1 opacity-90">
+                  <li>Ve a los Ajustes de tu celular</li>
+                  <li>Ubicación {">"} Activar</li>
+                  <li>Busca tu Navegador (Chrome/Safari)</li>
+                  <li>Permite el acceso a "Ubicación precisa"</li>
+                </ol>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
       <Button 
         variant="ghost" 
         size="sm" 
@@ -2329,6 +2388,7 @@ export const TripDetails = () => {
         </div>
       )}
     </div>
+  </div>
   );
 };
 
