@@ -89,7 +89,25 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
   
   y += 20;
 
-  // 3. Trazabilidad de Eventos (Checkpoints)
+  // 3. Alertas de Seguridad
+  const alerts = [];
+  if (trip.alertas?.desvioRuta) alerts.push('⚠️ DESVÍO DE RUTA DETECTADO');
+  if (trip.alertas?.perdidaSignal) alerts.push('⚠️ PÉRDIDA DE SEÑAL PROLONGADA');
+  if (trip.alertas?.paradaNoAutorizada) alerts.push('⚠️ PARADA NO AUTORIZADA');
+
+  if (alerts.length > 0) {
+    y += 15;
+    y = sectionTitle('ALERTAS DE SEGURIDAD Y CUMPLIMIENTO', y);
+    doc.setTextColor(220, 38, 38); // Red
+    doc.setFont('helvetica', 'bold');
+    alerts.forEach((alert, index) => {
+      doc.text(alert, 15, y + (index * 6));
+    });
+    y += (alerts.length * 6) + 5;
+  }
+
+  // 4. Trazabilidad de Eventos (Checkpoints)
+  y += 5;
   y = sectionTitle('HISTORIAL DE EVENTOS (AUDITORÍA DIGITAL)', y);
   
   const tableRows = trip.checkpoints?.sort((a,b) => b.timestamp - a.timestamp).map(cp => [
@@ -111,7 +129,7 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
 
   const finalY = (doc as any).lastAutoTable.finalY + 15;
 
-  // 4. Evidencia Digital
+  // 5. Evidencia Digital
   y = sectionTitle('EVIDENCIA DIGITAL DE ENTREGA', finalY);
   
   doc.setFontSize(9);

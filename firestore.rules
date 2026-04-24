@@ -80,6 +80,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.uid == "4RpsZPaoDSa1MxHlsMIftHc7Gk22" ||
+        request.auth.token.email == "lurgia18yuar@gmail.com" ||
         request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
         request.auth.token.email == "vvendiya@gmail.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -123,8 +124,18 @@ service cloud.firestore {
              data.tipoUsuario in ['comerciante', 'transportista', 'admin'] &&
              data.verificado in ['pendiente', 'verificado', 'rechazado'] &&
              data.createdAt is number &&
-             (!('telefono' in data) || (data.telefono is string && data.telefono.size() < 20)) &&
-             (!('documento' in data) || (data.documento is string && data.documento.size() < 20));
+             (!('telefono' in data) || (data.telefono is string && data.telefono.size() < 40)) &&
+             (!('documento' in data) || (data.documento is string && data.documento.size() < 40)) &&
+             (!('tipoCuenta' in data) || (data.tipoCuenta in ['natural', 'ruc10', 'ruc20'])) &&
+             (!('documentosUrls' in data) || data.documentosUrls is map) &&
+             (!('vehiculo' in data) || data.vehiculo is map) &&
+             (!('zonasOperacion' in data) || data.zonasOperacion is list) &&
+             (!('datosBancarios' in data) || data.datosBancarios is map) &&
+             (!('rating' in data) || data.rating is number) &&
+             (!('totalRatings' in data) || data.totalRatings is number) &&
+             (!('sumRatings' in data) || data.sumRatings is number) &&
+             (!('completedTrips' in data) || data.completedTrips is number) &&
+             (!('indiceConfiabilidad' in data) || data.indiceConfiabilidad is number);
     }
 
     function isValidCargo(data) {
@@ -153,12 +164,14 @@ service cloud.firestore {
              data.cargoId is string &&
              data.comercianteId is string &&
              data.transportistaId is string &&
-             data.origen is string && data.origen.size() < 200 &&
-             data.destino is string && data.destino.size() < 200 &&
+             data.origen is string && data.origen.size() < 500 &&
+             data.destino is string && data.destino.size() < 500 &&
              data.precioFinal is number && data.precioFinal > 0 &&
              data.comision is number && data.comision >= 0 &&
              data.estado in ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
-             data.createdAt is number;
+             data.createdAt is number &&
+             (!('alertas' in data) || data.alertas is map) &&
+             (!('seguimiento' in data) || data.seguimiento is map);
     }
 
     // ===============================================================
@@ -226,6 +239,18 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    match /support_tickets/{ticketId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /support_chats/{chatId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
     }
 
     match /{path=**} {

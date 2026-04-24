@@ -8,11 +8,47 @@
         "uid": { "type": "string" },
         "nombre": { "type": "string" },
         "email": { "type": "string", "format": "email" },
+        "tipoCuenta": { "type": "string", "enum": ["natural", "ruc10", "ruc20"] },
         "telefono": { "type": "string" },
         "documento": { "type": "string" },
-        "tipoUsuario": { "type": "string", "enum": ["comerciante", "transportista"] },
+        "tipoUsuario": { "type": "string", "enum": ["comerciante", "transportista", "admin"] },
         "verificado": { "type": "string", "enum": ["pendiente", "verificado", "rechazado"] },
         "rating": { "type": "number" },
+        "totalRatings": { "type": "number" },
+        "sumRatings": { "type": "number" },
+        "completedTrips": { "type": "number" },
+        "indiceConfiabilidad": { "type": "number" },
+        "documentosUrls": {
+          "type": "object",
+          "properties": {
+            "dni": { "type": "string" },
+            "licencia": { "type": "string" },
+            "tarjetaPropiedad": { "type": "string" },
+            "soat": { "type": "string" }
+          }
+        },
+        "vehiculo": {
+          "type": "object",
+          "properties": {
+            "tipo": { "type": "string" },
+            "placa": { "type": "string" },
+            "capacidad": { "type": "string" }
+          }
+        },
+        "zonasOperacion": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "datosBancarios": {
+          "type": "object",
+          "properties": {
+            "banco": { "type": "string" },
+            "tipoCuenta": { "type": "string" },
+            "numeroCuenta": { "type": "string" },
+            "cci": { "type": "string" },
+            "titular": { "type": "string" }
+          }
+        },
         "createdAt": { "type": "number" }
       },
       "required": ["uid", "nombre", "email", "tipoUsuario", "verificado", "createdAt"]
@@ -69,13 +105,34 @@
         "origen": { "type": "string" },
         "destino": { "type": "string" },
         "precioFinal": { "type": "number" },
-        "estado": { "type": "string", "enum": ["en_camino_a_recojo", "recojo_completado", "en_camino_a_destino", "entregado_pendiente_confirmacion", "completado", "cancelado"] },
+        "comision": { "type": "number" },
+        "estado": { "type": "string", "enum": ["pendiente_pago", "pago_en_revision", "en_camino_a_recojo", "recojo_completado", "en_camino_a_destino", "entregado_pendiente_confirmacion", "completado", "cancelado"] },
+        "pagoInfo": {
+          "type": "object",
+          "properties": {
+            "referencia": { "type": "string" },
+            "comprobanteUrl": { "type": "string" },
+            "informadoAt": { "type": "number" },
+            "fechaPago": { "type": "number" },
+            "verificadoPor": { "type": "string" },
+            "verificadoAt": { "type": "number" }
+          }
+        },
         "seguimiento": {
           "type": "object",
           "properties": {
             "lat": { "type": "number" },
             "lng": { "type": "number" },
             "updatedAt": { "type": "number" }
+          }
+        },
+        "alertas": {
+          "type": "object",
+          "properties": {
+            "desvioRuta": { "type": "boolean" },
+            "retrasoCritico": { "type": "boolean" },
+            "paradaNoAutorizada": { "type": "boolean" },
+            "perdidaSignal": { "type": "boolean" }
           }
         },
         "tiempoEstimado": { "type": "string" },
@@ -99,6 +156,32 @@
         "createdAt": { "type": "number" }
       },
       "required": ["tripId", "reviewerId", "revieweeId", "rating", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Support case for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "topic": { "type": "string", "enum": ["consulta", "fallo", "queja"] },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "topic", "status", "createdAt"]
+    },
+    "SupportChat": {
+      "title": "SupportChat",
+      "description": "Real-time support messages",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "text", "senderId", "createdAt"]
     }
   },
   "firestore": {
@@ -121,6 +204,14 @@
     "/reviews/{reviewId}": {
       "schema": "Review",
       "description": "User reviews"
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "User support tickets"
+    },
+    "/support_chats/{chatId}": {
+      "schema": "SupportChat",
+      "description": "Support chat messages"
     }
   }
 }

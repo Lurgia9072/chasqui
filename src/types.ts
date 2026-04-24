@@ -120,6 +120,7 @@ export interface Trip {
     desvioRuta: boolean;
     retrasoCritico: boolean;
     paradaNoAutorizada: boolean;
+    perdidaSignal: boolean;
   };
   evidencia?: {
     recojoUrl?: string;
