@@ -1,4 +1,3 @@
-import { AnimatePresence } from 'motion/react';
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, SubmitHandler } from 'react-hook-form';
@@ -10,11 +9,12 @@ import { auth, db } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, AlertCircle, User, Briefcase, FileText, Mail, CheckCircle2, Upload, CreditCard, Landmark, Eye, EyeOff } from 'lucide-react';
-import { User as UserType, UserRole, AccountType } from '../types';
+import { Truck, AlertCircle, Briefcase, FileText, Mail, CheckCircle2, Upload, Landmark, Eye, EyeOff, Zap, ShieldCheck, Lock, User, Check } from 'lucide-react';
+import { User as UserType, AccountType } from '../types';
 import { cn } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChasquiLogo } from '../components/ChasquiLogo';
 
 const registerSchema = z.object({
   nombre: z.string().min(3, 'Nombre demasiado corto'),
@@ -29,18 +29,15 @@ const registerSchema = z.object({
   telefono: z.string().min(9, 'Teléfono inválido'),
   tipoUsuario: z.enum(['comerciante', 'transportista']),
   tipoCuenta: z.enum(['natural', 'ruc10', 'ruc20']).optional(),
-  // Carrier specific
   tipoVehiculo: z.string().optional(),
   placa: z.string().optional(),
   capacidad: z.string().optional(),
   zonas: z.string().optional(),
-  // Bank details
   banco: z.string().optional(),
   tipoCuentaBancaria: z.string().optional(),
   numeroCuenta: z.string().optional(),
   cci: z.string().optional(),
   titularCuenta: z.string().optional(),
-  // Documents (Data URLs)
   dniDoc: z.string().optional(),
   licenciaDoc: z.string().optional(),
   tarjetaPropiedadDoc: z.string().optional(),
@@ -122,9 +119,8 @@ export const Register = () => {
               setIsLoading(false);
               return;
             }
-            // Si es admin, permitimos continuar para que el setDoc de abajo actualice el rol
           } catch (signInErr: any) {
-            setError('Este correo electrónico ya está registrado en el sistema de autenticación, pero no pudimos validar tu perfil. Por favor, contacta a soporte o usa otro correo.');
+            setError('Este correo electrónico ya está registrado. Por favor intenta con otro o recupera tu contraseña.');
             setIsLoading(false);
             return;
           }
@@ -148,7 +144,7 @@ export const Register = () => {
         totalRatings: 0,
         sumRatings: 0,
         completedTrips: 0,
-        indiceConfiabilidad: 100, // Starts with 100% reliability
+        indiceConfiabilidad: 100,
         createdAt: Date.now(),
         documentosUrls: {
           dni: dniUrl || '',
@@ -181,12 +177,10 @@ export const Register = () => {
 
       await setDoc(doc(db, 'users', user.uid), newUser);
       
-      // Enforce email verification
       if (!isAdminEmail) {
         await sendEmailVerification(user);
         setIsRegistered(true);
       } else {
-        // Admins are auto-verified in this logic or we just let them in
         setUser(newUser);
         navigate('/');
       }
@@ -217,6 +211,7 @@ export const Register = () => {
     const isValid = await trigger(fieldsToValidate);
     if (isValid) {
       setStep(s => s + 1);
+      window.scrollTo(0, 0);
     }
   };
 
@@ -230,8 +225,7 @@ export const Register = () => {
         if (type === 'tarjetaPropiedad') setTarjetaPropiedadUrl(compressedBase64);
         if (type === 'soat') setSoatUrl(compressedBase64);
       } catch (err) {
-        console.error('Error compressing image:', err);
-        setError('Error al procesar la imagen. Intenta con un archivo más pequeño.');
+        setError('Error al procesar la imagen.');
       }
     }
   };
@@ -249,510 +243,287 @@ export const Register = () => {
           const MAX_HEIGHT = 800;
           let width = img.width;
           let height = img.height;
-
           if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
           } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
           }
-
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          
-          // Compress to JPEG with 0.7 quality
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(dataUrl);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
-        img.onerror = (err) => reject(err);
+        img.onerror = reject;
       };
-      reader.onerror = (err) => reject(err);
+      reader.onerror = reject;
     });
   };
 
-  const prevStep = () => setStep(s => s - 1);
+  const prevStep = () => {
+    setStep(s => s - 1);
+    window.scrollTo(0, 0);
+  };
 
   if (isRegistered) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-md text-center">
-          <CardHeader>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 mb-4">
-              <Mail className="h-8 w-8 text-blue-600" />
-            </div>
-            <CardTitle className="text-2xl font-bold">¡Verifica tu correo!</CardTitle>
-            <CardDescription>
-              Hemos enviado un enlace de verificación a tu correo electrónico.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Por favor, revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace para activar tu cuenta.
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-[3rem] shadow-2xl p-12 max-w-md w-full text-center space-y-8 border border-slate-100"
+        >
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 rotate-3">
+            <Mail className="h-10 w-10" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">¡Verifica tu cuenta!</h2>
+            <p className="text-slate-500 font-medium">
+              Hemos enviado un enlace de activación a tu correo electrónico. Por favor revisa tu bandeja de entrada.
             </p>
-            <div className="rounded-lg bg-blue-50 p-4 border border-blue-100 text-left">
-              <div className="flex items-start space-x-3">
-                <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5" />
-                <p className="text-xs text-blue-700">
-                  Una vez verificado, podrás iniciar sesión y comenzar a usar la plataforma.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
-            <Button className="w-full" onClick={() => navigate('/login')}>
-              Ir al Inicio de Sesión
-            </Button>
-          </CardFooter>
-        </Card>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-left flex gap-3">
+             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+             <p className="text-xs font-bold text-emerald-700 leading-relaxed">
+               Una vez verificado, podrás publicar cargas o realizar ofertas de inmediato.
+             </p>
+          </div>
+          <Button className="w-full h-14 text-lg font-bold" onClick={() => navigate('/login')}>
+            Ir al Inicio de Sesión
+          </Button>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-6">
-            chasqui
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
+      {/* Left Wall - Marketing */}
+      <div className="hidden lg:flex flex-col justify-center p-12 bg-slate-900 overflow-hidden relative">
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]"></div>
+        <div className="relative z-10 space-y-12 max-w-lg mx-auto">
+          <Link to="/" className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-900 rotate-3">
+              <Zap className="h-6 w-6" />
+            </div>
+            <span className="text-2xl font-black tracking-tighter text-white">chasqui</span>
+          </Link>
+          <div className="space-y-6">
+            <h1 className="text-5xl font-black text-white leading-tight">
+              Únete a la <span className="text-blue-400">red logística</span> más segura del Perú.
+            </h1>
+            <p className="text-slate-400 text-lg font-medium">
+              Ya seas comerciante o transportista, Chasqui te brinda las herramientas para operar con total transparencia y seguridad.
+            </p>
           </div>
-          <CardTitle className="text-3xl font-bold">Crea tu cuenta</CardTitle>
-          <CardDescription>
-            Únete a la red de transporte de carga más grande del Perú
-          </CardDescription>
-          
-          {/* Progress Bar */}
-          <div className="mt-8 flex items-center justify-center space-x-4">
-            {[1, 2, 3, 4].map((s) => {
-              // Only show 4 steps for carriers
-              if (s === 4 && role === 'comerciante') return null;
-              return (
-                <div
-                  key={s}
-                  className={cn(
-                    "h-2 w-12 rounded-full transition-colors",
-                    step >= s ? "bg-blue-600" : "bg-gray-200"
-                  )}
-                />
-              );
-            })}
-          </div>
-        </CardHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="mt-6 space-y-6">
-            {error && (
-              <div className="flex items-center space-x-2 rounded-lg bg-red-50 p-3 text-sm text-red-600 border border-red-100">
-                <AlertCircle className="h-4 w-4" />
-                <span>{error}</span>
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 text-white/80">
+              <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                <Check className="h-5 w-5 text-emerald-400" />
               </div>
-            )}
+              <p className="text-sm font-bold">Registro rápido y verificado</p>
+            </div>
+            <div className="flex items-center gap-4 text-white/80">
+              <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                <Check className="h-5 w-5 text-blue-400" />
+              </div>
+              <p className="text-sm font-bold">Sin comisiones ocultas</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Wall - Form */}
+      <div className="flex flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 bg-white overflow-y-auto">
+        <div className="max-w-2xl w-full mx-auto space-y-10">
+          <div className="lg:hidden flex justify-center mb-6">
+             <Link to="/"><ChasquiLogo size="sm" /></Link>
+          </div>
+
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900">Crea tu cuenta</h2>
+                <p className="text-slate-500 font-medium tracking-tight">Regístrate en pocos pasos.</p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Paso {step} / {role === 'transportista' ? '4' : '3'}</span>
+                <div className="flex gap-1 mt-1">
+                  {[1, 2, 3, 4].map(s => {
+                    if (s === 4 && role === 'comerciante') return null;
+                    return (
+                      <div key={s} className={cn("h-1.5 w-6 rounded-full", step >= s ? "bg-blue-600" : "bg-slate-100")} />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-bold flex gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Step 1: Role Selection */}
             {step === 1 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => { 
-                    setValue('tipoUsuario', 'comerciante');
-                    setRole('comerciante'); 
-                    nextStep(); 
-                  }}
-                  className={cn(
-                    "flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition-all text-center",
-                    role === 'comerciante' ? "border-blue-600 bg-blue-50" : "border-gray-100 hover:border-blue-200"
-                  )}
-                >
-                  <Briefcase className="h-12 w-12 text-blue-600 mb-4" />
-                  <h3 className="font-bold text-lg">Soy Comerciante</h3>
-                  <p className="text-sm text-gray-500 mt-2">Quiero enviar carga y recibir ofertas de transportistas.</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { 
-                    setValue('tipoUsuario', 'transportista');
-                    setRole('transportista'); 
-                    nextStep(); 
-                  }}
-                  className={cn(
-                    "flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition-all text-center",
-                    role === 'transportista' ? "border-blue-600 bg-blue-50" : "border-gray-100 hover:border-blue-200"
-                  )}
-                >
-                  <Truck className="h-12 w-12 text-blue-600 mb-4" />
-                  <h3 className="font-bold text-lg">Soy Transportista</h3>
-                  <p className="text-sm text-gray-500 mt-2">Tengo un vehículo y quiero ofertar por servicios de carga.</p>
-                </button>
-                <input type="hidden" {...register('tipoUsuario')} />
-              </div>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <RoleCard 
+                  active={role === 'comerciante'} 
+                  onClick={() => { setValue('tipoUsuario', 'comerciante'); setRole('comerciante'); nextStep(); }}
+                  icon={<Briefcase className="h-10 w-10" />}
+                  title="Soy Comerciante"
+                  desc="Quiero enviar carga y recibir ofertas de transportistas."
+                />
+                <RoleCard 
+                  active={role === 'transportista'} 
+                  onClick={() => { setValue('tipoUsuario', 'transportista'); setRole('transportista'); nextStep(); }}
+                  icon={<Truck className="h-10 w-10" />}
+                  title="Soy Transportista"
+                  desc="Tengo un vehículo y quiero ofertar por servicios de carga."
+                />
+              </motion.div>
             )}
 
-            {/* Step 2: Basic Info */}
+            {/* Step 2: Information */}
             {step === 2 && (
-              <div className="space-y-4">
-                <Input
-                  label={role === 'comerciante' ? "Nombre o Razón Social" : "Nombre Completo"}
-                  placeholder="Ej: Juan Pérez o Logística SAC"
-                  {...register('nombre')}
-                  error={errors.nombre?.message}
-                />
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <Input label="Nombre o Razón Social" placeholder="Juan Pérez" {...register('nombre')} error={errors.nombre?.message} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="Email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="nombre@ejemplo.com"
-                    {...register('email')}
-                    error={errors.email?.message}
-                  />
-                  <Input
-                    label="Teléfono"
-                    placeholder="999 999 999"
-                    {...register('telefono')}
-                    error={errors.telefono?.message}
-                  />
+                  <Input label="Email" type="email" placeholder="nombre@ejemplo.com" {...register('email')} error={errors.email?.message} />
+                  <Input label="Teléfono" placeholder="999 999 999" {...register('telefono')} error={errors.telefono?.message} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="DNI o RUC"
-                    placeholder="Documento de identidad"
-                    {...register('documento')}
-                    error={errors.documento?.message}
-                  />
-                  <Input
-                    label="Contraseña"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    {...register('password')}
-                    error={errors.password?.message}
-                    suffix={
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="text-gray-400 hover:text-gray-600 focus:outline-none"
-                      >
-                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    }
-                  />
+                  <Input label="DNI o RUC" placeholder="Documento" {...register('documento')} error={errors.documento?.message} />
+                  <Input label="Contraseña" type={showPassword ? "text" : "password"} placeholder="••••••••" {...register('password')} error={errors.password?.message} 
+                         suffix={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>} />
                 </div>
                 {role === 'comerciante' && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Tipo de Cuenta</label>
-                    <select
-                      {...register('tipoCuenta')}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
+                    <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
+                    <select {...register('tipoCuenta')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500">
                       <option value="natural">Persona Natural</option>
-                      <option value="ruc10">RUC 10 (Persona con Negocio)</option>
-                      <option value="ruc20">RUC 20 (Empresa)</option>
+                      <option value="ruc10">RUC 10</option>
+                      <option value="ruc20">RUC 20</option>
                     </select>
                   </div>
                 )}
-                <div className="flex justify-between pt-4">
-                  <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                  <Button onClick={nextStep}>Siguiente</Button>
+                <div className="flex justify-between pt-6">
+                  <Button variant="ghost" onClick={prevStep} className="font-bold">Retroceder</Button>
+                  <Button onClick={nextStep} className="px-10 h-12 font-black">Continuar</Button>
                 </div>
-              </div>
+              </motion.div>
             )}
 
-            {/* Step 3: Role Specific / Final */}
+            {/* Step 3: Specifics / Upload */}
             {step === 3 && (
-              <div className="space-y-4">
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
                 {role === 'transportista' ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Input
-                        label="Tipo de Vehículo"
-                        placeholder="Ej: Camión 5tn, Furgón"
-                        {...register('tipoVehiculo')}
-                        error={errors.tipoVehiculo?.message}
-                      />
-                      <Input
-                        label="Placa"
-                        placeholder="ABC-123"
-                        {...register('placa')}
-                        error={errors.placa?.message}
-                      />
+                      <Input label="Tipo de Vehículo" placeholder="Camión 5tn" {...register('tipoVehiculo')} error={errors.tipoVehiculo?.message} />
+                      <Input label="Placa" placeholder="ABC-123" {...register('placa')} error={errors.placa?.message} />
                     </div>
-                    <Input
-                      label="Capacidad de Carga"
-                      placeholder="Ej: 5 Toneladas"
-                      {...register('capacidad')}
-                      error={errors.capacidad?.message}
-                    />
-                    <Input
-                      label="Zonas de Operación (separadas por coma)"
-                      placeholder="Ej: Lima, Arequipa, Trujillo"
-                      {...register('zonas')}
-                      error={errors.zonas?.message}
-                    />
-                    <div className="flex justify-between pt-4">
-                      <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                      <Button onClick={nextStep}>Siguiente: Documentos y Pago</Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input label="Capacidad" placeholder="5 Toneladas" {...register('capacidad')} error={errors.capacidad?.message} />
+                      <Input label="Zonas de Operación" placeholder="Lima, Ica, Piura" {...register('zonas')} error={errors.zonas?.message} />
+                    </div>
+                    <div className="flex justify-between pt-6">
+                      <Button variant="ghost" onClick={prevStep} className="font-bold">Retroceder</Button>
+                      <Button onClick={nextStep} className="px-10 h-12 font-black">Siguiente Paso</Button>
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="text-center space-y-2">
-                      <h3 className="text-xl font-bold">
-                        {ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) ? 'Registro de Administrador' : 'Verificación de Identidad'}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) 
-                          ? 'Estás registrando una cuenta con privilegios de administrador.' 
-                          : 'Sube una foto de tu DNI para validar tu cuenta de comerciante.'}
-                      </p>
+                  <div className="space-y-10">
+                    <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 flex flex-col items-center text-center space-y-6">
+                       <h3 className="text-xl font-black">Verificación de Identidad</h3>
+                       <p className="text-sm text-slate-500 font-medium">Sube una foto clara de tu DNI o RUC para mayor seguridad en la plataforma.</p>
+                       <UploadBox id="dni-m" active={!!dniUrl} label="Foto del DNI" onChange={(e) => handleFileUpload(e, 'dni')} />
                     </div>
-                    
-                    {!ADMIN_EMAILS.includes(watch('email')?.toLowerCase()) && (
-                      <div className="flex justify-center">
-                        <div className="w-full max-w-xs space-y-2">
-                          <label className="text-xs font-bold text-gray-700">DNI / RUC</label>
-                          <div className="relative">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleFileUpload(e, 'dni')}
-                              className="hidden"
-                              id="dni-upload-merchant"
-                            />
-                            <label
-                              htmlFor="dni-upload-merchant"
-                              className={cn(
-                                "flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-2xl cursor-pointer transition-all",
-                                dniUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                              )}
-                            >
-                              {dniUrl ? (
-                                <CheckCircle2 className="h-12 w-12 text-green-500" />
-                              ) : (
-                                <Upload className="h-12 w-12 text-gray-400" />
-                              )}
-                              <span className="text-sm mt-3 font-medium">Subir foto de DNI</span>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between pt-8">
-                      <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                      <Button 
-                        type="submit" 
-                        isLoading={isLoading} 
-                        disabled={!dniUrl && !ADMIN_EMAILS.includes(watch('email')?.toLowerCase())}
-                      >
-                        Finalizar Registro
-                      </Button>
+                    <div className="flex justify-between pt-6">
+                      <Button variant="ghost" onClick={prevStep} className="font-bold">Atrás</Button>
+                      <Button type="submit" isLoading={isLoading} disabled={!dniUrl && !ADMIN_EMAILS.includes(watch('email')?.toLowerCase())} className="px-12 h-14 font-black text-lg">Finalizar Registro</Button>
                     </div>
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
-            {/* Step 4: Documents & Bank Info (Only for Carriers) */}
+            {/* Step 4: Documents & Bank (Only Transportista) */}
             {step === 4 && role === 'transportista' && (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="font-bold text-lg flex items-center">
-                    <FileText className="h-5 w-5 mr-2 text-blue-600" />
-                    Documentos de Identidad y Vehículo
-                  </h3>
-                  <p className="text-xs text-gray-500">Sube fotos claras de tus documentos para validar tu cuenta.</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700">DNI / RUC</label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(e, 'dni')}
-                          className="hidden"
-                          id="dni-upload"
-                        />
-                        <label
-                          htmlFor="dni-upload"
-                          className={cn(
-                            "flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                            dniUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                          )}
-                        >
-                          {dniUrl ? (
-                            <CheckCircle2 className="h-8 w-8 text-green-500" />
-                          ) : (
-                            <Upload className="h-8 w-8 text-gray-400" />
-                          )}
-                          <span className="text-[10px] mt-2 font-medium">DNI</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700">Licencia</label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(e, 'licencia')}
-                          className="hidden"
-                          id="licencia-upload"
-                        />
-                        <label
-                          htmlFor="licencia-upload"
-                          className={cn(
-                            "flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                            licenciaUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                          )}
-                        >
-                          {licenciaUrl ? (
-                            <CheckCircle2 className="h-8 w-8 text-green-500" />
-                          ) : (
-                            <Upload className="h-8 w-8 text-gray-400" />
-                          )}
-                          <span className="text-[10px] mt-2 font-medium">Licencia</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700">Tarjeta Prop.</label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(e, 'tarjetaPropiedad')}
-                          className="hidden"
-                          id="tarjeta-upload"
-                        />
-                        <label
-                          htmlFor="tarjeta-upload"
-                          className={cn(
-                            "flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                            tarjetaPropiedadUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                          )}
-                        >
-                          {tarjetaPropiedadUrl ? (
-                            <CheckCircle2 className="h-8 w-8 text-green-500" />
-                          ) : (
-                            <Upload className="h-8 w-8 text-gray-400" />
-                          )}
-                          <span className="text-[10px] mt-2 font-medium">Tarjeta</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700">SOAT (Opcional)</label>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(e, 'soat')}
-                          className="hidden"
-                          id="soat-upload"
-                        />
-                        <label
-                          htmlFor="soat-upload"
-                          className={cn(
-                            "flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                            soatUrl ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-blue-400"
-                          )}
-                        >
-                          {soatUrl ? (
-                            <CheckCircle2 className="h-8 w-8 text-green-500" />
-                          ) : (
-                            <Upload className="h-8 w-8 text-gray-400" />
-                          )}
-                          <span className="text-[10px] mt-2 font-medium">SOAT</span>
-                        </label>
-                      </div>
-                    </div>
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-12">
+                <div className="space-y-6">
+                  <h3 className="text-xl font-black flex items-center gap-2"><FileText className="h-5 w-5 text-blue-600" /> Documentación</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <UploadBox id="dni" size="small" active={!!dniUrl} label="DNI" onChange={(e) => handleFileUpload(e, 'dni')} />
+                    <UploadBox id="lic" size="small" active={!!licenciaUrl} label="Licencia" onChange={(e) => handleFileUpload(e, 'licencia')} />
+                    <UploadBox id="tar" size="small" active={!!tarjetaPropiedadUrl} label="Tarjeta P." onChange={(e) => handleFileUpload(e, 'tarjetaPropiedad')} />
+                    <UploadBox id="soat" size="small" active={!!soatUrl} label="SOAT" onChange={(e) => handleFileUpload(e, 'soat')} />
                   </div>
                 </div>
-
-                <div className="space-y-4 pt-4 border-t border-gray-100">
-                  <h3 className="font-bold text-lg flex items-center">
-                    <Landmark className="h-5 w-5 mr-2 text-blue-600" />
-                    Información Bancaria
-                  </h3>
-                  <p className="text-xs text-gray-500">Necesaria para recibir tus pagos de forma segura.</p>
-                  
+                <div className="space-y-6 pt-8 border-t border-slate-100">
+                  <h3 className="text-xl font-black flex items-center gap-2"><Landmark className="h-5 w-5 text-blue-600" /> Datos de Pago</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Banco</label>
-                      <select
-                        {...register('banco')}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Selecciona un banco</option>
-                        <option value="BCP">BCP</option>
-                        <option value="Interbank">Interbank</option>
-                        <option value="BBVA">BBVA</option>
-                        <option value="Scotiabank">Scotiabank</option>
-                        <option value="Banco de la Nación">Banco de la Nación</option>
-                      </select>
+                       <label className="text-sm font-bold text-slate-700">Banco</label>
+                       <select {...register('banco')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
+                         <option value="">Selecciona...</option>
+                         <option value="BCP">BCP</option>
+                         <option value="Interbank">Interbank</option>
+                         <option value="BBVA">BBVA</option>
+                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Tipo de Cuenta</label>
-                      <select
-                        {...register('tipoCuentaBancaria')}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="ahorros">Ahorros</option>
-                        <option value="corriente">Corriente</option>
-                      </select>
+                       <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
+                       <select {...register('tipoCuentaBancaria')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
+                         <option value="ahorros">Ahorros</option>
+                         <option value="corriente">Corriente</option>
+                       </select>
                     </div>
                   </div>
-
-                  <Input
-                    label="Número de Cuenta"
-                    placeholder="Ej: 191-XXXXXXXX-X-XX"
-                    {...register('numeroCuenta')}
-                    error={errors.numeroCuenta?.message}
-                  />
-                  
+                  <Input label="Número de Cuenta" placeholder="Ej: 191-..." {...register('numeroCuenta')} />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="CCI (Opcional)"
-                      placeholder="Ej: 002-XXXXXXXXXXXXXXXXXXXX"
-                      {...register('cci')}
-                      error={errors.cci?.message}
-                    />
-                    <Input
-                      label="Titular de la Cuenta"
-                      placeholder="Nombre completo del titular"
-                      {...register('titularCuenta')}
-                      error={errors.titularCuenta?.message}
-                    />
+                    <Input label="CCI (Opcional)" placeholder="002-..." {...register('cci')} />
+                    <Input label="Titular" placeholder="Nombre completo" {...register('titularCuenta')} />
                   </div>
                 </div>
-
-                <div className="flex justify-between pt-4">
-                  <Button variant="ghost" onClick={prevStep}>Atrás</Button>
-                  <Button type="submit" isLoading={isLoading}>Finalizar Registro</Button>
+                <div className="flex justify-between pt-8">
+                  <Button variant="ghost" onClick={prevStep} className="font-bold">Atrás</Button>
+                  <Button type="submit" isLoading={isLoading} className="h-14 px-12 font-black text-lg">Finalizar Registro</Button>
                 </div>
-              </div>
+              </motion.div>
             )}
-          </CardContent>
-          <CardFooter className="justify-center border-t border-gray-100 bg-gray-50/50 py-4">
-            <p className="text-sm text-gray-600">
-              ¿Ya tienes una cuenta?{' '}
-              <Link to="/login" className="font-medium text-blue-600 hover:underline">
-                Inicia sesión
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+
+          <p className="text-center text-sm font-medium text-slate-500 py-6">
+            ¿Ya tienes una cuenta? <Link to="/login" className="font-black text-blue-600 hover:text-blue-700 underline">Inicia sesión</Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
+
+const RoleCard = ({ active, onClick, icon, title, desc }: { active: boolean; onClick: () => void; icon: React.ReactNode; title: string; desc: string }) => (
+  <button type="button" onClick={onClick} className={cn("flex flex-col items-center justify-center p-8 rounded-[2rem] border-2 transition-all text-center space-y-4", active ? "border-blue-600 bg-blue-50 shadow-xl shadow-blue-500/10 scale-[1.02]" : "border-slate-100 hover:border-slate-200 bg-slate-50/50")}>
+    <div className={cn("h-16 w-16 rounded-2xl flex items-center justify-center shadow-lg", active ? "bg-blue-600 text-white" : "bg-white text-slate-400")}>{icon}</div>
+    <div className="space-y-1">
+      <h3 className="font-black text-lg text-slate-900">{title}</h3>
+      <p className="text-xs text-slate-500 font-medium leading-relaxed leading-snug">{desc}</p>
+    </div>
+  </button>
+);
+
+const UploadBox = ({ id, label, active, size = "large", onChange }: { id: string; label: string; active: boolean; size?: "small" | "large"; onChange: (e: any) => void }) => (
+  <div className="w-full flex flex-col items-center gap-2">
+    <input type="file" accept="image/*" onChange={onChange} className="hidden" id={id} />
+    <label htmlFor={id} className={cn("flex flex-col items-center justify-center border-2 border-dashed rounded-2xl cursor-pointer transition-all w-full", size === "small" ? "h-24" : "h-32 shadow-sm bg-white", active ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-blue-400")}>
+      {active ? <CheckCircle2 className="h-8 w-8 text-emerald-500" /> : <Upload className="h-7 w-7 text-slate-300" />}
+      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-2">{label}</span>
+    </label>
+  </div>
+);

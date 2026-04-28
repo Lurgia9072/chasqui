@@ -1,5 +1,5 @@
 {
   "name": "chasquii",
-  "description": "Plataforma de transporte de carga tipo InDrive para el mercado peruano.",
+  "description": "Plataforma de transporte de carga  para el mercado peruano.",
   "requestFramePermissions": ["geolocation", "camera"]
 }
