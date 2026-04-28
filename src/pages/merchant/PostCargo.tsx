@@ -14,7 +14,7 @@ import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
 import { Package, MapPin, DollarSign, Info, ArrowLeft, Truck, X, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../../lib/utils';
+import { cn, cleanObject } from '../../lib/utils';
 
 const cargoSchema = z.object({
   origen: z.string().min(5, 'Dirección de origen inválida'),
@@ -78,15 +78,16 @@ export const PostCargo = () => {
     setIsLoading(true);
     try {
       const path = 'cargas';
-      const docRef = await addDoc(collection(db, path), {
+      const cargoData = cleanObject({
         ...data,
-        origenCoords: coords.origen,
-        destinoCoords: coords.destino,
+        origenCoords: coords.origen || null,
+        destinoCoords: coords.destino || null,
         comercianteId: user.uid,
         comercianteNombre: user.nombre,
         estado: 'disponible',
         createdAt: Date.now(),
       });
+      const docRef = await addDoc(collection(db, path), cargoData);
       navigate(`/merchant/cargo/${docRef.id}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'cargas');

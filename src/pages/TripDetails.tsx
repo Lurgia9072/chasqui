@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink } from 'lucide-react';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
@@ -18,7 +18,6 @@ import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-
 
 // Fix Leaflet default icon issue
 // @ts-ignore
@@ -123,6 +122,9 @@ export const TripDetails = () => {
   const [etaInfo, setEtaInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isGpsActive, setIsGpsActive] = useState(false);
   const [autoCenter, setAutoCenter] = useState(true);
+  const [appConfig, setAppConfig] = useState<any>(null);
+
+  const [viewingVoucherUrl, setViewingVoucherUrl] = useState<string | null>(null);
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
@@ -220,6 +222,16 @@ export const TripDetails = () => {
 
     return () => unsubscribe();
   }, [id, user]);
+
+  // Fetch App Config for Payment Methods
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'payment_methods'), (snap) => {
+      if (snap.exists()) {
+        setAppConfig(snap.data());
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (trip?.transportistaId) {
@@ -432,8 +444,8 @@ export const TripDetails = () => {
             });
             
             // Actualizar tiempo estimado en Firebase si es transportista
-            if (isCarrier && durationText && trip.tiempoEstimado !== durationText) {
-              updateDoc(doc(db, 'trips', trip.id), {
+            if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
+              updateDoc(doc(db, 'trips', trip?.id), {
                 tiempoEstimado: durationText
               });
             }
@@ -1056,7 +1068,7 @@ export const TripDetails = () => {
       </Button>
 
       {/* ALERTAS SMART */}
-      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retraso) && (
+      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retrasoCritico) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
           <div className="flex items-center space-x-3">
             <AlertCircle className="h-6 w-6 text-red-600 animate-pulse" />
@@ -1065,7 +1077,7 @@ export const TripDetails = () => {
               <p className="text-xs text-red-700">
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
                 {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
-                {trip.alertas.retraso && "Se detectó un retraso atípico en el tiempo de entrega estimado."}
+                {trip.alertas.retrasoCritico && "Se detectó un retraso crítico en el tiempo de entrega estimado."}
               </p>
             </div>
           </div>
@@ -1162,20 +1174,28 @@ export const TripDetails = () => {
                           <span className="text-[10px] font-bold text-purple-700">YAPE</span>
                         </div>
                         <div>
-                          <p className="text-xs font-bold">987 654 321</p>
-                          <p className="text-[10px] text-gray-500">A nombre de: TransportaYa SAC</p>
+                          <p className="text-xs font-bold">{appConfig?.yapeNumber || '987 654 321'}</p>
+                          <p className="text-[10px] text-gray-500 truncate">A nombre de: {appConfig?.yapeName || 'Chasqui SAC'}</p>
                         </div>
                       </div>
                       <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
                         <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center mr-3">
-                          <span className="text-[10px] font-bold text-blue-700">BCP</span>
+                          <span className="text-[10px] font-bold text-blue-700">{appConfig?.bcpBank?.substring(0, 4).toUpperCase() || 'BCP'}</span>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold">191-98765432-0-11</p>
-                          <p className="text-[10px] text-gray-500">CCI: 00219100987654320111</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start">
+                            <p className="text-[10px] font-bold text-blue-800 uppercase">{appConfig?.bcpBank || 'Banco'}</p>
+                            <p className="text-[9px] text-gray-400 font-mono">{appConfig?.bcpDocType || 'NIT'}: {appConfig?.bcpDocNum || '...'}</p>
+                          </div>
+                          <p className="text-xs font-bold font-mono truncate">{appConfig?.bcpAccount || '191-98765432-0-11'}</p>
+                          <p className="text-[10px] text-gray-500 truncate">CCI: {appConfig?.bcpCci || '00219100987654320111'}</p>
+                          <p className="text-[9px] text-gray-400 truncate">Titular: {appConfig?.bcpName || 'Chasqui SAC'}</p>
                         </div>
                       </div>
                     </div>
+                    {appConfig?.bcpName && (
+                      <p className="text-[10px] text-gray-400 font-medium text-center">Titular BCP: {appConfig.bcpName}</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1302,11 +1322,8 @@ export const TripDetails = () => {
                       <div 
                         className="h-16 w-16 bg-gray-100 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center"
                         onClick={() => {
-                          if (trip.pagoInfo?.comprobanteUrl && trip.pagoInfo.comprobanteUrl.startsWith('data:')) {
-                            const win = window.open();
-                            win?.document.write(`<img src="${trip.pagoInfo.comprobanteUrl}" style="max-width:100%">`);
-                          } else if (trip.pagoInfo?.comprobanteUrl !== 'pdf_file_uploaded') {
-                            window.open(trip.pagoInfo?.comprobanteUrl, '_blank');
+                          if (trip.pagoInfo?.comprobanteUrl && trip.pagoInfo.comprobanteUrl !== 'pdf_file_uploaded') {
+                            setViewingVoucherUrl(trip.pagoInfo.comprobanteUrl);
                           }
                         }}
                       >
@@ -1683,7 +1700,7 @@ export const TripDetails = () => {
                                             src={displayUrl} 
                                             alt="Evidencia" 
                                             className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" 
-                                            onClick={() => window.open(displayUrl)} 
+                                            onClick={() => setViewingVoucherUrl(displayUrl)} 
                                           />
                                         );
                                       })()}
@@ -2127,20 +2144,45 @@ export const TripDetails = () => {
                       </div>
                       
                       {trip.payoutInfo?.estado === 'pagado' ? (
-                        <div className="space-y-2 pt-2 border-t border-emerald-200">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-emerald-600">Referencia:</span>
-                            <span className="font-mono font-bold text-gray-900">{trip.payoutInfo.referencia}</span>
+                        <>
+                          <div className="space-y-2 pt-2 border-t border-emerald-200">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-emerald-600">Referencia:</span>
+                              <span className="font-mono font-bold text-gray-900">{trip.payoutInfo.referencia}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-emerald-600">Fecha:</span>
+                              <span className="font-bold text-gray-900">{new Date(trip.payoutInfo.pagadoAt!).toLocaleDateString()}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-emerald-600">Monto:</span>
+                              <span className="font-bold text-gray-900">S/ {trip.payoutInfo.montoPagado?.toFixed(2)}</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-emerald-600">Fecha:</span>
-                            <span className="font-bold text-gray-900">{new Date(trip.payoutInfo.pagadoAt!).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-emerald-600">Monto:</span>
-                            <span className="font-bold text-gray-900">S/ {trip.payoutInfo.montoPagado?.toFixed(2)}</span>
-                          </div>
-                        </div>
+
+                          {trip.payoutInfo.comprobanteUrl && (
+                            <div 
+                              className="pt-2 cursor-pointer group"
+                              onClick={() => setViewingVoucherUrl(trip.payoutInfo!.comprobanteUrl!)}
+                            >
+                              <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1 flex items-center">
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Constancia de Pago:
+                              </p>
+                              <div className="relative h-24 w-full rounded-lg border border-emerald-200 overflow-hidden bg-white flex items-center justify-center">
+                                <img 
+                                  src={trip.payoutInfo.comprobanteUrl} 
+                                  alt="Constancia" 
+                                  className="h-full w-full object-contain group-hover:scale-105 transition-transform" 
+                                  referrerPolicy="no-referrer"
+                                />
+                                <div className="absolute inset-0 bg-emerald-600/10 group-hover:bg-transparent transition-colors flex items-center justify-center">
+                                  <ExternalLink className="h-5 w-5 text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <p className="text-xs text-blue-700 italic">
                           El administrador está procesando tu pago a tu cuenta bancaria configurada.
@@ -2264,16 +2306,16 @@ export const TripDetails = () => {
               </Button>
               <Button 
                 size="sm" 
-                variant={trip.alertas?.retraso ? "destructive" : "outline"}
-                className={cn("h-10 text-[11px]", trip.alertas?.retraso && "animate-pulse")}
+                variant={trip.alertas?.retrasoCritico ? "destructive" : "outline"}
+                className={cn("h-10 text-[11px]", trip.alertas?.retrasoCritico && "animate-pulse")}
                 onClick={async () => {
                   await updateDoc(doc(db, 'trips', trip.id), {
-                    'alertas.retraso': !trip.alertas?.retraso
+                    'alertas.retraso': !trip.alertas?.retrasoCritico
                   });
                 }}
               >
                 <AlertCircle className="h-3 w-3 mr-2" />
-                {trip.alertas?.retraso ? 'Detener Alerta Retraso' : 'Simular Retraso'}
+                {trip.alertas?.retrasoCritico ? 'Detener Alerta Retraso' : 'Simular Retraso'}
               </Button>
             </div>
           </CardContent>
@@ -2476,10 +2518,54 @@ export const TripDetails = () => {
           </div>
         </div>
       )}
+      {viewingVoucherUrl && (
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setViewingVoucherUrl(null)}
+        >
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="relative max-w-4xl w-full h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              className="absolute -top-12 right-0 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+              onClick={() => setViewingVoucherUrl(null)}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <div className="flex-1 overflow-auto bg-white rounded-2xl p-2">
+              <img 
+                src={viewingVoucherUrl} 
+                alt="Voucher Grande" 
+                className="w-full h-auto object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="mt-4 flex justify-between items-center text-white p-2">
+              <span className="text-sm font-medium">Constancia de Pago</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = viewingVoucherUrl;
+                  link.download = `payout-voucher-${trip.id}.png`;
+                  link.click();
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Descargar
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   </div>
   );
 };
 
-
-
+       

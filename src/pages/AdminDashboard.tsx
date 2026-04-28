@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { ADMIN_EMAILS } from '../lib/constants';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
-type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'payouts' | 'todos' | 'users' | 'cargas' | 'soporte';
+type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'payouts' | 'todos' | 'users' | 'cargas' | 'soporte' | 'config';
 type UserVerificationFilter = 'todos' | 'pendiente' | 'verificado' | 'rechazado';
 
 interface SupportTicket {
@@ -65,6 +65,8 @@ export const AdminDashboard = () => {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [adminReply, setAdminReply] = useState('');
+  const [appConfig, setAppConfig] = useState<any>(null);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
@@ -130,6 +132,26 @@ export const AdminDashboard = () => {
       unsubTrips();
       unsubSupport();
     };
+  }, [isAdmin]);
+
+  // Fetch App Config
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = onSnapshot(doc(db, 'config', 'payment_methods'), (snap) => {
+      if (snap.exists()) {
+        setAppConfig(snap.data());
+      } else {
+        // Initialize with defaults if not exists
+        setAppConfig({
+          yapeNumber: '987 654 321',
+          yapeName: 'TransportaYa SAC',
+          bcpAccount: '191-98765432-0-11',
+          bcpCci: '00219100987654320111',
+          bcpName: 'TransportaYa SAC'
+        });
+      }
+    });
+    return () => unsub();
   }, [isAdmin]);
 
   useEffect(() => {
@@ -320,6 +342,22 @@ export const AdminDashboard = () => {
       handleFirestoreError(err, OperationType.UPDATE, `trips/${rejectingTrip.id}`);
     } finally {
       setIsUpdating(null);
+    }
+  };
+
+  const handleUpdateAppConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appConfig) return;
+    setIsSavingConfig(true);
+    try {
+      await setDoc(doc(db, 'config', 'payment_methods'), appConfig);
+      // addNotification placeholder replaced by simple alert for now or you can implement a local toast state
+      alert('Configuración guardada con éxito');
+    } catch (err) {
+      console.error(err);
+      alert('Error al guardar la configuración');
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -553,6 +591,16 @@ export const AdminDashboard = () => {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setActiveTab('config')}
+          className={cn(
+            "px-6 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center",
+            activeTab === 'config' ? "bg-white text-slate-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <CreditCard className="h-4 w-4 mr-2" />
+          Configuración
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
@@ -736,7 +784,7 @@ export const AdminDashboard = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Publicado por: {c.comercianteNombre}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-purple-600">S/ {c.precioSugerido}</p>
+                      <p className="text-sm font-bold text-purple-600">S/ {c.precioPropuesto}</p>
                       <span className={cn(
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
                         c.estado === 'abierta' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
@@ -1055,15 +1103,137 @@ export const AdminDashboard = () => {
         </Card>
       </div>
 
+      {activeTab === 'config' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center">
+                <Banknote className="h-6 w-6 mr-2 text-blue-600" />
+                Configuración de Métodos de Pago
+              </CardTitle>
+              <CardDescription>Estos datos se mostrarán a los comerciantes cuando necesiten pagar un flete.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateAppConfig} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4 p-4 bg-orange-50/50 rounded-2xl border border-orange-100">
+                    <h4 className="font-bold text-orange-900 flex items-center">
+                      <div className="h-6 w-6 bg-orange-200 rounded flex items-center justify-center mr-2 text-[10px] font-black text-orange-700">YAPE</div>
+                      Datos de Yape
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-orange-700 uppercase">Número de Celular</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-orange-100 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm"
+                          value={appConfig?.yapeNumber || ''}
+                          onChange={(e) => setAppConfig({ ...appConfig, yapeNumber: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-orange-700 uppercase">Nombre del Titular</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-orange-100 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm"
+                          value={appConfig?.yapeName || ''}
+                          onChange={(e) => setAppConfig({ ...appConfig, yapeName: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                    <h4 className="font-bold text-blue-900 flex items-center">
+                      <div className="h-6 w-6 bg-blue-200 rounded flex items-center justify-center mr-2 text-[10px] font-black text-blue-700">BCP</div>
+                      Datos de Cuentas Bancarias
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-blue-700 uppercase">Banco</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          value={appConfig?.bcpBank || 'Interbank'}
+                          onChange={(e) => setAppConfig({ ...appConfig, bcpBank: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-blue-700 uppercase">Número de Cuenta</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          value={appConfig?.bcpAccount || ''}
+                          onChange={(e) => setAppConfig({ ...appConfig, bcpAccount: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-blue-700 uppercase">CCI</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          value={appConfig?.bcpCci || ''}
+                          onChange={(e) => setAppConfig({ ...appConfig, bcpCci: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-blue-700 uppercase">Titular / Empresa</label>
+                        <input 
+                          type="text"
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          value={appConfig?.bcpName || ''}
+                          onChange={(e) => setAppConfig({ ...appConfig, bcpName: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-blue-700 uppercase">Tipo Documento</label>
+                          <input 
+                            type="text"
+                            className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            value={appConfig?.bcpDocType || 'NIT'}
+                            onChange={(e) => setAppConfig({ ...appConfig, bcpDocType: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-blue-700 uppercase">No. Documento</label>
+                          <input 
+                            type="text"
+                            className="w-full p-2.5 bg-white border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            value={appConfig?.bcpDocNum || ''}
+                            onChange={(e) => setAppConfig({ ...appConfig, bcpDocNum: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-gray-100">
+                   <Button 
+                    type="submit"
+                    className="px-8 shadow-lg shadow-blue-100"
+                    isLoading={isSavingConfig}
+                    disabled={!appConfig}
+                   >
+                     Guardar Configuración
+                   </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Payout Modal */}
       {payingTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="text-xl font-bold text-gray-900">Procesar Reembolso</h3>
-              <button onClick={() => setPayingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+              <Button onClick={() => setPayingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                 <X className="h-5 w-5 text-gray-500" />
-              </button>
+              </Button>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-start space-x-3">
@@ -1083,6 +1253,41 @@ export const AdminDashboard = () => {
                   value={payoutRef}
                   onChange={(e) => setPayoutRef(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Comprobante (Opcional):</label>
+                <div 
+                  className={cn(
+                    "bg-gray-50 p-6 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center group",
+                    payoutFile ? "border-emerald-400 bg-emerald-50/30" : "border-gray-200 hover:border-emerald-400"
+                  )}
+                  onClick={() => document.getElementById('payout-upload')?.click()}
+                >
+                  <input 
+                    id="payout-upload"
+                    type="file" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setPayoutFile(file);
+                        const reader = new FileReader();
+                        reader.onloadend = () => setPayoutProofUrl(reader.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  {payoutProofUrl ? (
+                    <img src={payoutProofUrl} alt="Voucher" className="h-32 w-auto object-contain mx-auto rounded-lg shadow-md" />
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Receipt className="h-8 w-8 text-gray-400 group-hover:text-emerald-500 transition-colors" />
+                      <p className="text-xs text-gray-500 mt-2">Haz clic para subir la foto del voucher</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
