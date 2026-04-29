@@ -10,11 +10,11 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Truck, AlertCircle, Briefcase, FileText, Mail, CheckCircle2, Upload, Landmark, Eye, EyeOff, Zap, ShieldCheck, Lock, User, Check } from 'lucide-react';
+import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User as UserType, AccountType } from '../types';
 import { cn } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChasquiLogo } from '../components/ChasquiLogo';
 
 const registerSchema = z.object({
   nombre: z.string().min(3, 'Nombre demasiado corto'),
@@ -178,7 +178,11 @@ export const Register = () => {
       await setDoc(doc(db, 'users', user.uid), newUser);
       
       if (!isAdminEmail) {
-        await sendEmailVerification(user);
+        const actionCodeSettings = {
+          url: window.location.origin + '/login',
+          handleCodeInApp: true,
+        };
+        await sendEmailVerification(user, actionCodeSettings);
         setIsRegistered(true);
       } else {
         setUser(newUser);
@@ -301,11 +305,8 @@ export const Register = () => {
       <div className="hidden lg:flex flex-col justify-center p-12 bg-slate-900 overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]"></div>
         <div className="relative z-10 space-y-12 max-w-lg mx-auto">
-          <Link to="/" className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-900 rotate-3">
-              <Zap className="h-6 w-6" />
-            </div>
-            <span className="text-2xl font-black tracking-tighter text-white">chasqui</span>
+          <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+            <ChasquiLogo variant="white" />
           </Link>
           <div className="space-y-6">
             <h1 className="text-5xl font-black text-white leading-tight">

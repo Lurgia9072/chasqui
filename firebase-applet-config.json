@@ -1,10 +1,9 @@
 {
-  "projectId": "transportaya-35b29",
-  "appId": "1:757072090933:web:ed06e9b27ddafbe8ed1e7c",
-  "apiKey": "AIzaSyCk0LZPYmXHhhyksxYbJcFAqAu3EtpAWys",
-  "authDomain": "transportaya-35b29.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "transportaya-35b29.firebasestorage.app",
-  "messagingSenderId": "757072090933",
-  "measurementId": "G-0LR5NLPEJ8"
+ "apiKey": "AIzaSyAGPrU8vMsHtfgP1BRabFk8nbLG5m7M5-w",
+  "authDomain": "chasqui-8aaa9.firebaseapp.com",
+  "projectId": "chasqui-8aaa9",
+  "storageBucket": "chasqui-8aaa9.firebasestorage.app",
+  "messagingSenderId": "639057191967",
+  "appId": "1:639057191967:web:facdf8ea19d3305d11a12a",
+  "measurementId": "G-QS51XHM425"
 }
