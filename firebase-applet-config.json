@@ -1,9 +1,10 @@
 {
- "apiKey": "AIzaSyAGPrU8vMsHtfgP1BRabFk8nbLG5m7M5-w",
+  "apiKey": "AIzaSyAGPrU8vMsHtfgP1BRabFk8nbLG5m7M5-w",
   "authDomain": "chasqui-8aaa9.firebaseapp.com",
   "projectId": "chasqui-8aaa9",
   "storageBucket": "chasqui-8aaa9.firebasestorage.app",
   "messagingSenderId": "639057191967",
   "appId": "1:639057191967:web:facdf8ea19d3305d11a12a",
-  "measurementId": "G-QS51XHM425"
+  "measurementId": "G-QS51XHM425",
+  "firestoreDatabaseId": "(default)"
 }
