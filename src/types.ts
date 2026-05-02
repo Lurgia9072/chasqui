@@ -174,6 +174,7 @@ export interface Trip {
   horaRecojo?: string;
   recojoRealAt?: number;
   entregaRealAt?: number;
+  llegadaAntesLimite?: boolean;
   lastTempUpdateAt?: number;
   vehiculo?: {
     tipo: string;

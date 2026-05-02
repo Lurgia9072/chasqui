@@ -142,7 +142,7 @@ service cloud.firestore {
     }
 
     function isValidCargo(data) {
-      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
+      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt', 'categoria']) &&
              data.comercianteId == request.auth.uid &&
              data.tipoCarga is string && data.tipoCarga.size() > 0 && data.tipoCarga.size() < 100 &&
              data.peso is number && 
@@ -150,6 +150,7 @@ service cloud.firestore {
              data.destino is string && data.destino.size() > 0 && data.destino.size() < 200 &&
              data.precioPropuesto is number && data.precioPropuesto > 0 && data.precioPropuesto < 1000000 &&
              data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
+             data.categoria in ['general', 'perecible', 'fragil', 'peligrosa'] &&
              data.createdAt is number &&
              (!('nombreProducto' in data) || (data.nombreProducto is string)) &&
              (!('lote' in data) || (data.lote is string)) &&
@@ -192,6 +193,14 @@ service cloud.firestore {
              (!('temperaturaRequerida' in data) || (data.temperaturaRequerida is string)) &&
              (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number)) &&
              (!('lastTempUpdateAt' in data) || (data.lastTempUpdateAt is number)) &&
+             (!('recojoRealAt' in data) || (data.recojoRealAt is number)) &&
+             (!('entregaRealAt' in data) || (data.entregaRealAt is number)) &&
+             (!('llegadaAntesLimite' in data) || (data.llegadaAntesLimite is bool)) &&
+             (!('temperaturaActual' in data) || (data.temperaturaActual is string)) &&
+             (!('recojoEstado' in data) || (data.recojoEstado is string)) &&
+             (!('recojoTemp' in data) || (data.recojoTemp is string)) &&
+             (!('entregaEstado' in data) || (data.entregaEstado is string)) &&
+             (!('entregaTemp' in data) || (data.entregaTemp is string)) &&
              (!('seguimiento' in data) || data.seguimiento is map);
     }
 

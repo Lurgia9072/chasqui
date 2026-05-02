@@ -213,3 +213,80 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
 
   doc.save(`CHASQUI_TRAZABILIDAD_${trip.id.toUpperCase()}.pdf`);
 };
+
+export const generateMonthlyReport = (trips: Trip[], merchant: User) => {
+  const doc = new jsPDF();
+  const primaryColor = [15, 23, 42]; // slate-900
+
+  // Header
+  doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.rect(0, 0, 210, 45, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.setFont('helvetica', 'bold');
+  doc.text('REPORTE MENSUAL DE TRAZABILIDAD', 15, 20);
+  doc.setFontSize(12);
+  doc.text(`${merchant.razonSocial || merchant.nombre} - RUC: ${merchant.ruc || merchant.documento}`, 15, 30);
+  doc.setFontSize(10);
+  doc.text(`PERIODO: ${dateFnsFormat(new Date(), 'MMMM yyyy', { locale: es }).toUpperCase()}`, 15, 38);
+
+  doc.setFontSize(9);
+  doc.text(`GENERADO: ${dateFnsFormat(new Date(), 'dd/MM/yyyy HH:mm')}`, 150, 38);
+
+  // Stats Summary
+  const completedCount = trips.length;
+  const onTimeCount = trips.filter(t => t.llegadaAntesLimite).length;
+  const reliability = completedCount > 0 ? ((onTimeCount / completedCount) * 100).toFixed(1) : '100';
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.text('RESUMEN DE INDICADORES (KPI)', 15, 60);
+  doc.setDrawColor(200, 200, 200);
+  doc.line(15, 62, 195, 62);
+
+  autoTable(doc, {
+    startY: 65,
+    head: [['Total Envíos', 'Entregas a Tiempo', 'Índice de Puntualidad']],
+    body: [[completedCount.toString(), onTimeCount.toString(), `${reliability}%`]],
+    theme: 'grid',
+    headStyles: { fillColor: [51, 65, 85] }
+  });
+
+  // Detailed Table
+  const tableRows = trips.map(t => [
+    t.id.substring(0, 8).toUpperCase(),
+    t.nombreProducto || t.tipoCarga || 'N/A',
+    t.guiaRemision || 'N/A',
+    t.destino.substring(0, 20),
+    dateFnsFormat(t.entregaRealAt || t.createdAt, 'dd/MM/yyyy'),
+    t.llegadaAntesLimite ? 'A TIEMPO' : 'RETRASO'
+  ]);
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 15,
+    head: [['ID Viaje', 'Producto', 'Guía', 'Destino', 'F. Entrega', 'Estado']],
+    body: tableRows,
+    theme: 'striped',
+    headStyles: { fillColor: primaryColor as any },
+    styles: { fontSize: 8 },
+    didDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        if (data.cell.text[0] === 'A TIEMPO') {
+          doc.setTextColor(22, 163, 74);
+        } else {
+          doc.setTextColor(220, 38, 38);
+        }
+      }
+    }
+  });
+
+  // Footer text
+  const finalY = (doc as any).lastAutoTable.finalY + 20;
+  doc.setTextColor(100, 100, 100);
+  doc.setFontSize(8);
+  doc.text('Este reporte es un documento certificado por la plataforma Chasqui.', 15, finalY);
+  doc.text('Los datos de geolocalización y tiempos son auditables mediante la cadena de custodia digital.', 15, finalY + 5);
+
+  doc.save(`REPORTE_MENSUAL_${merchant.nombre.replace(/\s+/g, '_')}.pdf`);
+};

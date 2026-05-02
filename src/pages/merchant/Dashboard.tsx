@@ -13,6 +13,7 @@ import { cn } from '../../lib/utils';
 import { motion } from 'motion/react';
 import { ADMIN_EMAILS } from '../../lib/constants';
 import { NearbyCarriersMap } from '../../components/NearbyCarriersMap';
+import { generateMonthlyReport } from '../../lib/pdfGenerator';
 import { User } from '../../types';
 
 export const MerchantDashboard = () => {
@@ -88,8 +89,11 @@ export const MerchantDashboard = () => {
   }, [user]);
 
   const handleExportMonthly = () => {
-    // This is a placeholder for generating a summary PDF of multiple trips
-    alert('Generando reporte consolidado del mes... El reporte incluirá los ' + completedTrips.length + ' envíos completados con su respectiva trazabilidad.');
+    if (!user || completedTrips.length === 0) {
+      alert('No hay viajes completados este mes para exportar.');
+      return;
+    }
+    generateMonthlyReport(completedTrips, user as any);
   };
 
   return (
@@ -370,68 +374,117 @@ export const MerchantDashboard = () => {
         </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cargas
-            .filter(c => {
-               if (filter === 'activas') return c.estado === 'asignado';
-               if (filter === 'por_salir') return c.estado === 'disponible' || c.estado === 'en_negociacion';
-               if (filter === 'completadas') return c.estado === 'completado';
-               return true;
-            })
-            .map((carga) => (
-            <Link key={carga.id} to={`/merchant/cargo/${carga.id}`}>
-              <Card className="hover:border-blue-300 transition-all group overflow-hidden">
-                <div className={cn(
-                  "h-1.5 w-full",
-                  carga.estado === 'disponible' ? "bg-green-500" : 
-                  carga.estado === 'en_negociacion' ? "bg-blue-500" : "bg-gray-400"
-                )} />
-                <CardHeader className="pb-4">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg font-bold group-hover:text-blue-600 transition-colors">
-                      {carga.nombreProducto || carga.tipoCarga}
-                    </CardTitle>
-                    <span className={cn(
-                      "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
-                      carga.estado === 'disponible' ? "bg-green-100 text-green-700" : 
-                      carga.estado === 'en_negociacion' ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
-                    )}>
-                      {carga.estado}
-                    </span>
-                  </div>
-                  <CardDescription className="flex items-center text-[10px] font-bold text-slate-500 uppercase">
-                    <Clock className="h-3 w-3 mr-1" />
-                    Puerto Destino: <span className="text-slate-900 ml-1">{carga.puertoDestino || 'N/E'}</span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 pb-6">
-                  <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-                    <span>Lote: <span className="text-slate-900">{carga.lote || 'N/E'}</span></span>
-                    <span>Guía: <span className="text-slate-900">{carga.guiaRemision || 'N/E'}</span></span>
-                  </div>
-                  <div className="space-y-2 border-t border-slate-50 pt-3">
-                    <div className="flex items-start text-sm">
-                      <MapPin className="h-4 w-4 text-red-500 mr-2 mt-0.5 shrink-0" />
-                      <span className="text-gray-600 font-medium truncate">{carga.origen}</span>
+          {filter === 'completadas' ? (
+            completedTrips.map((trip) => (
+              <Link key={trip.id} to={`/trip/${trip.id}`}>
+                <Card className="hover:border-green-300 border-2 border-green-50 transition-all group overflow-hidden bg-white shadow-sm">
+                  <div className="h-1.5 w-full bg-green-500" />
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg font-bold group-hover:text-green-600 transition-colors">
+                        {trip.nombreProducto || trip.tipoCarga || 'Carga Finalizada'}
+                      </CardTitle>
+                      <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">
+                        Entregado
+                      </span>
                     </div>
-                    <div className="flex items-start text-sm">
-                      <MapPin className="h-4 w-4 text-blue-500 mr-2 mt-0.5 shrink-0" />
-                      <span className="text-gray-600 font-medium truncate">{carga.destino}</span>
+                    <CardDescription className="flex items-center text-[10px] font-bold text-slate-500 uppercase">
+                      <ShieldCheck className="h-3 w-3 mr-1 text-green-600" />
+                      Trazabilidad Certificada
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pb-6">
+                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                      <span>Guía: <span className="text-slate-900">{trip.guiaRemision || 'N/E'}</span></span>
+                      <span>Lote: <span className="text-slate-900">{trip.lote || 'N/E'}</span></span>
                     </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pt-4 border-t border-gray-50">
-                    <div className="flex flex-col">
-                      <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Precio Propuesto</span>
-                      <span className="text-xl font-extrabold text-gray-900">S/ {carga.precioPropuesto}</span>
+                    <div className="space-y-2 border-t border-slate-50 pt-3">
+                      <div className="flex items-start text-sm">
+                        <MapPin className="h-4 w-4 text-slate-400 mr-2 mt-0.5 shrink-0" />
+                        <span className="text-gray-600 font-medium truncate">{trip.origen}</span>
+                      </div>
+                      <div className="flex items-start text-sm">
+                        <MapPin className="h-4 w-4 text-green-500 mr-2 mt-0.5 shrink-0" />
+                        <span className="text-gray-600 font-medium truncate">{trip.destino}</span>
+                      </div>
                     </div>
-                    <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
-                      <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+                    
+                    <div className="flex justify-between items-center pt-4 border-t border-green-50">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 uppercase font-bold">Inversión Final</span>
+                        <span className="text-lg font-extrabold text-gray-900">S/ {trip.precioFinal}</span>
+                      </div>
+                      <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
+                        <ChevronRight className="h-5 w-5 text-green-600" />
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            ))
+          ) : (
+            cargas
+              .filter(c => {
+                 if (filter === 'activas') return c.estado === 'asignado';
+                 if (filter === 'por_salir') return c.estado === 'disponible' || c.estado === 'en_negociacion';
+                 return true;
+              })
+              .map((carga) => (
+              <Link key={carga.id} to={`/merchant/cargo/${carga.id}`}>
+                <Card className="hover:border-blue-300 transition-all group overflow-hidden">
+                  <div className={cn(
+                    "h-1.5 w-full",
+                    carga.estado === 'disponible' ? "bg-green-500" : 
+                    carga.estado === 'en_negociacion' ? "bg-blue-500" : "bg-gray-400"
+                  )} />
+                  <CardHeader className="pb-4">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg font-bold group-hover:text-blue-600 transition-colors">
+                        {carga.nombreProducto || carga.tipoCarga}
+                      </CardTitle>
+                      <span className={cn(
+                        "text-[10px] uppercase font-bold px-2 py-1 rounded-full",
+                        carga.estado === 'disponible' ? "bg-green-100 text-green-700" : 
+                        carga.estado === 'en_negociacion' ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
+                      )}>
+                        {carga.estado}
+                      </span>
+                    </div>
+                    <CardDescription className="flex items-center text-[10px] font-bold text-slate-500 uppercase">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Puerto Destino: <span className="text-slate-900 ml-1">{carga.puertoDestino || 'N/E'}</span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pb-6">
+                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                      <span>Lote: <span className="text-slate-900">{carga.lote || 'N/E'}</span></span>
+                      <span>Guía: <span className="text-slate-900">{carga.guiaRemision || 'N/E'}</span></span>
+                    </div>
+                    <div className="space-y-2 border-t border-slate-50 pt-3">
+                      <div className="flex items-start text-sm">
+                        <MapPin className="h-4 w-4 text-red-500 mr-2 mt-0.5 shrink-0" />
+                        <span className="text-gray-600 font-medium truncate">{carga.origen}</span>
+                      </div>
+                      <div className="flex items-start text-sm">
+                        <MapPin className="h-4 w-4 text-blue-500 mr-2 mt-0.5 shrink-0" />
+                        <span className="text-gray-600 font-medium truncate">{carga.destino}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center pt-4 border-t border-gray-50">
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Precio Propuesto</span>
+                        <span className="text-xl font-extrabold text-gray-900">S/ {carga.precioPropuesto}</span>
+                      </div>
+                      <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))
+          )}
         </div>
       )}
 
