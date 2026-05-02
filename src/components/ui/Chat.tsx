@@ -168,18 +168,23 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return;
 
+    const messageToSend = newMessage;
+    setNewMessage('');
+
     try {
       await addDoc(collection(db, 'trips', tripId, 'messages'), {
         senderId: user.uid,
         senderName: user.nombre,
         senderPhotoUrl: user.photoUrl || null,
-        text: newMessage,
+        text: messageToSend,
         type: 'text',
         createdAt: Date.now()
       });
-      setNewMessage('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `trips/${tripId}/messages`);
+      // Optional: restore message if failed? Usually users prefer it staying gone if they already moved on.
+      // But for better UX maybe we should restore it if it fails.
+      // For now, clearing it immediately is what the user asked for "debe ser rapido".
     }
   };
 
