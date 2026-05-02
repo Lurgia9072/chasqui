@@ -41,10 +41,17 @@ export interface User {
     entregasExitosas: number;
     tasaCancelacion: number;
   };
+  // Campos Empresa Exportadora
+  ruc?: string;
+  razonSocial?: string;
+  sector?: 'alimentos_procesados' | 'agroindustrial' | 'metalmecanica' | 'confecciones' | 'otro';
+  puertoPrincipal?: 'callao' | 'paita' | 'matarani' | 'ilo' | 'otro';
+  agenteAduana?: string;
+  
   zonasOperacion?: string[];
   currentLocation?: Location;
   vehiculo?: {
-    tipo: string;
+    tipo: 'refrigerado' | 'seco' | 'isotermico' | 'plataforma' | 'grua' | string;
     placa: string;
     capacidad: string;
     sensorTemperatura?: boolean;
@@ -59,7 +66,7 @@ export interface User {
     banco: string;
     tipoCuenta: string;
     numeroCuenta: string;
-    cci: string;
+    cci?: string;
     titular: string;
   };
   createdAt: number;
@@ -75,7 +82,24 @@ export interface Cargo {
   destinoCoords?: Location;
   tipoCarga: string;
   categoria: 'general' | 'perecible' | 'fragil' | 'peligrosa';
-  temperaturaRequerida?: string;
+  
+  // Datos Producto Exportable
+  nombreProducto?: string;
+  lote?: string;
+  certificacion?: 'organico' | 'globalgap' | 'fair_trade' | 'sin_certificacion';
+  partidaArancelaria?: string;
+
+  // Condiciones de Transporte
+  temperaturaRequerida?: 'ambiente' | 'refrigerado' | 'congelado' | 'controlado' | string;
+  tipoVehiculoRequerido?: 'refrigerado' | 'seco' | 'isotermico' | 'indiferente';
+  condicionSanitaria?: boolean; // Vehículo con limpieza previa certificada
+
+  // Datos de Exportación
+  guiaRemision?: string;
+  puertoDestino?: string;
+  fechaHoraLimitePuerto?: number;
+  numeroContenedor?: string;
+
   cuidadoEspecial?: string;
   peso: string;
   capacidadRequerida: string;
@@ -116,19 +140,33 @@ export interface Trip {
   estado: TripStatus;
   seguimiento?: Location;
   checkpoints: Checkpoint[];
+  
+  // Trazabilidad Específica
+  fechaHoraLimitePuerto?: number;
+  nombreProducto?: string;
+  lote?: string;
+  guiaRemision?: string;
+  temperaturaRequerida?: string;
+
   alertas?: {
     desvioRuta: boolean;
     retrasoCritico: boolean;
     paradaNoAutorizada: boolean;
     perdidaSignal: boolean;
+    riesgoLlegadaTardia?: boolean;
   };
   evidencia?: {
     recojoUrl?: string;
     recojoTimestamp?: number;
     recojoLocation?: Location;
+    recojoEstado?: 'conforme' | 'con_observaciones';
+    recojoObservaciones?: string;
+    recojoTemperatura?: number;
     entregaUrl?: string;
     entregaTimestamp?: number;
     entregaLocation?: Location;
+    entregaEstado?: 'conforme' | 'con_observaciones' | 'dañada';
+    entregaTemperatura?: number;
   };
   tiempoEstimado?: string;
   distanciaRestante?: string;
@@ -136,6 +174,7 @@ export interface Trip {
   horaRecojo?: string;
   recojoRealAt?: number;
   entregaRealAt?: number;
+  lastTempUpdateAt?: number;
   vehiculo?: {
     tipo: string;
     placa: string;

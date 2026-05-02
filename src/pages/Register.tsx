@@ -12,7 +12,7 @@ import { Input } from '../components/ui/Input';
 import { Truck, AlertCircle, Briefcase, FileText, Mail, CheckCircle2, Upload, Landmark, Eye, EyeOff, Zap, ShieldCheck, Lock, User, Check } from 'lucide-react';
 import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User as UserType, AccountType } from '../types';
-import { cn } from '../lib/utils';
+import { cn, cleanObject } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -29,19 +29,28 @@ const registerSchema = z.object({
   telefono: z.string().min(9, 'Teléfono inválido'),
   tipoUsuario: z.enum(['comerciante', 'transportista']),
   tipoCuenta: z.enum(['natural', 'ruc10', 'ruc20']).optional(),
+
+  // Campos Exportadora
+  ruc: z.string().optional(),
+  razonSocial: z.string().optional(),
+  sector: z.string().optional(),
+  puertoPrincipal: z.string().optional(),
+  agenteAduana: z.string().optional(),
+
   tipoVehiculo: z.string().optional(),
   placa: z.string().optional(),
   capacidad: z.string().optional(),
   zonas: z.string().optional(),
+  dniDoc: z.string().optional(),
+  licenciaDoc: z.string().optional(),
+  tarjetaPropiedadDoc: z.string().optional(),
+  soatDoc: z.string().optional(),
+  // Campos Bancarios
   banco: z.string().optional(),
   tipoCuentaBancaria: z.string().optional(),
   numeroCuenta: z.string().optional(),
   cci: z.string().optional(),
   titularCuenta: z.string().optional(),
-  dniDoc: z.string().optional(),
-  licenciaDoc: z.string().optional(),
-  tarjetaPropiedadDoc: z.string().optional(),
-  soatDoc: z.string().optional(),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -87,10 +96,6 @@ export const Register = () => {
         setError('Debes subir todos los documentos requeridos para continuar.');
         return;
       }
-      if (!data.banco || !data.numeroCuenta || !data.titularCuenta) {
-        setError('Debes completar la información bancaria para continuar.');
-        return;
-      }
     } else if (role === 'comerciante' && !isAdminEmail) {
       if (!dniUrl) {
         setError('Debes subir una foto de tu DNI para continuar.');
@@ -101,26 +106,33 @@ export const Register = () => {
     setIsLoading(true);
     setError(null);
     try {
+      console.log('Iniciando registro con Auth:', { email: data.email });
       let user;
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
         user = userCredential.user;
+        console.log('Usuario creado exitosamente en Auth:', user.uid);
       } catch (authErr: any) {
+        console.warn('Error en createUserWithEmailAndPassword:', authErr.code, authErr.message);
         if (authErr.code === 'auth/email-already-in-use') {
           try {
+            console.log('Email en uso, intentando iniciar sesión...');
             const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
             user = userCredential.user;
+            console.log('Inicio de sesión exitoso tras email en uso:', user.uid);
             
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             const isAdminEmail = ADMIN_EMAILS.includes(data.email.toLowerCase());
             
             if (userDoc.exists() && !isAdminEmail) {
-              setError('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
+              setError('Este correo electrónico ya está registrado en el sistema. Por favor, inicia sesión desde la pantalla de login.');
               setIsLoading(false);
               return;
             }
+            console.log('El documento de usuario no existe, se procederá a crearlo.');
           } catch (signInErr: any) {
-            setError('Este correo electrónico ya está registrado. Por favor intenta con otro o recupera tu contraseña.');
+            console.error('Error en signInWithEmailAndPassword:', signInErr.code, signInErr.message);
+            setError('Este correo electrónico ya está registrado. Si es tuyo, por favor recupera tu contraseña o usa un correo diferente.');
             setIsLoading(false);
             return;
           }
@@ -129,15 +141,16 @@ export const Register = () => {
         }
       }
 
-      if (!user) throw new Error('No se pudo obtener la información del usuario.');
+      if (!user) throw new Error('No se pudo obtener la información del usuario de autenticación.');
 
+      // Crear objeto de usuario asegurando que no haya valores undefined
       const newUser: UserType = {
         uid: user.uid,
-        nombre: data.nombre,
+        nombre: data.nombre || '',
         tipoUsuario: isAdminEmail ? 'admin' : (data.tipoUsuario as 'comerciante' | 'transportista'),
-        tipoCuenta: data.tipoCuenta as AccountType,
-        documento: data.documento,
-        telefono: data.telefono,
+        tipoCuenta: (data.tipoCuenta as AccountType) || 'natural',
+        documento: data.documento || '',
+        telefono: data.telefono || '',
         email: data.email,
         verificado: isAdminEmail ? 'verificado' : 'pendiente', 
         rating: 0, 
@@ -146,9 +159,15 @@ export const Register = () => {
         completedTrips: 0,
         indiceConfiabilidad: 100,
         createdAt: Date.now(),
+        // Datos Exportadora
+        ruc: data.ruc || undefined,
+        razonSocial: data.razonSocial || undefined,
+        sector: (data.sector as any) || undefined,
+        puertoPrincipal: (data.puertoPrincipal as any) || undefined,
+        agenteAduana: data.agenteAduana || undefined,
         documentosUrls: {
           dni: dniUrl || '',
-        }
+        },
       };
 
       if (data.tipoUsuario === 'transportista') {
@@ -166,16 +185,19 @@ export const Register = () => {
           soat: soatUrl || '',
         };
 
-        newUser.datosBancarios = {
-          banco: data.banco || '',
-          tipoCuenta: data.tipoCuentaBancaria || 'ahorros',
-          numeroCuenta: data.numeroCuenta || '',
-          cci: data.cci || '',
-          titular: data.titularCuenta || '',
-        };
+        if (data.banco) {
+          newUser.datosBancarios = {
+            banco: data.banco,
+            tipoCuenta: data.tipoCuentaBancaria || 'ahorros',
+            numeroCuenta: data.numeroCuenta || '',
+            cci: data.cci || '',
+            titular: data.titularCuenta || data.nombre,
+          };
+        }
       }
 
-      await setDoc(doc(db, 'users', user.uid), newUser);
+      console.log('Enviando documento a Firestore:', cleanObject(newUser));
+      await setDoc(doc(db, 'users', user.uid), cleanObject(newUser));
       
       if (!isAdminEmail) {
         const actionCodeSettings = {
@@ -185,11 +207,18 @@ export const Register = () => {
         await sendEmailVerification(user, actionCodeSettings);
         setIsRegistered(true);
       } else {
-        setUser(newUser);
-        navigate('/');
+        setUser(cleanObject(newUser) as any);
+        console.log('Registro completado, redirigiendo...');
+        if (newUser.tipoUsuario === 'admin') {
+          navigate('/admin');
+        } else if (newUser.tipoUsuario === 'comerciante') {
+          navigate('/merchant/dashboard');
+        } else {
+          navigate('/carrier/dashboard');
+        }
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('Error general en el registro:', err);
       setError(err.message || 'Ocurrió un error al registrar la cuenta.');
     } finally {
       setIsLoading(false);
@@ -204,7 +233,7 @@ export const Register = () => {
     } else if (step === 2) {
       fieldsToValidate = ['nombre', 'email', 'telefono', 'documento', 'password'];
       if (role === 'comerciante') {
-        fieldsToValidate.push('tipoCuenta');
+        fieldsToValidate.push('ruc', 'razonSocial', 'sector', 'puertoPrincipal');
       }
     } else if (step === 3) {
       if (role === 'transportista') {
@@ -377,15 +406,15 @@ export const Register = () => {
                   active={role === 'comerciante'} 
                   onClick={() => { setValue('tipoUsuario', 'comerciante'); setRole('comerciante'); nextStep(); }}
                   icon={<Briefcase className="h-10 w-10" />}
-                  title="Soy Comerciante"
-                  desc="Quiero enviar carga y recibir ofertas de transportistas."
+                  title="Empresa Exportadora"
+                  desc="Gestión de transporte y trazabilidad para carga de exportación."
                 />
                 <RoleCard 
                   active={role === 'transportista'} 
                   onClick={() => { setValue('tipoUsuario', 'transportista'); setRole('transportista'); nextStep(); }}
                   icon={<Truck className="h-10 w-10" />}
-                  title="Soy Transportista"
-                  desc="Tengo un vehículo y quiero ofertar por servicios de carga."
+                  title="Transportista Verificado"
+                  desc="Oferta servicios de transporte a empresas exportadoras."
                 />
               </motion.div>
             )}
@@ -403,16 +432,42 @@ export const Register = () => {
                   <Input label="Contraseña" type={showPassword ? "text" : "password"} placeholder="••••••••" {...register('password')} error={errors.password?.message} 
                          suffix={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>} />
                 </div>
+
                 {role === 'comerciante' && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
-                    <select {...register('tipoCuenta')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500">
-                      <option value="natural">Persona Natural</option>
-                      <option value="ruc10">RUC 10</option>
-                      <option value="ruc20">RUC 20</option>
-                    </select>
+                  <div className="space-y-6 pt-4 border-t border-slate-100">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Datos Corporativos</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input label="RUC de la empresa" placeholder="20123456789" {...register('ruc')} error={errors.ruc?.message} />
+                      <Input label="Razón Social" placeholder="Empresa S.A.C." {...register('razonSocial')} error={errors.razonSocial?.message} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-700">Sector</label>
+                        <select {...register('sector')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                          <option value="">Selecciona...</option>
+                          <option value="alimentos_procesados">Alimentos Procesados</option>
+                          <option value="agroindustrial">Agroindustrial</option>
+                          <option value="metalmecanica">Metalmecánica</option>
+                          <option value="confecciones">Confecciones</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-700">Puerto de Embarque</label>
+                        <select {...register('puertoPrincipal')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                          <option value="">Selecciona...</option>
+                          <option value="callao">Callao</option>
+                          <option value="paita">Paita</option>
+                          <option value="matarani">Matarani</option>
+                          <option value="ilo">Ilo</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                      </div>
+                    </div>
+                    <Input label="Agente de Aduana (Opcional)" placeholder="Nombre del agente" {...register('agenteAduana')} />
                   </div>
                 )}
+
                 <div className="flex justify-between pt-6">
                   <Button variant="ghost" onClick={prevStep} className="font-bold">Retroceder</Button>
                   <Button onClick={nextStep} className="px-10 h-12 font-black">Continuar</Button>
@@ -426,7 +481,17 @@ export const Register = () => {
                 {role === 'transportista' ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Input label="Tipo de Vehículo" placeholder="Camión 5tn" {...register('tipoVehiculo')} error={errors.tipoVehiculo?.message} />
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-700">Tipo de Vehículo</label>
+                        <select {...register('tipoVehiculo')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                          <option value="">Selecciona...</option>
+                          <option value="refrigerado">Refrigerado</option>
+                          <option value="seco">Seco</option>
+                          <option value="isotermico">Isotérmico</option>
+                          <option value="plataforma">Plataforma</option>
+                          <option value="grua">Grúa</option>
+                        </select>
+                      </div>
                       <Input label="Placa" placeholder="ABC-123" {...register('placa')} error={errors.placa?.message} />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -454,7 +519,7 @@ export const Register = () => {
               </motion.div>
             )}
 
-            {/* Step 4: Documents & Bank (Only Transportista) */}
+            {/* Step 4: Documents (Only Transportista) */}
             {step === 4 && role === 'transportista' && (
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-12">
                 <div className="space-y-6">
@@ -466,6 +531,7 @@ export const Register = () => {
                     <UploadBox id="soat" size="small" active={!!soatUrl} label="SOAT" onChange={(e) => handleFileUpload(e, 'soat')} />
                   </div>
                 </div>
+
                 <div className="space-y-6 pt-8 border-t border-slate-100">
                   <h3 className="text-xl font-black flex items-center gap-2"><Landmark className="h-5 w-5 text-blue-600" /> Datos de Pago</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -476,6 +542,8 @@ export const Register = () => {
                          <option value="BCP">BCP</option>
                          <option value="Interbank">Interbank</option>
                          <option value="BBVA">BBVA</option>
+                         <option value="Scotiabank">Scotiabank</option>
+                         <option value="Banco de la Nación">Banco de la Nación</option>
                        </select>
                     </div>
                     <div className="space-y-2">
@@ -489,9 +557,10 @@ export const Register = () => {
                   <Input label="Número de Cuenta" placeholder="Ej: 191-..." {...register('numeroCuenta')} />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input label="CCI (Opcional)" placeholder="002-..." {...register('cci')} />
-                    <Input label="Titular" placeholder="Nombre completo" {...register('titularCuenta')} />
+                    <Input label="Titular de la Cuenta" placeholder="Nombre completo" {...register('titularCuenta')} />
                   </div>
                 </div>
+
                 <div className="flex justify-between pt-8">
                   <Button variant="ghost" onClick={prevStep} className="font-bold">Atrás</Button>
                   <Button type="submit" isLoading={isLoading} className="h-14 px-12 font-black text-lg">Finalizar Registro</Button>

@@ -18,6 +18,11 @@
         "sumRatings": { "type": "number" },
         "completedTrips": { "type": "number" },
         "indiceConfiabilidad": { "type": "number" },
+        "ruc": { "type": "string" },
+        "razonSocial": { "type": "string" },
+        "sector": { "type": "string", "enum": ["alimentos_procesados", "agroindustrial", "metalmecanica", "confecciones", "otro"] },
+        "puertoPrincipal": { "type": "string", "enum": ["callao", "paita", "matarani", "ilo", "otro"] },
+        "agenteAduana": { "type": "string" },
         "documentosUrls": {
           "type": "object",
           "properties": {
@@ -39,16 +44,6 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "datosBancarios": {
-          "type": "object",
-          "properties": {
-            "banco": { "type": "string" },
-            "tipoCuenta": { "type": "string" },
-            "numeroCuenta": { "type": "string" },
-            "cci": { "type": "string" },
-            "titular": { "type": "string" }
-          }
-        },
         "createdAt": { "type": "number" }
       },
       "required": ["uid", "nombre", "email", "tipoUsuario", "verificado", "createdAt"]
@@ -65,6 +60,17 @@
         "descripcion": { "type": "string" },
         "origen": { "type": "string" },
         "destino": { "type": "string" },
+        "nombreProducto": { "type": "string" },
+        "lote": { "type": "string" },
+        "certificacion": { "type": "string", "enum": ["organico", "globalgap", "fair_trade", "sin_certificacion"] },
+        "partidaArancelaria": { "type": "string" },
+        "temperaturaRequerida": { "type": "string" },
+        "tipoVehiculoRequerido": { "type": "string" },
+        "condicionSanitaria": { "type": "boolean" },
+        "guiaRemision": { "type": "string" },
+        "puertoDestino": { "type": "string" },
+        "fechaHoraLimitePuerto": { "type": "number" },
+        "numeroContenedor": { "type": "string" },
         "precioPropuesto": { "type": "number" },
         "estado": { "type": "string", "enum": ["disponible", "en_negociacion", "asignado", "completado"] },
         "createdAt": { "type": "number" }
@@ -104,6 +110,12 @@
         },
         "origen": { "type": "string" },
         "destino": { "type": "string" },
+        "fechaHoraLimitePuerto": { "type": "number" },
+        "nombreProducto": { "type": "string" },
+        "lote": { "type": "string" },
+        "guiaRemision": { "type": "string" },
+        "temperaturaRequerida": { "type": "string" },
+        "lastTempUpdateAt": { "type": "number" },
         "precioFinal": { "type": "number" },
         "comision": { "type": "number" },
         "estado": { "type": "string", "enum": ["pendiente_pago", "pago_en_revision", "en_camino_a_recojo", "recojo_completado", "en_camino_a_destino", "entregado_pendiente_confirmacion", "completado", "cancelado"] },
@@ -132,7 +144,21 @@
             "desvioRuta": { "type": "boolean" },
             "retrasoCritico": { "type": "boolean" },
             "paradaNoAutorizada": { "type": "boolean" },
-            "perdidaSignal": { "type": "boolean" }
+            "perdidaSignal": { "type": "boolean" },
+            "riesgoLlegadaTardia": { "type": "boolean" }
+          }
+        },
+        "evidencia": {
+          "type": "object",
+          "properties": {
+            "recojoUrl": { "type": "string" },
+            "recojoTimestamp": { "type": "number" },
+            "recojoEstado": { "type": "string" },
+            "recojoTemperatura": { "type": "number" },
+            "entregaUrl": { "type": "string" },
+            "entregaTimestamp": { "type": "number" },
+            "entregaEstado": { "type": "string" },
+            "entregaTemperatura": { "type": "number" }
           }
         },
         "tiempoEstimado": { "type": "string" },

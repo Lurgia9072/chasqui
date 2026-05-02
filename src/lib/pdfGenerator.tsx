@@ -6,145 +6,210 @@ import { es } from 'date-fns/locale';
 
 export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, carrier: User) => {
   const doc = new jsPDF();
-  const primaryColor = [37, 99, 235]; // #2563eb
+  const primaryColor = [15, 23, 42]; // slate-900
+  const secondaryColor = [37, 99, 235]; // blue-600
 
   // --- Header ---
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('REPORTE DE TRAZABILIDAD AUDITABLE', 15, 20);
+  doc.text('DOCUMENTO DE CONTROL LOGÍSTICO', 15, 18);
+  doc.setFontSize(14);
+  doc.text('CHASQUI - PLATAFORMA DE TRANSPORTE', 15, 28);
   
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(`ID de Viaje: ${trip.id}`, 15, 30);
-  doc.text(`Fecha de Emisión: ${dateFnsFormat(new Date(), "PPpp", { locale: es })}`, 150, 30);
+  doc.text(`ID ÚNICO: #${trip.id.toUpperCase()}`, 150, 18);
+  doc.text(`EMISIÓN: ${dateFnsFormat(new Date(), "PPpp", { locale: es })}`, 150, 25);
 
   // --- Info Sections ---
   let y = 50;
 
-  const sectionTitle = (title: string, topY: number) => {
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setFontSize(12);
+  const sectionTitle = (title: string, topY: number, color = primaryColor) => {
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text(title, 15, topY);
-    doc.setDrawColor(200, 200, 200);
+    doc.setDrawColor(220, 220, 220);
     doc.line(15, topY + 2, 195, topY + 2);
     return topY + 10;
   };
 
-  // 1. Datos del Viaje
-  y = sectionTitle('DATOS DE LA OPERACIÓN', y);
+  // 1. Datos del Cliente
+  y = sectionTitle('DATOS DE LA EMPRESA EXPORTADORA', y);
   doc.setTextColor(50, 50, 50);
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('Tipo de Carga:', 15, y);
+  doc.text('Razón Social:', 15, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${cargo.tipoCarga} (${cargo.categoria})`, 45, y);
+  doc.text(merchant.razonSocial || merchant.nombre, 45, y);
   
   doc.setFont('helvetica', 'bold');
-  doc.text('Peso:', 105, y);
+  doc.text('RUC / DNI:', 120, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(cargo.peso, 120, y);
+  doc.text(merchant.ruc || merchant.documento, 140, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sector:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(merchant.sector || 'NO ESPECIFICADO', 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Puerto Principal:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(merchant.puertoPrincipal || 'NO ESPECIFICADO', 150, y);
   
-  y += 7;
+  // 2. Datos del Producto
+  y += 12;
+  y = sectionTitle('DATOS DEL PRODUCTO EXPORTABLE', y);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text('Producto:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.nombreProducto || cargo.tipoCarga, 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Lote:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.lote || 'N/A', 145, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Guía Remisión:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.guiaRemision || 'N/A', 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Puerto Destino:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.puertoDestino || 'N/A', 145, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Partida Aran.:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.partidaArancelaria || 'N/A', 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Peso / Cantidad:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${cargo.peso} / ${cargo.capacidadRequerida}`, 150, y);
+
+  // 3. Condiciones y Logística
+  y += 12;
+  y = sectionTitle('CONDICIONES DE TRANSPORTE Y LOGÍSTICA', y, secondaryColor);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text('Vehículo Req.:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text((cargo.tipoVehiculoRequerido || 'N/A').toUpperCase(), 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Placa:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(trip.vehiculo?.placa || carrier.vehiculo?.placa || 'N/A', 145, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Transportista:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(carrier.nombre, 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Temperatura:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(trip.temperaturaActual || 'N/A', 145, y);
+
+  y += 6;
   doc.setFont('helvetica', 'bold');
   doc.text('Origen:', 15, y);
   doc.setFont('helvetica', 'normal');
   doc.text(cargo.origen, 45, y);
-  
-  y += 7;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Destino:', 15, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(cargo.destino, 45, y);
-  
-  if (cargo.temperaturaRequerida) {
-    y += 7;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Temp. Requerida:', 15, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(cargo.temperaturaRequerida, 45, y);
-  }
 
-  // 2. Participantes
-  y += 15;
-  y = sectionTitle('ACTORES INVOLUCRADOS', y);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Destino:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(cargo.destino, 145, y);
+
+  // 4. Cronología y Cumplimiento
+  y += 12;
+  y = sectionTitle('CRONOLOGÍA Y CUMPLIMIENTO DE PLAZOS', y);
   
-  // Comerciante
+  const deliveryDate = trip.entregaRealAt ? new Date(trip.entregaRealAt) : null;
+  const deadlineDate = cargo.fechaHoraLimitePuerto ? new Date(cargo.fechaHoraLimitePuerto) : null;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Límite Puerto:', 15, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(deadlineDate ? dateFnsFormat(deadlineDate, 'PPp', { locale: es }) : 'N/A', 45, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Entrega Real:', 120, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(deliveryDate ? dateFnsFormat(deliveryDate, 'PPp', { locale: es }) : 'PENDIENTE', 145, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Cumplimiento:', 15, y);
+  if (deliveryDate && deadlineDate) {
+    const onTime = deliveryDate <= deadlineDate;
+    doc.setTextColor(onTime ? 22 : 220, onTime ? 163 : 38, onTime ? 74 : 38);
+    doc.text(onTime ? 'EXITOSO - ENTREGADO A TIEMPO' : 'RETRASO - ENTREGADO FUERA DE PLAZO', 45, y);
+  } else {
+    doc.text('EN PROCESO', 45, y);
+  }
   doc.setTextColor(50, 50, 50);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Comerciante (Generador):', 15, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${merchant.nombre} - DNI/RUC: ${merchant.documento}`, 15, y + 5);
-  
-  // Transportista
-  doc.setFont('helvetica', 'bold');
-  doc.text('Transportista (Operador):', 105, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${carrier.nombre} - Placa: ${carrier.vehiculo?.placa}`, 105, y + 5);
-  doc.text(`Licencia: ${carrier.documentosUrls?.licencia ? 'Verificada' : 'Pendiente'}`, 105, y + 10);
-  
-  y += 20;
 
-  // 3. Alertas de Seguridad
-  const alerts = [];
-  if (trip.alertas?.desvioRuta) alerts.push('⚠️ DESVÍO DE RUTA DETECTADO');
-  if (trip.alertas?.perdidaSignal) alerts.push('⚠️ PÉRDIDA DE SEÑAL PROLONGADA');
-  if (trip.alertas?.paradaNoAutorizada) alerts.push('⚠️ PARADA NO AUTORIZADA');
+  y += 10;
 
-  if (alerts.length > 0) {
-    y += 15;
-    y = sectionTitle('ALERTAS DE SEGURIDAD Y CUMPLIMIENTO', y);
-    doc.setTextColor(220, 38, 38); // Red
-    doc.setFont('helvetica', 'bold');
-    alerts.forEach((alert, index) => {
-      doc.text(alert, 15, y + (index * 6));
-    });
-    y += (alerts.length * 6) + 5;
-  }
-
-  // 4. Trazabilidad de Eventos (Checkpoints)
-  y += 5;
-  y = sectionTitle('HISTORIAL DE EVENTOS (AUDITORÍA DIGITAL)', y);
-  
-  const tableRows = trip.checkpoints?.sort((a,b) => b.timestamp - a.timestamp).map(cp => [
+  // 5. Historial de Eventos (Checkpoints)
+  const tableRows = trip.checkpoints?.sort((a,b) => a.timestamp - b.timestamp).map(cp => [
     dateFnsFormat(cp.timestamp, 'dd/MM HH:mm', { locale: es }),
     cp.estado.replace(/_/g, ' ').toUpperCase(),
-    cp.mensaje + (cp.evidenciaUrl ? ' (Con evidencia)' : ''),
-    `${cp.location.lat.toFixed(4)}, ${cp.location.lng.toFixed(4)}`,
-    cp.automatico ? 'SISTEMA' : 'MANUAL'
+    cp.mensaje,
+    `${cp.location.lat.toFixed(4)}, ${cp.location.lng.toFixed(4)}`
   ]) || [];
 
   autoTable(doc, {
     startY: y,
-    head: [['Fecha/Hora', 'Evento', 'Descripción', 'Coordenadas', 'Origen']],
+    head: [['Fecha/Hora', 'Evento', 'Descripción', 'Geolocalización']],
     body: tableRows,
     theme: 'striped',
     headStyles: { fillColor: primaryColor as any, textColor: 255 },
-    styles: { fontSize: 8 }
+    styles: { fontSize: 7 }
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 15;
 
-  // 5. Evidencia Digital
-  y = sectionTitle('EVIDENCIA DIGITAL DE ENTREGA', finalY);
-  
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  doc.text('Este documento certifica que el transporte se realizó bajo los estándares de trazabilidad auditables.', 15, y);
-  doc.text('Las coordenadas y marcas de tiempo han sido generadas automáticamente por el sistema GPS.', 15, y + 5);
-  
-  // Footer
+  // 6. Pie de Página y QR Placeholder
+  if (finalY < 250) {
+    y = finalY;
+    doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.setLineWidth(0.5);
+    doc.rect(160, y, 30, 30);
+    doc.setFontSize(6);
+    doc.text('QR DE VERIFICACIÓN', 162, y + 15);
+    doc.text('ESCANEABLE POR ADUANA', 161, y + 20);
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Documento generado automáticamente por Chasqui.', 15, y + 10);
+    doc.text('Válido para fines informativos y de control logístico interno.', 15, y + 15);
+    doc.text('Este reporte cuenta con marcas de tiempo GPS no modificables.', 15, y + 20);
+  }
+
+  // Final Footer
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text(`TransportaYa Logística - Reporte de Cumplimiento Logístico - Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+    doc.text(`Chasqui Logistics Technology - Página ${i} de ${pageCount} - Trace ID: ${trip.id}`, 105, 285, { align: 'center' });
   }
 
-  doc.save(`audit_report_${trip.id}.pdf`);
+  doc.save(`CHASQUI_TRAZABILIDAD_${trip.id.toUpperCase()}.pdf`);
 };
