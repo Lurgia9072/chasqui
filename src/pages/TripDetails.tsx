@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2 } from 'lucide-react';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
@@ -18,6 +18,7 @@ import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
+
 
 // Fix Leaflet default icon issue
 // @ts-ignore
@@ -1129,6 +1130,29 @@ export const TripDetails = () => {
           <p className="text-gray-600">ID de Viaje: {trip.id}</p>
         </div>
         <div className="flex items-center space-x-3">
+          {trip.estado !== 'pendiente_pago' && 
+           trip.estado !== 'pago_en_revision' && 
+           trip.estado !== 'pago_rechazado' && 
+           trip.estado !== 'en_camino_a_recojo' && 
+           trip.estado !== 'cancelado' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden md:flex bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+              onClick={() => {
+                const publicLink = `${window.location.origin}/track/${trip.id}`;
+                navigator.clipboard.writeText(publicLink);
+                addNotification({
+                  title: 'Enlace Copiado',
+                  message: 'El link de seguimiento público se ha copiado al portapapeles.',
+                  type: 'success'
+                });
+              }}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Compartir Viaje
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 
@@ -1964,7 +1988,7 @@ export const TripDetails = () => {
                     <div 
                       className={cn(
                         "p-4 border-2 border-dashed rounded-xl text-center cursor-pointer hover:bg-gray-50 transition-colors",
-                        evidenceFile ? "border-green-400 bg-green-50/50" : "border-gray-200"
+                        evidenceFile ? "border-green-400 bg-green-50/50" : "border-blue-400 bg-blue-50/20"
                       )}
                       onClick={() => document.getElementById('evidence-upload-input')?.click()}
                     >
@@ -1976,11 +2000,15 @@ export const TripDetails = () => {
                         onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
                       />
                       {evidenceFile ? (
-                        <p className="text-xs text-green-700 font-bold">✓ {evidenceFile.name}</p>
+                        <div className="space-y-2">
+                          <CheckCircle className="h-6 w-6 text-green-500 mx-auto" />
+                          <p className="text-xs text-green-700 font-bold">Evidencia cargada: {evidenceFile.name}</p>
+                        </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <Package className="h-5 w-5 text-gray-400 mb-1" />
-                          <p className="text-[10px] text-gray-500 font-bold uppercase">Subir Foto Evidencia</p>
+                          <Package className="h-6 w-6 text-blue-500 mb-2 animate-bounce" />
+                          <p className="text-sm font-black text-blue-600 uppercase">SUBIR FOTO OBLIGATORIA</p>
+                          <p className="text-[10px] text-blue-400 mt-1">Sube la foto para habilitar el botón de estado</p>
                         </div>
                       )}
                     </div>
@@ -1988,9 +2016,13 @@ export const TripDetails = () => {
 
                   {trip.estado === 'en_camino_a_recojo' && (
                     <Button 
-                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                      )}
                       onClick={() => updateTripStatus('recojo_completado')}
                       isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
                     >
                       <Package className="h-5 w-5 mr-2" />
                       Confirmar Recojo
@@ -2010,9 +2042,13 @@ export const TripDetails = () => {
 
                   {trip.estado === 'en_camino_a_destino' && (
                     <Button 
-                      className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100"
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-green-600 hover:bg-green-700 shadow-green-100"
+                      )}
                       onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
                       isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
                     >
                       <CheckCircle className="h-5 w-5 mr-2" />
                       Confirmar Entrega Final
@@ -2353,16 +2389,16 @@ export const TripDetails = () => {
               </Button>
               <Button 
                 size="sm" 
-                variant={trip.alertas?.retraso ? "destructive" : "outline"}
-                className={cn("h-10 text-[11px]", trip.alertas?.retraso && "animate-pulse")}
+                variant={trip.alertas?.retrasoCritico ? "destructive" : "outline"}
+                className={cn("h-10 text-[11px]", trip.alertas?.retrasoCritico && "animate-pulse")}
                 onClick={async () => {
                   await updateDoc(doc(db, 'trips', trip.id), {
-                    'alertas.retraso': !trip.alertas?.retraso
+                    'alertas.retraso': !trip.alertas?.retrasoCritico
                   });
                 }}
               >
                 <AlertCircle className="h-3 w-3 mr-2" />
-                {trip.alertas?.retraso ? 'Detener Alerta Retraso' : 'Simular Retraso'}
+                {trip.alertas?.retrasoCritico ? 'Detener Alerta Retraso' : 'Simular Retraso'}
               </Button>
             </div>
           </CardContent>
@@ -2614,3 +2650,4 @@ export const TripDetails = () => {
   </div>
   );
 };
+
