@@ -14,10 +14,10 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(20);
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text('DOCUMENTO DE CONTROL LOGÍSTICO', 15, 18);
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.text('CHASQUI - PLATAFORMA DE TRANSPORTE', 15, 28);
   
   doc.setFontSize(9);
@@ -128,15 +128,19 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
   doc.setFont('helvetica', 'bold');
   doc.text('Origen:', 15, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(cargo.origen, 45, y);
+  const origenLines = doc.splitTextToSize(cargo.origen, 150);
+  doc.text(origenLines, 45, y);
+  y += (origenLines.length * 5);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('Destino:', 120, y);
+  doc.text('Destino:', 15, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(cargo.destino, 145, y);
+  const destinoLines = doc.splitTextToSize(cargo.destino, 150);
+  doc.text(destinoLines, 45, y);
+  y += (destinoLines.length * 5);
 
   // 4. Cronología y Cumplimiento
-  y += 12;
+  y += 6;
   y = sectionTitle('CRONOLOGÍA Y CUMPLIMIENTO DE PLAZOS', y);
   
   const deliveryDate = trip.entregaRealAt ? new Date(trip.entregaRealAt) : null;
@@ -188,12 +192,12 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
   // 6. Pie de Página y QR Placeholder
   if (finalY < 250) {
     y = finalY;
-    doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+   /*  doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.setLineWidth(0.5);
     doc.rect(160, y, 30, 30);
     doc.setFontSize(6);
     doc.text('QR DE VERIFICACIÓN', 162, y + 15);
-    doc.text('ESCANEABLE POR ADUANA', 161, y + 20);
+    doc.text('ESCANEABLE POR ADUANA', 161, y + 20); */
 
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
