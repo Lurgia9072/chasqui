@@ -209,7 +209,8 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow get: if true;
+      allow list: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isAuthenticated() && (
         isOwner(userId) || 
@@ -220,7 +221,8 @@ service cloud.firestore {
     }
 
     match /cargas/{cargoId} {
-      allow read: if isAuthenticated();
+      allow get: if true;
+      allow list: if isAuthenticated();
       allow create: if isMerchant() && isValidCargo(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || isAdmin());
       allow delete: if isAdmin();
@@ -234,7 +236,8 @@ service cloud.firestore {
     }
 
     match /trips/{tripId} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
+      allow get: if true;
+      allow list: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
       allow create: if isAuthenticated() && isValidTrip(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
       allow delete: if isAdmin();

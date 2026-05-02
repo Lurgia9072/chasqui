@@ -1133,7 +1133,11 @@ export const TripDetails = () => {
             variant="outline" 
             size="sm" 
             className="hidden md:flex bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
-            onClick={() => generateAuditReport(trip, carga, merchantData, carrierData)}
+            onClick={async () => {
+              if (trip && carga && merchantData && carrierData) {
+                await generateAuditReport(trip, carga, merchantData, carrierData);
+              }
+            }}
           >
             <FileText className="h-4 w-4 mr-2" />
             Reporte de Trazabilidad (PDF)
@@ -2610,5 +2614,3 @@ export const TripDetails = () => {
   </div>
   );
 };
-
-       

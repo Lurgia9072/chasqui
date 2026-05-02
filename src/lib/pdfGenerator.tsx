@@ -1,23 +1,40 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { Trip, Cargo, User } from '../types';
 import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, carrier: User) => {
+export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: User, carrier: User) => {
   const doc = new jsPDF();
   const primaryColor = [15, 23, 42]; // slate-900
   const secondaryColor = [37, 99, 235]; // blue-600
+
+  // --- QR Generation ---
+  const trackingUrl = `${window.location.origin}/track/${trip.id}`;
+  let qrDataUrl = '';
+  try {
+    qrDataUrl = await QRCode.toDataURL(trackingUrl, {
+      margin: 1,
+      width: 100,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff'
+      }
+    });
+  } catch (err) {
+    console.error('Error generating QR:', err);
+  }
 
   // --- Header ---
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.text('DOCUMENTO DE CONTROL LOGÍSTICO', 15, 18);
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.text('CHASQUI - PLATAFORMA DE TRANSPORTE', 15, 28);
   
   doc.setFontSize(9);
@@ -189,21 +206,36 @@ export const generateAuditReport = (trip: Trip, cargo: Cargo, merchant: User, ca
 
   const finalY = (doc as any).lastAutoTable.finalY + 15;
 
-  // 6. Pie de Página y QR Placeholder
+  // 6. Pie de Página y QR Real
   if (finalY < 250) {
     y = finalY;
-   /*  doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setLineWidth(0.5);
-    doc.rect(160, y, 30, 30);
-    doc.setFontSize(6);
-    doc.text('QR DE VERIFICACIÓN', 162, y + 15);
-    doc.text('ESCANEABLE POR ADUANA', 161, y + 20); */
-
+    if (qrDataUrl) {
+      doc.addImage(qrDataUrl, 'PNG', 160, y, 30, 30);
+    } else {
+      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setLineWidth(0.5);
+      doc.rect(160, y, 30, 30);
+    }
+    
     doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text('VERIFICACIÓN INDEPENDIENTE', 15, y + 5);
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text('Documento generado automáticamente por Chasqui.', 15, y + 10);
-    doc.text('Válido para fines informativos y de control logístico interno.', 15, y + 15);
-    doc.text('Este reporte cuenta con marcas de tiempo GPS no modificables.', 15, y + 20);
+    doc.text('Escanea el código QR para verificar la autenticidad de este', 15, y + 10);
+    doc.text('documento y la trazabilidad GPS en tiempo real por terceros.', 15, y + 14);
+    
+    doc.setFontSize(6);
+    doc.setTextColor( secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text(`URL: ${trackingUrl}`, 15, y + 19);
+
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text('"Este documento cuenta con trazabilidad GPS verificable"', 15, y + 26);
+    doc.text('por la infraestructura tecnológica de Chasqui Logistics.', 15, y + 30);
   }
 
   // Final Footer
