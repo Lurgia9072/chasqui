@@ -21,9 +21,26 @@ const cargoSchema = z.object({
   destino: z.string().min(5, 'Dirección de destino inválida'),
   tipoCarga: z.string().min(3, 'Tipo de carga inválido'),
   categoria: z.enum(['general', 'perecible', 'fragil', 'peligrosa']),
+  
+  // Datos Producto Exportable
+  nombreProducto: z.string().min(3, 'Nombre del producto requerido'),
+  lote: z.string().min(1, 'Código de lote requerido'),
+  certificacion: z.enum(['organico', 'globalgap', 'fair_trade', 'sin_certificacion']),
+  partidaArancelaria: z.string().optional(),
+
+  // Condiciones de Transporte
   temperaturaRequerida: z.string().optional(),
+  tipoVehiculoRequerido: z.enum(['refrigerado', 'seco', 'isotermico', 'indiferente']),
+  condicionSanitaria: z.boolean().default(false),
+
+  // Datos de Exportación
+  guiaRemision: z.string().min(1, 'Guía de remisión requerida'),
+  puertoDestino: z.string().min(1, 'Puerto de destino requerido'),
+  fechaHoraLimitePuerto: z.string().min(1, 'Fecha límite requerida'),
+  numeroContenedor: z.string().optional(),
+
   cuidadoEspecial: z.string().optional(),
-  peso: z.string().min(1, 'Peso requerido'),
+  peso: z.string().transform((val) => Number(val)).pipe(z.number().min(0.1, 'El peso debe ser mayor a 0')),
   capacidadRequerida: z.string().min(1, 'Capacidad requerida'),
   descripcion: z.string().min(10, 'Descripción demasiado corta'),
   precioPropuesto: z.string().transform((val) => Number(val)).pipe(z.number().min(10, 'El precio debe ser mayor a S/ 10')),
@@ -80,6 +97,7 @@ export const PostCargo = () => {
       const path = 'cargas';
       const cargoData = cleanObject({
         ...data,
+        fechaHoraLimitePuerto: data.fechaHoraLimitePuerto ? new Date(data.fechaHoraLimitePuerto).getTime() : null,
         origenCoords: coords.origen || null,
         destinoCoords: coords.destino || null,
         comercianteId: user.uid,
@@ -225,7 +243,7 @@ export const PostCargo = () => {
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Mercancía</label>
                 <Input
-                  placeholder="Ej: Arándanos, Motores, Vidrio"
+                  placeholder="Ej: Abarrotes, Muebles, Construcción"
                   {...register('tipoCarga')}
                   error={errors.tipoCarga?.message}
                   className="h-12"
@@ -253,33 +271,90 @@ export const PostCargo = () => {
 
             <AnimatePresence>
               {watch('categoria') === 'perecible' && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100"
-                >
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-blue-800 uppercase tracking-wider">Temperatura Requerida (°C)</label>
-                    <Input
-                      placeholder="Ej: -18°C a -20°C"
-                      {...register('temperaturaRequerida')}
-                      className="h-12 border-blue-200"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-blue-800 uppercase tracking-wider">Protocolo de Cadena de Frío</label>
-                    <Input
-                      placeholder="Ej: Monitoreo cada 30 min"
-                      {...register('cuidadoEspecial')}
-                      className="h-12 border-blue-200"
-                    />
-                  </div>
-                </motion.div>
+                <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                  <Info className="h-5 w-5 text-emerald-600" />
+                  <p className="text-xs font-bold text-emerald-800">Recuerda especificar la temperatura exacta en la sección de condiciones de transporte.</p>
+                </div>
               )}
             </AnimatePresence>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Datos del Producto Exportable */}
+            <div className="space-y-6 pt-4">
+              <h3 className="text-lg font-black text-slate-900 border-l-4 border-emerald-500 pl-4 uppercase tracking-wider">Datos del Producto Exportable</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input label="Nombre del Producto (Ej: Palta Hass)" placeholder="Ej: Palta Hass" {...register('nombreProducto')} error={errors.nombreProducto?.message} />
+                <Input label="Código de Lote / Producción" placeholder="Ej: LOT-2026-X" {...register('lote')} error={errors.lote?.message} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Certificación</label>
+                  <select
+                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                    {...register('certificacion')}
+                  >
+                    <option value="sin_certificacion">Sin Certificación</option>
+                    <option value="organico">Orgánico</option>
+                    <option value="globalgap">GlobalGAP</option>
+                    <option value="fair_trade">Fair Trade</option>
+                  </select>
+                </div>
+                <Input label="Partida Arancelaria (Opcional)" placeholder="Ej: 0804400000" {...register('partidaArancelaria')} />
+              </div>
+            </div>
+
+            {/* Condiciones de Transporte */}
+            <div className="space-y-6 pt-4">
+              <h3 className="text-lg font-black text-slate-900 border-l-4 border-blue-500 pl-4 uppercase tracking-wider">Condiciones de Transporte</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Temperatura Requerida</label>
+                  <select
+                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                    {...register('temperaturaRequerida')}
+                  >
+                    <option value="ambiente">Ambiente</option>
+                    <option value="refrigerado">Refrigerado (2°C - 8°C)</option>
+                    <option value="congelado">Congelado (-18°C)</option>
+                    <option value="controlado">Controlado (8°C - 15°C)</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Vehículo Requerido</label>
+                  <select
+                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                    {...register('tipoVehiculoRequerido')}
+                  >
+                    <option value="indiferente">Indiferente</option>
+                    <option value="refrigerado">Refrigerado / Cámara</option>
+                    <option value="seco">Seco / Furgón</option>
+                    <option value="isotermico">Isotérmico</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                <input type="checkbox" id="sanitaria" {...register('condicionSanitaria')} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <label htmlFor="sanitaria" className="text-sm font-bold text-slate-700">Vehículo con limpieza previa certificada</label>
+              </div>
+            </div>
+
+            {/* Datos de Exportación */}
+            <div className="space-y-6 pt-4">
+              <h3 className="text-lg font-black text-slate-900 border-l-4 border-red-500 pl-4 uppercase tracking-wider">Datos de Exportación</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input label="Guía de Remisión" placeholder="Ej: T001-000123" {...register('guiaRemision')} error={errors.guiaRemision?.message} />
+                <Input label="Puerto / Punto de Embarque Destino" placeholder="Ej: DP World Callao" {...register('puertoDestino')} error={errors.puertoDestino?.message} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Fecha y Hora Límite en Puerto</label>
+                  <Input type="datetime-local" {...register('fechaHoraLimitePuerto')} error={errors.fechaHoraLimitePuerto?.message} />
+                  <p className="text-[10px] text-red-500 font-bold uppercase">Activa alertas críticas de puntualidad</p>
+                </div>
+                <Input label="Número de Contenedor (Opcional)" placeholder="Ej: MSKU1234567" {...register('numeroContenedor')} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Peso Aprox.</label>
                 <Input

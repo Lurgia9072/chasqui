@@ -168,18 +168,23 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user) return;
 
+    const messageToSend = newMessage;
+    setNewMessage('');
+
     try {
       await addDoc(collection(db, 'trips', tripId, 'messages'), {
         senderId: user.uid,
         senderName: user.nombre,
         senderPhotoUrl: user.photoUrl || null,
-        text: newMessage,
+        text: messageToSend,
         type: 'text',
         createdAt: Date.now()
       });
-      setNewMessage('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `trips/${tripId}/messages`);
+      // Optional: restore message if failed? Usually users prefer it staying gone if they already moved on.
+      // But for better UX maybe we should restore it if it fails.
+      // For now, clearing it immediately is what the user asked for "debe ser rapido".
     }
   };
 
@@ -323,13 +328,18 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
               >
                 <Mic className="h-5 w-5" />
               </button>
-              <Input
-                placeholder="Escribe un mensaje..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                className="flex-1 border-none bg-gray-100 focus:ring-0 rounded-xl"
-              />
+                <Input
+                  placeholder="Escribe un mensaje..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  className="flex-1 border-none bg-gray-100 focus:ring-0 rounded-xl"
+                />
               <Button 
                 size="sm" 
                 className="h-10 w-10 rounded-full p-0"

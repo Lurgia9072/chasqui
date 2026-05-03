@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { ADMIN_EMAILS } from '../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../lib/constants';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { StatusBadge } from '../components/ui/StatusBadge';
 import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -161,7 +162,7 @@ export const AdminDashboard = () => {
     let q;
     
     if (activeTab === 'todos') {
-      q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
+      q = query(collection(db, 'trips'));
     } else if (activeTab === 'users' || activeTab === 'cargas' || activeTab === 'soporte') {
       // No necesitamos cargar viajes si estamos en estas pestañas
       setLoading(false);
@@ -708,7 +709,7 @@ export const AdminDashboard = () => {
 
                     {/* Documentos del Usuario */}
                     {u.documentosUrls && (Object.values(u.documentosUrls).some(url => !!url)) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-16">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pl-16">
                         {u.documentosUrls.dni && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase">DNI / RUC</p>
@@ -771,6 +772,28 @@ export const AdminDashboard = () => {
                         )}
                       </div>
                     )}
+
+                    {/* Datos Bancarios del Usuario */}
+                    {u.datosBancarios && (
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 ml-16 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">Banco</p>
+                          <p className="text-xs font-bold text-gray-800">{u.datosBancarios.banco}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">Cuenta</p>
+                          <p className="text-xs font-mono font-bold text-gray-800">{u.datosBancarios.numeroCuenta}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">CCI</p>
+                          <p className="text-xs font-mono font-bold text-gray-800">{u.datosBancarios.cci || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">Titular</p>
+                          <p className="text-xs font-bold text-gray-800 truncate">{u.datosBancarios.titular}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -784,7 +807,7 @@ export const AdminDashboard = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Publicado por: {c.comercianteNombre}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-purple-600">S/ {c.precioPropuesto}</p>
+                      <p className="text-sm font-bold text-purple-600">S/ {c.precioSugerido}</p>
                       <span className={cn(
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
                         c.estado === 'abierta' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
@@ -934,11 +957,12 @@ export const AdminDashboard = () => {
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center space-x-2">
-                            <h4 className="font-bold text-gray-900 text-lg">{trip.tipoCarga}</h4>
-                            <Link to={`/trip/${trip.id}`} className="text-blue-600 hover:underline text-xs flex items-center">
-                              Ver Detalle <ExternalLink className="h-3 w-3 ml-1" />
-                            </Link>
-                          </div>
+                             <h4 className="font-bold text-gray-900 text-lg">{trip.tipoCarga}</h4>
+                             <StatusBadge status={trip.estado} />
+                             <Link to={`/trip/${trip.id}`} className="text-blue-600 hover:underline text-xs flex items-center">
+                               Ver Detalle <ExternalLink className="h-3 w-3 ml-1" />
+                             </Link>
+                           </div>
                           <p className="text-sm text-gray-500">ID Viaje: {trip.id}</p>
                           <p className="text-xs text-gray-400">Creado {formatDistanceToNow(trip.createdAt, { addSuffix: true, locale: es })}</p>
                         </div>
@@ -1231,9 +1255,9 @@ export const AdminDashboard = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="text-xl font-bold text-gray-900">Procesar Reembolso</h3>
-              <Button onClick={() => setPayingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+              <button onClick={() => setPayingTrip(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
                 <X className="h-5 w-5 text-gray-500" />
-              </Button>
+              </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-start space-x-3">

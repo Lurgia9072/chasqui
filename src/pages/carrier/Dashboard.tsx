@@ -11,8 +11,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { ADMIN_EMAILS } from '../../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../../lib/constants';
 import { NearbyCargoMap } from '../../components/NearbyCargoMap';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
@@ -45,14 +46,14 @@ export const CarrierDashboard = () => {
     tarjetaPropiedad: null
   });
   const [showBankModal, setShowBankModal] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
   const [bankData, setBankData] = useState({
     banco: user?.datosBancarios?.banco || '',
-    tipoCuenta: user?.datosBancarios?.tipoCuenta || '',
+    tipoCuenta: user?.datosBancarios?.tipoCuenta || 'ahorros',
     numeroCuenta: user?.datosBancarios?.numeroCuenta || '',
     cci: user?.datosBancarios?.cci || '',
     titular: user?.datosBancarios?.titular || user?.nombre || ''
   });
-  const [savingBank, setSavingBank] = useState(false);
 
   const fetchCargas = () => {
     if (!user || user.verificado !== 'verificado') {
@@ -172,20 +173,6 @@ export const CarrierDashboard = () => {
     }
   };
 
-  const handleAdminApprove = async () => {
-    if (!user) return;
-    setUploading(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, { verificado: 'verificado' });
-      useAuthStore.getState().setUser({ ...user, verificado: 'verificado' });
-    } catch (error) {
-      console.error("Error approving:", error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleSaveBank = async () => {
     if (!user) return;
     setSavingBank(true);
@@ -203,6 +190,20 @@ export const CarrierDashboard = () => {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     } finally {
       setSavingBank(false);
+    }
+  };
+
+  const handleAdminApprove = async () => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { verificado: 'verificado' });
+      useAuthStore.getState().setUser({ ...user, verificado: 'verificado' });
+    } catch (error) {
+      console.error("Error approving:", error);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -263,12 +264,30 @@ export const CarrierDashboard = () => {
                 description="Revisamos tu DNI, Licencia y Tarjeta de Propiedad."
                 status={user?.verificado === 'pendiente' ? 'in_progress' : 'pending'}
               />
-              <StepCard 
-                icon={<Landmark className="h-6 w-6 text-emerald-600" />}
-                title="Datos Bancarios"
-                description="Configura dónde quieres recibir tus pagos."
-                status={user?.datosBancarios?.numeroCuenta ? 'completed' : 'pending'}
-              />
+              <Card 
+                className="cursor-pointer hover:border-blue-300 transition-all"
+                onClick={() => setShowBankModal(true)}
+              >
+                <CardContent className="p-5 flex items-start space-x-4">
+                  <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                    <Landmark className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-gray-900">Datos Bancarios</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {user?.datosBancarios?.banco ? `${user.datosBancarios.banco} - ${user.datosBancarios.numeroCuenta}` : "Configura tu cuenta para recibir pagos."}
+                    </p>
+                    <div className="mt-3">
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                        user?.datosBancarios?.numeroCuenta ? "text-green-600 bg-green-50" : "text-gray-400 bg-gray-50"
+                      )}>
+                        {user?.datosBancarios?.numeroCuenta ? "Configurado" : "Pendiente"}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             <Card className="border-dashed border-2 bg-gray-50/50">
@@ -396,37 +415,107 @@ export const CarrierDashboard = () => {
             </div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showBankModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+              >
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                  <h2 className="text-xl font-bold text-gray-900">Datos Bancarios</h2>
+                  <button onClick={() => setShowBankModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-gray-700 uppercase">Banco</label>
+                      <select 
+                        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
+                        value={bankData.banco}
+                        onChange={(e) => setBankData(prev => ({ ...prev, banco: e.target.value }))}
+                      >
+                        <option value="">Selecciona...</option>
+                        <option value="BCP">BCP</option>
+                        <option value="Interbank">Interbank</option>
+                        <option value="BBVA">BBVA</option>
+                        <option value="Scotiabank">Scotiabank</option>
+                        <option value="Banco de la Nación">Banco de la Nación</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-gray-700 uppercase">Tipo</label>
+                      <select 
+                        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
+                        value={bankData.tipoCuenta}
+                        onChange={(e) => setBankData(prev => ({ ...prev, tipoCuenta: e.target.value }))}
+                      >
+                        <option value="ahorros">Ahorros</option>
+                        <option value="corriente">Corriente</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-700 uppercase">Número de Cuenta</label>
+                    <input 
+                      type="text"
+                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
+                      placeholder="Ej: 191-..."
+                      value={bankData.numeroCuenta}
+                      onChange={(e) => setBankData(prev => ({ ...prev, numeroCuenta: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-700 uppercase">CCI (Opcional)</label>
+                    <input 
+                      type="text"
+                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
+                      placeholder="002-..."
+                      value={bankData.cci}
+                      onChange={(e) => setBankData(prev => ({ ...prev, cci: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-700 uppercase">Titular de la Cuenta</label>
+                    <input 
+                      type="text"
+                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
+                      placeholder="Nombre tal cual en el banco"
+                      value={bankData.titular}
+                      onChange={(e) => setBankData(prev => ({ ...prev, titular: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="pt-4">
+                    <Button 
+                      className="w-full h-12 text-lg shadow-lg"
+                      onClick={handleSaveBank}
+                      disabled={!bankData.banco || !bankData.numeroCuenta || !bankData.titular || savingBank}
+                      isLoading={savingBank}
+                    >
+                      {savingBank ? "Guardando..." : "Guardar Datos Bancarios"}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
-      {/* Alerta de Datos Bancarios Faltantes */}
-      {!user.datosBancarios?.numeroCuenta && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-orange-50 border-2 border-orange-200 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-orange-100"
-        >
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 bg-orange-100 rounded-2xl flex items-center justify-center shrink-0">
-              <AlertCircle className="h-6 w-6 text-orange-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-orange-900">Configura tus datos bancarios</h3>
-              <p className="text-sm text-orange-800">Es obligatorio para poder recibir tus pagos una vez finalizados los servicios.</p>
-            </div>
-          </div>
-          <Button 
-            onClick={() => setShowBankModal(true)}
-            className="bg-orange-600 hover:bg-orange-700 whitespace-nowrap"
-          >
-            Configurar Ahora
-          </Button>
-        </motion.div>
-      )}
-
       {/* Viajes en Curso */}
       {activeTrips.length > 0 && (
         <section className="space-y-6">
@@ -450,7 +539,10 @@ export const CarrierDashboard = () => {
                   <CardContent className="p-6 space-y-4">
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-[10px] uppercase font-bold text-green-600 tracking-widest">Servicio Activo</p>
+                        <div className="flex items-center space-x-2">
+                           <p className="text-[10px] uppercase font-bold text-green-600 tracking-widest">Servicio Activo</p>
+                           <StatusBadge status={trip.estado} />
+                        </div>
                         <h3 className="text-lg font-bold text-gray-900">Viaje a {trip.destino}</h3>
                       </div>
                       <div className="text-right">
@@ -630,101 +722,6 @@ export const CarrierDashboard = () => {
         </div>
       )}
 
-      {/* Modal de Datos Bancarios */}
-      <AnimatePresence>
-        {showBankModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
-            >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                <h2 className="text-xl font-bold text-gray-900">Datos Bancarios</h2>
-                <button onClick={() => setShowBankModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">Banco</label>
-                  <select 
-                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    value={bankData.banco}
-                    onChange={(e) => setBankData({...bankData, banco: e.target.value})}
-                  >
-                    <option value="">Seleccionar banco...</option>
-                    <option value="BCP">BCP</option>
-                    <option value="Interbank">Interbank</option>
-                    <option value="BBVA">BBVA</option>
-                    <option value="Scotiabank">Scotiabank</option>
-                    <option value="Banco de la Nación">Banco de la Nación</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">Tipo de Cuenta</label>
-                  <select 
-                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    value={bankData.tipoCuenta}
-                    onChange={(e) => setBankData({...bankData, tipoCuenta: e.target.value})}
-                  >
-                    <option value="">Seleccionar tipo...</option>
-                    <option value="Ahorros">Ahorros</option>
-                    <option value="Corriente">Corriente</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">Número de Cuenta</label>
-                  <input 
-                    type="text"
-                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: 191-XXXXXXXX-X-XX"
-                    value={bankData.numeroCuenta}
-                    onChange={(e) => setBankData({...bankData, numeroCuenta: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">CCI (Opcional)</label>
-                  <input 
-                    type="text"
-                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ej: 002-XXXXXXXXXXXXXXXXXXXX"
-                    value={bankData.cci}
-                    onChange={(e) => setBankData({...bankData, cci: e.target.value})}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">Titular de la Cuenta</label>
-                  <input 
-                    type="text"
-                    className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Nombre completo del titular"
-                    value={bankData.titular}
-                    onChange={(e) => setBankData({...bankData, titular: e.target.value})}
-                  />
-                </div>
-
-                <div className="pt-4">
-                  <Button 
-                    className="w-full h-12 text-lg shadow-lg shadow-blue-200"
-                    onClick={handleSaveBank}
-                    disabled={!bankData.banco || !bankData.numeroCuenta || !bankData.titular || savingBank}
-                    isLoading={savingBank}
-                  >
-                    Guardar Datos Bancarios
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

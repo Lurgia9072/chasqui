@@ -6,18 +6,19 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2 } from 'lucide-react';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
-import { ADMIN_EMAILS } from '../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../lib/constants';
 import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
+
 
 // Fix Leaflet default icon issue
 // @ts-ignore
@@ -125,6 +126,13 @@ export const TripDetails = () => {
   const [appConfig, setAppConfig] = useState<any>(null);
 
   const [viewingVoucherUrl, setViewingVoucherUrl] = useState<string | null>(null);
+
+  const [recojoEstado, setRecojoEstado] = useState<'Conforme' | 'Con observaciones'>('Conforme');
+  const [recojoTemp, setRecojoTemp] = useState('');
+  const [entregaEstado, setEntregaEstado] = useState<'Conforme' | 'Con observaciones' | 'Dañada'>('Conforme');
+  const [entregaTemp, setEntregaTemp] = useState('');
+  const [newTemp, setNewTemp] = useState('');
+  const [isUpdatingTemp, setIsUpdatingTemp] = useState(false);
 
   const isCarrier = user?.tipoUsuario === 'transportista';
   const [payoutRef, setPayoutRef] = useState('');
@@ -442,10 +450,34 @@ export const TripDetails = () => {
               distance: `${distanceKm} km`,
               duration: durationText
             });
+
+            // Alerta de Margen Crítico para Exportación
+            if (trip.estado === 'en_camino_a_destino' && trip.fechaHoraLimitePuerto) {
+              const limitTime = trip.fechaHoraLimitePuerto;
+              const etaSeconds = route.duration;
+              const now = Date.now();
+              const estimatedArrival = now + (etaSeconds * 1000);
+              const margin = limitTime - estimatedArrival;
+              const marginHours = margin / (3600000);
+
+              if (marginHours < 2 && !trip.alertas?.riesgoLlegadaTardia) {
+                updateDoc(doc(db, 'trips', trip.id), {
+                  'alertas.riesgoLlegadaTardia': true
+                });
+                
+                addDoc(collection(db, 'trips', trip.id, 'messages'), {
+                  text: `🚨 ALERTA CRÍTICA: Margen de tiempo menor a 2 horas para llegar al puerto (${carga?.puertoDestino || 'destino'}). El transportista tiene un arribo estimado muy cercano al límite establecido.`,
+                  senderId: 'system',
+                  senderNombre: 'Chasqui Control',
+                  createdAt: Date.now(),
+                  readBy: [user?.uid || '']
+                });
+              }
+            }
             
             // Actualizar tiempo estimado en Firebase si es transportista
-            if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
-              updateDoc(doc(db, 'trips', trip?.id), {
+            if (isCarrier && durationText && trip.tiempoEstimado !== durationText) {
+              updateDoc(doc(db, 'trips', trip.id), {
                 tiempoEstimado: durationText
               });
             }
@@ -567,51 +599,6 @@ export const TripDetails = () => {
     });
   };
 
-  const handleEvidenceUpload = async (type: 'recojo' | 'entrega') => {
-    if (!evidenceFile || !trip) return;
-    setIsUploadingEvidence(true);
-    
-    try {
-      // Compress image before storage to avoid Firestore 1MB limit
-      const evidenceUrl = await compressImage(evidenceFile);
-
-      // For general status messages, we don't need to duplicate the large evidence URL in every checkpoint
-      // if it's already stored in the main evidence fields. 
-      // This saves massive space in the document.
-      const checkpointMsg = type === 'recojo' ? 'Evidencia de recojo cargada con foto' : 'Evidencia de entrega cargada con foto';
-      const refId = type === 'recojo' ? 'recojo_ref' : 'entrega_ref';
-      
-      const newCheckpoints = await createCheckpoint(trip.estado, checkpointMsg, refId);
-      
-      const updates: any = {};
-      if (type === 'recojo') {
-        updates['evidencia.recojoUrl'] = evidenceUrl;
-        updates['evidencia.recojoTimestamp'] = Date.now();
-        updates['evidencia.recojoLocation'] = trip.seguimiento || { lat: 0, lng: 0 };
-      } else {
-        updates['evidencia.entregaUrl'] = evidenceUrl;
-        updates['evidencia.entregaTimestamp'] = Date.now();
-        updates['evidencia.entregaLocation'] = trip.seguimiento || { lat: 0, lng: 0 };
-      }
-
-      updates.checkpoints = newCheckpoints;
-      
-      await updateDoc(doc(db, 'trips', trip.id), updates);
-      
-      addNotification({
-        title: 'Evidencia Guardada',
-        message: 'La foto ha sido registrada en el historial auditable.',
-        type: 'success'
-      });
-      setEvidenceFile(null);
-    } catch (err) {
-      console.error(err);
-      addNotification({ title: 'Error', message: 'No se pudo subir la evidencia', type: 'error' });
-    } finally {
-      setIsUploadingEvidence(false);
-    }
-  };
-
   const updateTripStatus = async (newStatus: TripStatus) => {
     if (!trip || !carga) return;
     setIsUpdating(true);
@@ -620,27 +607,46 @@ export const TripDetails = () => {
       let notificationTitle = '';
       let notificationMessage = '';
       let checkpointMsg = '';
+      let evidenceUrl = '';
+
+      // Handle evidence upload if file exists
+      if (isCarrier && evidenceFile) {
+        evidenceUrl = await compressImage(evidenceFile);
+        setEvidenceFile(null);
+      }
       
       // Actualizar tiempo estimado según el estado
       if (newStatus === 'recojo_completado') {
         updates.tiempoEstimado = 'En camino al destino';
         updates.recojoRealAt = Date.now();
+        updates.recojoEstado = recojoEstado;
+        if (carga.categoria === 'perecible' && recojoTemp) updates.recojoTemp = recojoTemp;
+        
         notificationTitle = 'Carga Recogida';
-        notificationMessage = `El transportista ha recogido tu carga de ${carga.tipoCarga} y está en camino al destino.`;
-        checkpointMsg = 'Carga reportada como recogida exitosamente por el transportista.';
+        notificationMessage = `El transportista ha recogido tu carga de ${carga.nombreProducto || carga.tipoCarga} y está en camino al destino.`;
+        checkpointMsg = `Carga recogida: ${recojoEstado}. ${recojoTemp ? `Temp: ${recojoTemp}°C.` : ''}`;
+      } else if (newStatus === 'entregado_pendiente_confirmacion') {
+        updates.tiempoEstimado = 'Esperando confirmación';
+        updates.entregaRealAt = Date.now();
+        updates.entregaEstado = entregaEstado;
+        if (carga.categoria === 'perecible' && entregaTemp) updates.entregaTemp = entregaTemp;
+        
+        // Auto-comparison for port deadline
+        if (carga.fechaHoraLimitePuerto) {
+          updates.llegadaAntesLimite = Date.now() <= carga.fechaHoraLimitePuerto;
+        }
+
+        notificationTitle = 'Carga Entregada';
+        notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.nombreProducto || carga.tipoCarga}. Estado: ${entregaEstado}.`;
+        checkpointMsg = `Carga entregada: ${entregaEstado}. ${entregaTemp ? `Temp: ${entregaTemp}°C.` : ''} ${updates.llegadaAntesLimite ? '✓ Llegada a tiempo al puerto' : '⚠ Llegada fuera de plazo'}`;
       } else if (newStatus === 'en_camino_a_destino') {
         updates.tiempoEstimado = 'Calculando tiempo...';
         notificationTitle = 'En Tránsito';
         notificationMessage = `Tu carga de ${carga.tipoCarga} está en camino al destino final.`;
         checkpointMsg = 'Inicio de tránsito troncal hacia el punto de destino.';
-      } else if (newStatus === 'entregado_pendiente_confirmacion') {
-        updates.tiempoEstimado = 'Esperando confirmación';
-        updates.entregaRealAt = Date.now();
-        notificationTitle = 'Carga Entregada';
-        notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.tipoCarga}. Por favor, confirma la recepción.`;
-        checkpointMsg = 'Carga reportada como entregada en el punto de destino.';
       } else if (newStatus === 'completado') {
         updates.tiempoEstimado = 'Viaje Finalizado';
+        updates.entregaRealAt = Date.now();
         notificationTitle = 'Viaje Completado';
         notificationMessage = `El comerciante ha confirmado la recepción de la carga. ¡Buen trabajo!`;
         checkpointMsg = 'Comerciante confirma recepción conforme de la mercancía. Cierre de auditoría.';
@@ -654,7 +660,7 @@ export const TripDetails = () => {
         });
       }
 
-      const updatedCheckpoints = await createCheckpoint(newStatus, checkpointMsg);
+      const updatedCheckpoints = await createCheckpoint(newStatus, checkpointMsg, evidenceUrl);
       updates.checkpoints = updatedCheckpoints;
  
       await updateDoc(doc(db, 'trips', trip.id), updates);
@@ -968,6 +974,31 @@ export const TripDetails = () => {
     }
   };
 
+  const handleUpdateTemp = async () => {
+    if (!trip || !newTemp) return;
+    setIsUpdatingTemp(true);
+    try {
+      const tempVal = parseFloat(newTemp);
+      await updateDoc(doc(db, 'trips', trip.id), {
+        temperaturaActual: `${tempVal}°C`,
+        lastTempUpdateAt: Date.now()
+      });
+
+      await createCheckpoint(trip.estado, `Registro periódico de temperatura: ${tempVal}°C`);
+      
+      addNotification({
+        title: 'Temperatura Actualizada',
+        message: `Se ha registrado la temperatura de ${tempVal}°C`,
+        type: 'success'
+      });
+      setNewTemp('');
+    } catch (err) {
+      console.error('Error actualizando temperatura:', err);
+    } finally {
+      setIsUpdatingTemp(false);
+    }
+  };
+
   const handleCall = () => {
     if (!trip) return;
     const phoneToCall = isCarrier ? merchantData?.telefono : carrierData?.telefono;
@@ -980,18 +1011,7 @@ export const TripDetails = () => {
   if (!trip || !carga) return <div className="text-center py-20">Viaje no encontrado</div>;
 
   const getStatusLabel = (status: TripStatus) => {
-    switch (status) {
-      case 'pendiente_pago': return 'Pendiente de Pago';
-      case 'pago_en_revision': return 'Pago en Revisión';
-      case 'pago_rechazado': return 'Pago Rechazado';
-      case 'en_camino_a_recojo': return 'En camino al recojo';
-      case 'recojo_completado': return 'Carga Recogida';
-      case 'en_camino_a_destino': return 'En camino al destino';
-      case 'entregado_pendiente_confirmacion': return 'Entregado (Pendiente Confirmación)';
-      case 'completado': return 'Completado';
-      case 'cancelado': return 'Cancelado';
-      default: return status;
-    }
+    return TRIP_STATUS_LABELS[status]?.label || status;
   };
 
   const getArrivalTime = (durationStr: string) => {
@@ -1068,16 +1088,17 @@ export const TripDetails = () => {
       </Button>
 
       {/* ALERTAS SMART */}
-      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retrasoCritico) && (
+      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retrasoCritico || trip.alertas.riesgoLlegadaTardia) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
           <div className="flex items-center space-x-3">
             <AlertCircle className="h-6 w-6 text-red-600 animate-pulse" />
             <div>
-              <p className="text-sm font-bold text-red-900">ALERTA DE SEGURIDAD LOGÍSTICA</p>
+              <p className="text-sm font-bold text-red-900 uppercase">Alerta de Cumplimiento Logístico/Sanitario</p>
               <p className="text-xs text-red-700">
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
                 {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
-                {trip.alertas.retrasoCritico && "Se detectó un retraso crítico en el tiempo de entrega estimado."}
+                {trip.alertas.riesgoLlegadaTardia && "MARGEN CRÍTICO: El transportista podría no llegar antes del cierre en puerto. "}
+                {trip.alertas.retrasoCritico && "Se detectó un retraso atípico."}
               </p>
             </div>
           </div>
@@ -1098,11 +1119,38 @@ export const TripDetails = () => {
           <p className="text-gray-600">ID de Viaje: {trip.id}</p>
         </div>
         <div className="flex items-center space-x-3">
+          {trip.estado !== 'pendiente_pago' && 
+           trip.estado !== 'pago_en_revision' && 
+           trip.estado !== 'pago_rechazado' && 
+           trip.estado !== 'en_camino_a_recojo' && 
+           trip.estado !== 'cancelado' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden md:flex bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+              onClick={() => {
+                const publicLink = `${window.location.origin}/track/${trip.id}`;
+                navigator.clipboard.writeText(publicLink);
+                addNotification({
+                  title: 'Enlace Copiado',
+                  message: 'El link de seguimiento público se ha copiado al portapapeles.',
+                  type: 'success'
+                });
+              }}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Compartir Viaje
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 
             className="hidden md:flex bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
-            onClick={() => generateAuditReport(trip, carga, merchantData, carrierData)}
+            onClick={async () => {
+              if (trip && carga && merchantData && carrierData) {
+                await generateAuditReport(trip, carga, merchantData, carrierData);
+              }
+            }}
           >
             <FileText className="h-4 w-4 mr-2" />
             Reporte de Trazabilidad (PDF)
@@ -1685,25 +1733,12 @@ export const TripDetails = () => {
                                   </p>
                                   {cp.evidenciaUrl && (
                                     <div className="mt-2">
-                                      {(() => {
-                                        let displayUrl = cp.evidenciaUrl;
-                                        if (cp.evidenciaUrl === 'recojo_ref' || (cp.evidenciaUrl === 'REFERENCIA_A_EVIDENCIA_PRINCIPAL' && cp.mensaje.toLowerCase().includes('recojo'))) {
-                                          displayUrl = trip?.evidencia?.recojoUrl;
-                                        } else if (cp.evidenciaUrl === 'entrega_ref' || (cp.evidenciaUrl === 'REFERENCIA_A_EVIDENCIA_PRINCIPAL' && cp.mensaje.toLowerCase().includes('entrega'))) {
-                                          displayUrl = trip?.evidencia?.entregaUrl;
-                                        }
-
-                                        if (!displayUrl) return null;
-
-                                        return (
-                                          <img 
-                                            src={displayUrl} 
-                                            alt="Evidencia" 
-                                            className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" 
-                                            onClick={() => setViewingVoucherUrl(displayUrl)} 
-                                          />
-                                        );
-                                      })()}
+                                      <img 
+                                        src={cp.evidenciaUrl} 
+                                        alt="Evidencia" 
+                                        className="h-20 w-32 object-cover rounded-lg border border-gray-200 cursor-zoom-in" 
+                                        onClick={() => setViewingVoucherUrl(cp.evidenciaUrl!)} 
+                                      />
                                     </div>
                                   )}
                                 </div>
@@ -1736,13 +1771,17 @@ export const TripDetails = () => {
             <CardContent>
               <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-blue-500 before:via-gray-200 before:to-gray-200">
                 {[
-                  { id: 'pendiente_pago', label: 'Pendiente de Pago', desc: 'El comerciante debe pagar el flete.' },
-                  { id: 'pago_en_revision', label: 'Pago en Revisión', desc: 'El administrador está verificando el pago.' },
-                  { id: 'en_camino_a_recojo', label: 'Camino al Recojo', desc: 'El transportista se dirige al origen.' },
-                  { id: 'recojo_completado', label: 'Carga Recogida', desc: 'La mercadería ha sido cargada en el vehículo.' },
-                  { id: 'en_camino_a_destino', label: 'En Tránsito', desc: 'La carga está en camino al destino final.' },
-                  { id: 'entregado_pendiente_confirmacion', label: 'Entregado', desc: 'El transportista ha llegado al destino.' },
-                  { id: 'completado', label: 'Finalizado', desc: 'El comerciante confirmó la recepción.' }
+                  { ...TRIP_STATUS_LABELS.pendiente_pago, id: 'pendiente_pago' },
+                  { ...TRIP_STATUS_LABELS.pago_en_revision, id: 'pago_en_revision' },
+                  { ...TRIP_STATUS_LABELS.en_camino_a_recojo, id: 'en_camino_a_recojo' },
+                  { 
+                    id: 'recojo_completado', 
+                    label: TRIP_STATUS_LABELS.recojo_completado.label,
+                    desc: trip.temperaturaActual ? `${TRIP_STATUS_LABELS.recojo_completado.desc}. Temperatura: ${trip.temperaturaActual}` : TRIP_STATUS_LABELS.recojo_completado.desc
+                  },
+                  { ...TRIP_STATUS_LABELS.en_camino_a_destino, id: 'en_camino_a_destino' },
+                  { ...TRIP_STATUS_LABELS.entregado_pendiente_confirmacion, id: 'entregado_pendiente_confirmacion' },
+                  { ...TRIP_STATUS_LABELS.completado, id: 'completado' }
                 ].map((step, idx) => {
                   const stepsOrder = ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
                   const isPast = stepsOrder.indexOf(trip.estado) > idx;
@@ -1789,6 +1828,77 @@ export const TripDetails = () => {
                 </div>
               </div>
 
+              {/* Required Conditions Indicator */}
+              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
+                <p className="text-[10px] font-bold text-blue-800 uppercase tracking-widest">Condiciones Requeridas vs Vehículo</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600">Tipo de Vehículo:</span>
+                    <div className="flex items-center">
+                      <span className="text-xs font-bold mr-2">{carga.tipoVehiculoRequerido || 'Cualquiera'}</span>
+                      {(!carga.tipoVehiculoRequerido || carga.tipoVehiculoRequerido === 'indiferente' || trip.vehiculo?.tipo === carga.tipoVehiculoRequerido) ? (
+                        <CheckCircle className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-3 w-3 text-red-500" />
+                      )}
+                    </div>
+                  </div>
+                  {carga.temperaturaRequerida && carga.temperaturaRequerida !== 'ambiente' && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">Temperatura:</span>
+                      <div className="flex items-center">
+                        <span className="text-xs font-bold mr-2 uppercase">{carga.temperaturaRequerida}</span>
+                        <CheckCircle className="h-3 w-3 text-green-500" />
+                      </div>
+                    </div>
+                  )}
+                  {carga.condicionSanitaria && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">Condición Sanitaria:</span>
+                      <CheckCircle className="h-3 w-3 text-green-500" />
+                    </div>
+                  )}
+                </div>
+                {trip.vehiculo?.tipo !== carga.tipoVehiculoRequerido && carga.tipoVehiculoRequerido && carga.tipoVehiculoRequerido !== 'indiferente' && (
+                  <div className="mt-2 bg-red-100 p-2 rounded text-[10px] text-red-700 font-bold flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    ¡ALERTA! El vehículo NO cumple con el tipo requerido por el cliente.
+                  </div>
+                )}
+              </div>
+
+              {/* Temperature Update for Perishable Cargo */}
+              {isCarrier && carga.categoria === 'perecible' && trip.estado === 'en_camino_a_destino' && (
+                <div className="bg-white p-4 rounded-xl border border-blue-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-gray-900 uppercase">Control de Temperatura</p>
+                    <span className="text-[10px] text-blue-600 font-bold">CADA 2 HORAS</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="number"
+                      placeholder="°C"
+                      className="h-9 text-xs"
+                      value={newTemp}
+                      onChange={(e) => setNewTemp(e.target.value)}
+                    />
+                    <Button 
+                      size="sm" 
+                      className="whitespace-nowrap"
+                      disabled={!newTemp || isUpdatingTemp}
+                      onClick={handleUpdateTemp}
+                    >
+                      Actualizar
+                    </Button>
+                  </div>
+                  {trip.lastTempUpdateAt && (
+                    <p className="text-[10px] text-gray-500">
+                      Última actualización: {dateFnsFormat(trip.lastTempUpdateAt, 'HH:mm')}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Precio Acordado</span>
@@ -1824,12 +1934,90 @@ export const TripDetails = () => {
               )}
 
               {isCarrier && !['completado', 'pendiente_pago', 'pago_en_revision', 'cancelado'].includes(trip.estado) && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* Evidence Upload Section */}
+                  <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-4">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      Evidencia de {trip.estado === 'en_camino_a_recojo' ? 'Recojo' : trip.estado === 'recojo_completado' ? 'Inicio de Viaje' : 'Entrega'}
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-700">Estado de Carga:</label>
+                        {trip.estado === 'en_camino_a_recojo' ? (
+                          <select 
+                            className="w-full text-xs p-2 border rounded"
+                            value={recojoEstado}
+                            onChange={(e) => setRecojoEstado(e.target.value as any)}
+                          >
+                            <option value="Conforme">Conforme</option>
+                            <option value="Con observaciones">Con observaciones</option>
+                          </select>
+                        ) : (
+                          <select 
+                            className="w-full text-xs p-2 border rounded"
+                            value={entregaEstado}
+                            onChange={(e) => setEntregaEstado(e.target.value as any)}
+                          >
+                            <option value="Conforme">Conforme</option>
+                            <option value="Con observaciones">Con observaciones</option>
+                            <option value="Dañada">Dañada</option>
+                          </select>
+                        )}
+                      </div>
+
+                      {carga.categoria === 'perecible' && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-gray-700">Temp. Vehículo (°C):</label>
+                          <Input 
+                            type="number"
+                            placeholder="Ej: 4"
+                            className="text-xs"
+                            value={trip.estado === 'en_camino_a_recojo' ? recojoTemp : entregaTemp}
+                            onChange={(e) => trip.estado === 'en_camino_a_recojo' ? setRecojoTemp(e.target.value) : setEntregaTemp(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div 
+                      className={cn(
+                        "p-4 border-2 border-dashed rounded-xl text-center cursor-pointer hover:bg-gray-50 transition-colors",
+                        evidenceFile ? "border-green-400 bg-green-50/50" : "border-blue-400 bg-blue-50/20"
+                      )}
+                      onClick={() => document.getElementById('evidence-upload-input')?.click()}
+                    >
+                      <input 
+                        id="evidence-upload-input"
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                      />
+                      {evidenceFile ? (
+                        <div className="space-y-2">
+                          <CheckCircle className="h-6 w-6 text-green-500 mx-auto" />
+                          <p className="text-xs text-green-700 font-bold">Evidencia cargada: {evidenceFile.name}</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <Package className="h-6 w-6 text-blue-500 mb-2 animate-bounce" />
+                          <p className="text-sm font-black text-blue-600 uppercase">SUBIR FOTO OBLIGATORIA</p>
+                          <p className="text-[10px] text-blue-400 mt-1">Sube la foto para habilitar el botón de estado</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {trip.estado === 'en_camino_a_recojo' && (
                     <Button 
-                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                      )}
                       onClick={() => updateTripStatus('recojo_completado')}
                       isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
                     >
                       <Package className="h-5 w-5 mr-2" />
                       Confirmar Recojo
@@ -1837,111 +2025,33 @@ export const TripDetails = () => {
                   )}
                   
                   {trip.estado === 'recojo_completado' && (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-xs font-bold text-gray-500 uppercase">Evidencia de Recojo</p>
-                      {trip.evidencia?.recojoUrl ? (
-                         <div className="flex items-center space-x-3">
-                            <img src={trip.evidencia.recojoUrl} className="h-16 w-16 object-cover rounded-lg border shadow-sm" alt="Recojo" />
-                            <div className="text-xs text-green-600 font-bold flex items-center">
-                               <CheckCircle className="h-4 w-4 mr-1" /> FOTO CARGADA
-                            </div>
-                         </div>
-                      ) : (
-                        <div className="flex flex-col space-y-2">
-                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-white hover:bg-gray-50 transition-colors">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-500">
-                               <Package className="h-6 w-6 mb-2" />
-                               <p className="text-xs font-medium">Click para foto de carga</p>
-                            </div>
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) setEvidenceFile(file);
-                              }}
-                            />
-                          </label>
-                          {evidenceFile && (
-                            <Button 
-                              size="sm" 
-                              className="w-full"
-                              onClick={() => handleEvidenceUpload('recojo')}
-                              isLoading={isUploadingEvidence}
-                            >
-                              Subir Foto de Recojo
-                            </Button>
-                          )}
-                        </div>
+                    <Button 
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
                       )}
-                      
-                      <Button 
-                        className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
-                        onClick={() => updateTripStatus('en_camino_a_destino')}
-                        isLoading={isUpdating}
-                      >
-                        <Navigation className="h-5 w-5 mr-2" />
-                        Iniciar Ruta a Destino
-                      </Button>
-                    </div>
+                      onClick={() => updateTripStatus('en_camino_a_destino')}
+                      isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
+                    >
+                      <Navigation className="h-5 w-5 mr-2" />
+                      Iniciar Ruta a Destino
+                    </Button>
                   )}
 
                   {trip.estado === 'en_camino_a_destino' && (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                       <p className="text-xs font-bold text-gray-500 uppercase">Evidencia de Entrega</p>
-                       {trip.evidencia?.entregaUrl ? (
-                         <div className="flex items-center space-x-3">
-                            <img src={trip.evidencia.entregaUrl} className="h-16 w-16 object-cover rounded-lg border shadow-sm" alt="Entrega" />
-                            <div className="text-xs text-green-600 font-bold flex items-center">
-                               <CheckCircle className="h-4 w-4 mr-1" /> FOTO CARGADA
-                            </div>
-                         </div>
-                      ) : (
-                        <div className="flex flex-col space-y-2">
-                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-white hover:bg-gray-50 transition-colors">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-500">
-                               <Navigation className="h-6 w-6 mb-2" />
-                               <p className="text-xs font-medium">Click para foto de entrega</p>
-                            </div>
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) setEvidenceFile(file);
-                              }}
-                            />
-                          </label>
-                          {evidenceFile && (
-                            <Button 
-                              size="sm" 
-                              className="w-full"
-                              onClick={() => handleEvidenceUpload('entrega')}
-                              isLoading={isUploadingEvidence}
-                            >
-                              Subir Foto de Entrega
-                            </Button>
-                          )}
-                        </div>
+                    <Button 
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-green-600 hover:bg-green-700 shadow-green-100"
                       )}
-
-                      <Button 
-                        className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
-                        isLoading={isUpdating}
-                        disabled={!trip.evidencia?.entregaUrl}
-                      >
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                        Confirmar Entrega Final
-                      </Button>
-                      {!trip.evidencia?.entregaUrl && (
-                        <p className="text-[10px] text-red-500 font-bold text-center animate-pulse">
-                          * Debes subir la foto de entrega antes de confirmar
-                        </p>
-                      )}
-                    </div>
+                      onClick={() => updateTripStatus('entregado_pendiente_confirmacion')}
+                      isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
+                    >
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      Confirmar Entrega Final
+                    </Button>
                   )}
 
                   {trip.estado === 'entregado_pendiente_confirmacion' && (
@@ -2047,61 +2157,33 @@ export const TripDetails = () => {
                           </div>
                         </div>
 
-                        {carrierData?.datosBancarios ? (
-                          <div className="pt-3 border-t border-gray-100 grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
-                            <div className="col-span-2">
-                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Titular</p>
-                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.titular}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Banco</p>
-                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.banco}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Tipo</p>
-                              <p className="font-bold text-gray-900">{carrierData.datosBancarios.tipoCuenta}</p>
-                            </div>
-                            <div className="col-span-2">
-                              <p className="text-[10px] text-emerald-600 font-bold uppercase">Número de Cuenta</p>
-                              <p className="font-bold text-gray-900 font-mono">{carrierData.datosBancarios.numeroCuenta}</p>
-                            </div>
-                            {carrierData.datosBancarios.cci && (
-                              <div className="col-span-2">
-                                <p className="text-[10px] text-emerald-600 font-bold uppercase">CCI</p>
-                                <p className="font-bold text-gray-900 font-mono">{carrierData.datosBancarios.cci}</p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-start space-x-2">
-                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                            <p className="text-xs text-red-700 font-medium">El transportista aún no ha configurado sus datos bancarios.</p>
-                          </div>
-                        )}
+                        {/* Payout banking info removed as the fields were rolled back */}
+                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start space-x-2">
+                          <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                          <p className="text-xs text-blue-700 font-medium">Realiza la transferencia al transportista según los acuerdos externos.</p>
+                        </div>
                       </div>
 
-                      {carrierData?.datosBancarios && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-emerald-800 uppercase">Referencia de Transferencia:</label>
-                            <Input 
-                              placeholder="Ej: OP-123456789"
-                              value={payoutRef}
-                              onChange={(e) => setPayoutRef(e.target.value)}
-                              className="bg-white border-emerald-200 focus:ring-emerald-500"
-                            />
-                          </div>
-                          <Button 
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-lg shadow-lg shadow-emerald-100"
-                            onClick={handleProcessPayout}
-                            disabled={!payoutRef || isUpdating}
-                            isLoading={isUpdating}
-                          >
-                            <CheckCircle className="h-5 w-5 mr-2" />
-                            Confirmar Reembolso Enviado
-                          </Button>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-emerald-800 uppercase">Referencia de Transferencia:</label>
+                          <Input 
+                            placeholder="Ej: OP-123456789"
+                            value={payoutRef}
+                            onChange={(e) => setPayoutRef(e.target.value)}
+                            className="bg-white border-emerald-200 focus:ring-emerald-500"
+                          />
                         </div>
-                      )}
+                        <Button 
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-lg shadow-lg shadow-emerald-100"
+                          onClick={handleProcessPayout}
+                          disabled={!payoutRef || isUpdating}
+                          isLoading={isUpdating}
+                        >
+                          <CheckCircle className="h-5 w-5 mr-2" />
+                          Confirmar Reembolso Enviado
+                        </Button>
+                      </div>
                     </div>
                   )}
 
@@ -2568,4 +2650,3 @@ export const TripDetails = () => {
   );
 };
 
-       

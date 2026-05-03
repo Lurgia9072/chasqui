@@ -18,6 +18,7 @@ import { TripDetails } from './pages/TripDetails';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { History } from './pages/History';
 import { Profile } from './pages/Profile';
+import { PublicTracking } from './pages/PublicTracking';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
 import { SupportWidget } from './pages/Support';
@@ -61,6 +62,7 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/track/:id" element={<PublicTracking />} />
 
                 {/* Merchant Routes */}
                 <Route element={<ProtectedRoute allowedRoles={['comerciante']} />}>
