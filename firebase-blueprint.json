@@ -18,6 +18,16 @@
         "sumRatings": { "type": "number" },
         "completedTrips": { "type": "number" },
         "indiceConfiabilidad": { "type": "number" },
+        "datosBancarios": {
+          "type": "object",
+          "properties": {
+            "banco": { "type": "string" },
+            "tipoCuenta": { "type": "string" },
+            "numeroCuenta": { "type": "string" },
+            "cci": { "type": "string" },
+            "titular": { "type": "string" }
+          }
+        },
         "ruc": { "type": "string" },
         "razonSocial": { "type": "string" },
         "sector": { "type": "string", "enum": ["alimentos_procesados", "agroindustrial", "metalmecanica", "confecciones", "otro"] },
@@ -116,6 +126,11 @@
         "guiaRemision": { "type": "string" },
         "temperaturaRequerida": { "type": "string" },
         "lastTempUpdateAt": { "type": "number" },
+        "temperaturaActual": { "type": "string" },
+        "recojoEstado": { "type": "string" },
+        "recojoTemp": { "type": "string" },
+        "entregaEstado": { "type": "string" },
+        "entregaTemp": { "type": "string" },
         "precioFinal": { "type": "number" },
         "comision": { "type": "number" },
         "estado": { "type": "string", "enum": ["pendiente_pago", "pago_en_revision", "en_camino_a_recojo", "recojo_completado", "en_camino_a_destino", "entregado_pendiente_confirmacion", "completado", "cancelado"] },
@@ -128,6 +143,16 @@
             "fechaPago": { "type": "number" },
             "verificadoPor": { "type": "string" },
             "verificadoAt": { "type": "number" }
+          }
+        },
+        "payoutInfo": {
+          "type": "object",
+          "properties": {
+            "estado": { "type": "string", "enum": ["pendiente", "pagado"] },
+            "referencia": { "type": "string" },
+            "comprobanteUrl": { "type": "string" },
+            "pagadoAt": { "type": "number" },
+            "montoPagado": { "type": "number" }
           }
         },
         "seguimiento": {

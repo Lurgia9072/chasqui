@@ -13,7 +13,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
-import { ADMIN_EMAILS } from '../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../lib/constants';
 import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
@@ -1011,18 +1011,7 @@ export const TripDetails = () => {
   if (!trip || !carga) return <div className="text-center py-20">Viaje no encontrado</div>;
 
   const getStatusLabel = (status: TripStatus) => {
-    switch (status) {
-      case 'pendiente_pago': return 'Pendiente de Pago';
-      case 'pago_en_revision': return 'Pago en Revisión';
-      case 'pago_rechazado': return 'Pago Rechazado';
-      case 'en_camino_a_recojo': return 'En camino al recojo';
-      case 'recojo_completado': return 'Carga Recogida';
-      case 'en_camino_a_destino': return 'En camino al destino';
-      case 'entregado_pendiente_confirmacion': return 'Entregado (Pendiente Confirmación)';
-      case 'completado': return 'Completado';
-      case 'cancelado': return 'Cancelado';
-      default: return status;
-    }
+    return TRIP_STATUS_LABELS[status]?.label || status;
   };
 
   const getArrivalTime = (durationStr: string) => {
@@ -1099,7 +1088,7 @@ export const TripDetails = () => {
       </Button>
 
       {/* ALERTAS SMART */}
-      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retraso || trip.alertas.riesgoLlegadaTardia) && (
+      {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retrasoCritico || trip.alertas.riesgoLlegadaTardia) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
           <div className="flex items-center space-x-3">
             <AlertCircle className="h-6 w-6 text-red-600 animate-pulse" />
@@ -1109,7 +1098,7 @@ export const TripDetails = () => {
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
                 {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
                 {trip.alertas.riesgoLlegadaTardia && "MARGEN CRÍTICO: El transportista podría no llegar antes del cierre en puerto. "}
-                {trip.alertas.retraso && "Se detectó un retraso atípico."}
+                {trip.alertas.retrasoCritico && "Se detectó un retraso atípico."}
               </p>
             </div>
           </div>
@@ -1782,13 +1771,17 @@ export const TripDetails = () => {
             <CardContent>
               <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-blue-500 before:via-gray-200 before:to-gray-200">
                 {[
-                  { id: 'pendiente_pago', label: 'Pendiente de Pago', desc: 'El comerciante debe pagar el flete.' },
-                  { id: 'pago_en_revision', label: 'Pago en Revisión', desc: 'El administrador está verificando el pago.' },
-                  { id: 'en_camino_a_recojo', label: 'Camino al Recojo', desc: 'El transportista se dirige al origen.' },
-                  { id: 'recojo_completado', label: 'Carga Recogida', desc: 'La mercadería ha sido cargada en el vehículo.' },
-                  { id: 'en_camino_a_destino', label: 'En Tránsito', desc: 'La carga está en camino al destino final.' },
-                  { id: 'entregado_pendiente_confirmacion', label: 'Entregado', desc: 'El transportista ha llegado al destino.' },
-                  { id: 'completado', label: 'Finalizado', desc: 'El comerciante confirmó la recepción.' }
+                  { ...TRIP_STATUS_LABELS.pendiente_pago, id: 'pendiente_pago' },
+                  { ...TRIP_STATUS_LABELS.pago_en_revision, id: 'pago_en_revision' },
+                  { ...TRIP_STATUS_LABELS.en_camino_a_recojo, id: 'en_camino_a_recojo' },
+                  { 
+                    id: 'recojo_completado', 
+                    label: TRIP_STATUS_LABELS.recojo_completado.label,
+                    desc: trip.temperaturaActual ? `${TRIP_STATUS_LABELS.recojo_completado.desc}. Temperatura: ${trip.temperaturaActual}` : TRIP_STATUS_LABELS.recojo_completado.desc
+                  },
+                  { ...TRIP_STATUS_LABELS.en_camino_a_destino, id: 'en_camino_a_destino' },
+                  { ...TRIP_STATUS_LABELS.entregado_pendiente_confirmacion, id: 'entregado_pendiente_confirmacion' },
+                  { ...TRIP_STATUS_LABELS.completado, id: 'completado' }
                 ].map((step, idx) => {
                   const stepsOrder = ['pendiente_pago', 'pago_en_revision', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado'];
                   const isPast = stepsOrder.indexOf(trip.estado) > idx;
@@ -1944,7 +1937,9 @@ export const TripDetails = () => {
                 <div className="space-y-4">
                   {/* Evidence Upload Section */}
                   <div className="bg-white p-4 rounded-xl border border-blue-100 space-y-4">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Evidencia de {trip.estado === 'en_camino_a_recojo' ? 'Recojo' : 'Entrega'}</p>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      Evidencia de {trip.estado === 'en_camino_a_recojo' ? 'Recojo' : trip.estado === 'recojo_completado' ? 'Inicio de Viaje' : 'Entrega'}
+                    </p>
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -2031,9 +2026,13 @@ export const TripDetails = () => {
                   
                   {trip.estado === 'recojo_completado' && (
                     <Button 
-                      className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-lg shadow-lg shadow-blue-100"
+                      className={cn(
+                        "w-full h-14 text-lg shadow-lg transition-all",
+                        !evidenceFile ? "bg-gray-300 cursor-not-allowed grayscale" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                      )}
                       onClick={() => updateTripStatus('en_camino_a_destino')}
                       isLoading={isUpdating}
+                      disabled={!evidenceFile || isUpdating}
                     >
                       <Navigation className="h-5 w-5 mr-2" />
                       Iniciar Ruta a Destino

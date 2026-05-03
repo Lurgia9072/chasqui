@@ -7,7 +7,7 @@ import { Button } from './Button';
 import { PriceTag } from './PriceTag';
 import { StatusBadge } from './StatusBadge';
 import { Trip } from '../../types';
-import { format } from 'date-fns';
+import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface TripCardProps {
@@ -44,7 +44,10 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, cargoName, partnerName
               </p>
             </div>
           </div>
-          <StatusBadge status={trip.estado} />
+          <StatusBadge 
+            status={trip.estado} 
+            detail={trip.temperaturaActual || (trip.estado === 'recojo_completado' ? (trip as any).recojoTemp ? `${(trip as any).recojoTemp}°C` : undefined : undefined)} 
+          />
         </div>
 
         <div className="space-y-4">
@@ -70,7 +73,7 @@ export const TripCard: React.FC<TripCardProps> = ({ trip, cargoName, partnerName
             <div className="flex items-center space-x-2 text-gray-500">
               <Calendar className="h-4 w-4" />
               <span className="text-xs">
-                {format(trip.createdAt, "d 'de' MMMM", { locale: es })}
+                {dateFnsFormat(trip.createdAt, "d 'de' MMMM", { locale: es })}
               </span>
             </div>
             <PriceTag amount={trip.precioFinal} size="md" />

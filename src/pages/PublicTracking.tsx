@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { TRIP_STATUS_LABELS } from '../lib/constants';
 import { Trip, Cargo, Checkpoint } from '../types';
 import { MapPin, Clock, ShieldCheck, CheckCircle, Navigation, Info, AlertCircle, Package, Thermometer } from 'lucide-react';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
@@ -146,7 +147,7 @@ export const PublicTracking = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white">
         <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4 shadow-xl shadow-blue-100"></div>
-        <p className="text-gray-500 font-black animate-pulse  tracking-widest text-xs">Cargando Trazabilidad...</p>
+        <p className="text-gray-500 font-black animate-pulse uppercase tracking-widest text-xs">Cargando Trazabilidad...</p>
       </div>
     );
   }
@@ -177,7 +178,7 @@ export const PublicTracking = () => {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <ShieldCheck className="h-5 w-5 text-blue-400" />
-              <span className="text-[10px] font-black  tracking-widest text-blue-400">
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">
                 {isArchived ? 'Historial de Trazabilidad Archivo' : 'Trazabilidad Certificada por Chasqui'}
               </span>
             </div>
@@ -185,15 +186,15 @@ export const PublicTracking = () => {
             <p className="text-slate-400 font-medium mt-1">Lote: {trip.lote || 'N/E'} • GUÍA: {trip.guiaRemision || 'N/E'}</p>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-            <p className="text-[10px] font-black  text-slate-400 mb-1">Estado Final del Viaje</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Estado Final del Viaje</p>
             <div className="flex items-center gap-2">
               <div className={cn(
                 "w-3 h-3 rounded-full",
                 trip.estado === 'completado' ? "bg-green-500" : "bg-blue-500",
                 !isArchived && "animate-pulse"
               )} />
-              <span className="text-xl font-black  italic tracking-tighter">
-                {trip.estado.replace(/_/g, ' ')}
+              <span className="text-xl font-black uppercase italic tracking-tighter">
+                {TRIP_STATUS_LABELS[trip.estado]?.label || trip.estado.replace(/_/g, ' ')}
               </span>
             </div>
           </div>
@@ -210,11 +211,11 @@ export const PublicTracking = () => {
               <p className="text-gray-500 mb-6">Este viaje fue completado hace más de 30 días. El seguimiento en tiempo real y el mapa detallado ya no están disponibles por políticas de privacidad.</p>
               <div className="grid grid-cols-2 gap-4 text-left">
                 <div className="bg-gray-50 p-4 rounded-2xl">
-                  <p className="text-[10px] font-bold text-gray-400 ">Recogido en</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Recogido en</p>
                   <p className="text-sm font-black text-gray-800">{trip.recojoRealAt ? dateFnsFormat(trip.recojoRealAt, 'PPp', { locale: es }) : 'N/E'}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl">
-                  <p className="text-[10px] font-bold text-gray-400 ">Entregado en</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Entregado en</p>
                   <p className="text-sm font-black text-gray-800">{trip.entregaRealAt ? dateFnsFormat(trip.entregaRealAt, 'PPp', { locale: es }) : 'N/E'}</p>
                 </div>
               </div>
@@ -264,8 +265,8 @@ export const PublicTracking = () => {
                       <Navigation className="h-5 w-5 text-blue-600 animate-pulse" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-gray-500 ">Señal GPS</p>
-                      <p className="text-xs font-black text-gray-900 ">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Señal GPS</p>
+                      <p className="text-xs font-black text-gray-900 uppercase">
                         {trip.estado === 'completado' ? 'VIAJE FINALIZADO' : 'ACTIVA Y VERIFICADA'}
                       </p>
                     </div>
@@ -275,18 +276,18 @@ export const PublicTracking = () => {
 
               {/* Quick Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400  mb-2">Temperatura Última</p>
+                {/* <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Temperatura Última</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-red-50 rounded-xl flex items-center justify-center">
                       <Thermometer className="h-5 w-5 text-red-600" />
                     </div>
-                    <span className="text-1xl font-black text-gray-900">{trip.temperaturaActual || 'N/A'}</span>
+                    <span className="text-1xl font-black text-gray-900">{trip.temperaturaActual || 'Sin temperatura'}</span>
                   </div>
-                </div>
+                </div> */}
                 
                 <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400  mb-2">Etapa estimado</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">ETA Estimado</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center">
                       <Clock className="h-5 w-5 text-blue-600" />
@@ -298,12 +299,12 @@ export const PublicTracking = () => {
                 </div>
 
                 <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400  mb-2">Integridad</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Integridad</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center">
                       <Package className="h-5 w-5 text-green-600" />
                     </div>
-                    <span className="text-1xl font-black text-gray-900 ">Conforme</span>
+                    <span className="text-1xl font-black text-gray-900 uppercase">Conforme</span>
                   </div>
                 </div>
               </div>
@@ -315,21 +316,21 @@ export const PublicTracking = () => {
         <div className="space-y-6">
           {/* Order Details */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="text-sm font-black  text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="text-sm font-black uppercase text-gray-900 mb-4 flex items-center gap-2">
               <Info className="h-4 w-4 text-blue-600" /> Detalles de Carga
             </h3>
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-bold text-gray-400 ">Exportador</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Exportador</p>
                 <p className="text-sm font-black text-gray-800">{merchantName || 'Cargando...'}</p>
               </div>
               <div className="pt-3 border-t border-gray-50">
-                <p className="text-[10px] font-bold text-gray-400 ">Puerto de Destino</p>
-                <p className="text-sm font-black text-gray-800 ">{carga?.puertoDestino || 'No especificado'}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Puerto de Destino</p>
+                <p className="text-sm font-black text-gray-800 uppercase">{carga?.puertoDestino || 'No especificado'}</p>
               </div>
               <div className="pt-3 border-t border-gray-50">
-                <p className="text-[10px] font-bold text-gray-400 ">Certificación</p>
-                <p className="text-sm font-black text-blue-600  italic">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Certificación</p>
+                <p className="text-sm font-black text-blue-600 uppercase italic">
                   {carga?.certificacion?.replace(/_/g, ' ') || 'Ninguna'}
                 </p>
               </div>
@@ -338,7 +339,7 @@ export const PublicTracking = () => {
 
           {/* Chronology */}
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <h3 className="text-sm font-black  text-gray-900 mb-6 flex items-center gap-2">
+            <h3 className="text-sm font-black uppercase text-gray-900 mb-6 flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-600" /> Cronología
             </h3>
             <div className="space-y-6 relative ml-2">
@@ -350,10 +351,12 @@ export const PublicTracking = () => {
                     "absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm z-10",
                     idx === 0 ? "bg-blue-600 scale-125" : "bg-gray-300"
                   )}></div>
-                  <p className="text-[10px] font-black text-gray-400  leading-none mb-1">
+                  <p className="text-[10px] font-black text-gray-400 uppercase leading-none mb-1">
                     {dateFnsFormat(cp.timestamp, 'HH:mm', { locale: es })}
                   </p>
-                  <p className="text-xs font-black text-gray-900  tracking-tighter">{cp.estado.replace(/_/g, ' ')}</p>
+                  <p className="text-xs font-black text-gray-900 uppercase tracking-tighter">
+                    {TRIP_STATUS_LABELS[cp.estado]?.label || cp.estado.replace(/_/g, ' ')}
+                  </p>
                   <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{cp.mensaje}</p>
                 </div>
               ))}
@@ -363,12 +366,12 @@ export const PublicTracking = () => {
       </div>
 
       {/* Verification Badge */}
-      <div className="max-w-5xl mx-auto px-6 mt-12 text-center">
+     {/*  <div className="max-w-5xl mx-auto px-6 mt-12 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200/50 rounded-full border border-slate-300">
           <ShieldCheck className="h-4 w-4 text-slate-600" />
-          <span className="text-[10px] font-bold text-slate-600  tracking-widest">Documento y Trazabilidad Certificados con Hash SHA-256</span>
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Documento y Trazabilidad Certificados con Hash SHA-256</span>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

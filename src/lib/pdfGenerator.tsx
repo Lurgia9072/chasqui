@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { Trip, Cargo, User } from '../types';
 import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { TRIP_STATUS_LABELS } from './constants';
 
 export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: User, carrier: User) => {
   const doc = new jsPDF();
@@ -31,10 +32,10 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text('DOCUMENTO DE CONTROL LOGÍSTICO', 15, 18);
-  doc.setFontSize(10);
+  doc.setFontSize(12);
   doc.text('CHASQUI - PLATAFORMA DE TRANSPORTE', 15, 28);
   
   doc.setFontSize(9);
@@ -190,7 +191,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   // 5. Historial de Eventos (Checkpoints)
   const tableRows = trip.checkpoints?.sort((a,b) => a.timestamp - b.timestamp).map(cp => [
     dateFnsFormat(cp.timestamp, 'dd/MM HH:mm', { locale: es }),
-    cp.estado.replace(/_/g, ' ').toUpperCase(),
+    (TRIP_STATUS_LABELS[cp.estado as any]?.label || cp.estado.replace(/_/g, ' ')).toUpperCase(),
     cp.mensaje,
     `${cp.location.lat.toFixed(4)}, ${cp.location.lng.toFixed(4)}`
   ]) || [];

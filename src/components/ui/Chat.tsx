@@ -328,13 +328,18 @@ export const Chat = ({ tripId, isCarrier, onClose }: ChatProps) => {
               >
                 <Mic className="h-5 w-5" />
               </button>
-              <Input
-                placeholder="Escribe un mensaje..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                className="flex-1 border-none bg-gray-100 focus:ring-0 rounded-xl"
-              />
+                <Input
+                  placeholder="Escribe un mensaje..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  className="flex-1 border-none bg-gray-100 focus:ring-0 rounded-xl"
+                />
               <Button 
                 size="sm" 
                 className="h-10 w-10 rounded-full p-0"

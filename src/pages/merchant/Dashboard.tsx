@@ -11,7 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { motion } from 'motion/react';
-import { ADMIN_EMAILS } from '../../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../../lib/constants';
 import { NearbyCarriersMap } from '../../components/NearbyCarriersMap';
 import { generateMonthlyReport } from '../../lib/pdfGenerator';
 import { User } from '../../types';
@@ -216,7 +216,7 @@ export const MerchantDashboard = () => {
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
                            <p className="text-[10px] uppercase font-black text-blue-600 tracking-widest">
-                            {trip.estado.replace(/_/g, ' ')}
+                            {TRIP_STATUS_LABELS[trip.estado]?.label || trip.estado.replace(/_/g, ' ')}
                            </p>
                            {trip.alertas?.riesgoLlegadaTardia && (
                              <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center">

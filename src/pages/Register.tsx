@@ -194,6 +194,16 @@ export const Register = () => {
             titular: data.titularCuenta || data.nombre,
           };
         }
+      } else if (data.tipoUsuario === 'comerciante') {
+        if (data.banco) {
+          newUser.datosBancarios = {
+            banco: data.banco,
+            tipoCuenta: data.tipoCuentaBancaria || 'ahorros',
+            numeroCuenta: data.numeroCuenta || '',
+            cci: data.cci || '',
+            titular: data.titularCuenta || data.nombre,
+          };
+        }
       }
 
       console.log('Enviando documento a Firestore:', cleanObject(newUser));
@@ -509,6 +519,35 @@ export const Register = () => {
                        <h3 className="text-xl font-black">Verificación de Identidad</h3>
                        <p className="text-sm text-slate-500 font-medium">Sube una foto clara de tu DNI o RUC para mayor seguridad en la plataforma.</p>
                        <UploadBox id="dni-m" active={!!dniUrl} label="Foto del DNI" onChange={(e) => handleFileUpload(e, 'dni')} />
+                       
+                       <div className="w-full space-y-6 pt-6 border-t border-slate-100 text-left">
+                         <h3 className="text-lg font-black flex items-center gap-2"><Landmark className="h-5 w-5 text-blue-600" /> Datos Bancarios (Opcional)</h3>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <div className="space-y-2">
+                              <label className="text-sm font-bold text-slate-700">Banco</label>
+                              <select {...register('banco')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
+                                <option value="">Selecciona...</option>
+                                <option value="BCP">BCP</option>
+                                <option value="Interbank">Interbank</option>
+                                <option value="BBVA">BBVA</option>
+                                <option value="Scotiabank">Scotiabank</option>
+                                <option value="Banco de la Nación">Banco de la Nación</option>
+                              </select>
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
+                              <select {...register('tipoCuentaBancaria')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
+                                <option value="ahorros">Ahorros</option>
+                                <option value="corriente">Corriente</option>
+                              </select>
+                           </div>
+                         </div>
+                         <Input label="Número de Cuenta" placeholder="Ej: 191-..." {...register('numeroCuenta')} />
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           <Input label="CCI" placeholder="002-..." {...register('cci')} />
+                           <Input label="Titular de la Cuenta" placeholder="Nombre completo" {...register('titularCuenta')} />
+                         </div>
+                       </div>
                     </div>
                     <div className="flex justify-between pt-6">
                       <Button variant="ghost" onClick={prevStep} className="font-bold">Atrás</Button>
