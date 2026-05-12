@@ -144,11 +144,11 @@ export const AdminDashboard = () => {
       } else {
         // Initialize with defaults if not exists
         setAppConfig({
-          yapeNumber: '987 654 321',
-          yapeName: 'TransportaYa SAC',
-          bcpAccount: '191-98765432-0-11',
-          bcpCci: '00219100987654320111',
-          bcpName: 'TransportaYa SAC'
+          yapeNumber: '+51 960 354 149',
+          yapeName: 'Lurgia Yupa',
+          bcpAccount: '821 3443364810',
+          bcpCci: '00382101344336481069',
+          bcpName: 'Lurgia Yupa A.'
         });
       }
     });
