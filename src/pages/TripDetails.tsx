@@ -141,6 +141,9 @@ export const TripDetails = () => {
   const [signalStatus, setSignalStatus] = useState<'excelente' | 'pobre' | 'perdida'>('excelente');
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
+  const number_yape = '+51935444315';
+  const number_account = '821 3443364810';
+  const number_cci = '00382101344336481069';
 
   // Helper para calcular distancia entre dos coordenadas (Haversine)
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -452,7 +455,7 @@ export const TripDetails = () => {
             });
 
             // Alerta de Margen Crítico para Exportación
-            if (trip.estado === 'en_camino_a_destino' && trip.fechaHoraLimitePuerto) {
+            if (trip?.estado === 'en_camino_a_destino' && trip?.fechaHoraLimitePuerto) {
               const limitTime = trip.fechaHoraLimitePuerto;
               const etaSeconds = route.duration;
               const now = Date.now();
@@ -460,12 +463,12 @@ export const TripDetails = () => {
               const margin = limitTime - estimatedArrival;
               const marginHours = margin / (3600000);
 
-              if (marginHours < 2 && !trip.alertas?.riesgoLlegadaTardia) {
+              if (marginHours < 2 && !trip?.alertas?.riesgoLlegadaTardia) {
                 updateDoc(doc(db, 'trips', trip.id), {
                   'alertas.riesgoLlegadaTardia': true
                 });
                 
-                addDoc(collection(db, 'trips', trip.id, 'messages'), {
+                addDoc(collection(db, 'trips', trip?.id, 'messages'), {
                   text: `🚨 ALERTA CRÍTICA: Margen de tiempo menor a 2 horas para llegar al puerto (${carga?.puertoDestino || 'destino'}). El transportista tiene un arribo estimado muy cercano al límite establecido.`,
                   senderId: 'system',
                   senderNombre: 'Chasqui Control',
@@ -476,8 +479,8 @@ export const TripDetails = () => {
             }
             
             // Actualizar tiempo estimado en Firebase si es transportista
-            if (isCarrier && durationText && trip.tiempoEstimado !== durationText) {
-              updateDoc(doc(db, 'trips', trip.id), {
+            if (isCarrier && durationText && trip?.tiempoEstimado !== durationText) {
+              updateDoc(doc(db, 'trips', trip?.id), {
                 tiempoEstimado: durationText
               });
             }
@@ -1018,7 +1021,6 @@ export const TripDetails = () => {
     if (!durationStr) return null;
     const now = new Date();
     let minutesToAdd = 0;
-    
     // Parse common duration formats from Google Maps
     const hourMatch = durationStr.match(/(\d+)\s*h/);
     const minMatch = durationStr.match(/(\d+)\s*min/);
@@ -1219,25 +1221,25 @@ export const TripDetails = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
                         <div className="h-8 w-8 bg-purple-100 rounded flex items-center justify-center mr-3">
-                          <span className="text-[10px] font-bold text-purple-700">YAPE</span>
+                          <span className="text-[10px] font-bold text-purple-700">PLIN</span>
                         </div>
                         <div>
-                          <p className="text-xs font-bold">{appConfig?.yapeNumber || '987 654 321'}</p>
-                          <p className="text-[10px] text-gray-500 truncate">A nombre de: {appConfig?.yapeName || 'Chasqui SAC'}</p>
+                          <p className="text-xs font-bold">{number_yape}</p>
+                          <p className="text-[10px] text-gray-500 truncate">A nombre de: {appConfig?.yapeName || 'Lurgia Yupa A.'}</p>
                         </div>
                       </div>
                       <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
                         <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center mr-3">
-                          <span className="text-[10px] font-bold text-blue-700">{appConfig?.bcpBank?.substring(0, 4).toUpperCase() || 'BCP'}</span>
+                          <span className="text-[10px] font-bold text-blue-700">{appConfig?.bcpBank?.substring(0, 4).toUpperCase() || 'Interbank'}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
                             <p className="text-[10px] font-bold text-blue-800 uppercase">{appConfig?.bcpBank || 'Banco'}</p>
                             <p className="text-[9px] text-gray-400 font-mono">{appConfig?.bcpDocType || 'NIT'}: {appConfig?.bcpDocNum || '...'}</p>
                           </div>
-                          <p className="text-xs font-bold font-mono truncate">{appConfig?.bcpAccount || '191-98765432-0-11'}</p>
-                          <p className="text-[10px] text-gray-500 truncate">CCI: {appConfig?.bcpCci || '00219100987654320111'}</p>
-                          <p className="text-[9px] text-gray-400 truncate">Titular: {appConfig?.bcpName || 'Chasqui SAC'}</p>
+                          <p className="text-xs font-bold font-mono truncate">{number_account}</p>
+                          <p className="text-[10px] text-gray-500 truncate">CCI: {number_cci}</p>
+                          <p className="text-[9px] text-gray-400 truncate">Titular: {appConfig?.bcpName || 'Lurgia Yupa A.'}</p>
                         </div>
                       </div>
                     </div>
