@@ -7,7 +7,7 @@ import { Cargo, Offer, OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star, Navigation, Map as MapIcon, Thermometer } from 'lucide-react';
+import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, AlertCircle, Phone, Star, Navigation, Map as MapIcon, Thermometer, Truck, Info } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
@@ -361,43 +361,104 @@ export const CarrierCargoDetails = () => {
                 <div className="relative">
                   <div className="absolute -left-8 top-1 h-2 w-2 rounded-full bg-blue-500 ring-4 ring-blue-50" />
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Destino</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold text-gray-400">Destino / Puerto</span>
+                      {carga.puertoDestino && <span className="text-[10px] text-blue-600 font-bold uppercase bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{carga.puertoDestino}</span>}
+                    </div>
                     <p className="text-gray-900 font-medium">{carga.destino}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50">
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Categoría</span>
-                  <p className="text-gray-900 font-bold capitalize">{carga.categoria || 'General'}</p>
+              <div className="pt-6 border-t border-gray-100 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Detalle Producto */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Package className="h-4 w-4" /> Especificaciones del Producto
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Producto</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoCarga}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Sector</span>
+                        <p className="text-xs text-gray-900 font-bold capitalize">{carga.sectorProducto || 'General'}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Lote</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.lote || 'N/A'}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Certificación</span>
+                        <p className="text-xs text-gray-900 font-bold capitalize">{carga.certificacion?.replace('_', ' ') || 'Ninguna'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detalle Logístico */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Truck className="h-4 w-4" /> Requerimientos Logísticos
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.peso} t</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.capacidadRequerida}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Tipo Vehículo</span>
+                        <p className="text-xs text-gray-900 font-bold capitalize">{carga.tipoVehiculoRequerido || 'Indiferente'}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Tratamiento</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.cuidadoEspecial || 'Normal'}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
-                  <p className="text-gray-900 font-medium">{carga.peso}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
-                  <p className="text-gray-900 font-medium text-xs">{carga.capacidadRequerida}</p>
-                </div>
-                <div className="space-y-1 text-right">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Cuidado</span>
-                  <p className="text-gray-900 font-medium text-xs">{carga.cuidadoEspecial || 'Normal'}</p>
+
+                {/* Datos de Exportación Críticos */}
+                <div className="bg-orange-50/50 p-6 rounded-3xl border border-orange-100 space-y-4">
+                  <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" /> Datos Críticos de Exportación
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-orange-400">Límite en Puerto</span>
+                      <p className="text-sm font-black text-orange-700">
+                        {carga.fechaHoraLimitePuerto ? new Date(carga.fechaHoraLimitePuerto).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-orange-400">RUC Exportador</span>
+                      <p className="text-sm font-bold text-gray-900">{carga.rucExportador || 'Ver al asignar'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-orange-400">Guía Remisión</span>
+                      <p className="text-sm font-bold text-gray-900">{carga.guiaRemision || 'Pendiente'}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {carga.temperaturaRequerida && (
+              {(carga.temperaturaRequerida || carga.categoria === 'perecible') && (
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between">
                   <div className="flex items-center space-x-3 text-blue-700">
                     <Thermometer className="h-5 w-5" />
-                    <span className="text-sm font-bold">Cadena de Frío Requerida</span>
+                    <span className="text-sm font-bold uppercase tracking-tight">Control de Temperatura</span>
                   </div>
-                  <span className="bg-blue-600 text-white px-3 py-1 rounded-lg font-black text-sm">{carga.temperaturaRequerida}</span>
+                  <span className="bg-blue-600 text-white px-3 py-1 rounded-lg font-black text-sm uppercase">{carga.temperaturaRequerida || 'Ambiente'}</span>
                 </div>
               )}
 
               <div className="space-y-2 pt-4 border-t border-gray-50">
-                <span className="text-[10px] uppercase font-bold text-gray-400">Descripción</span>
+                <span className="text-[10px] uppercase font-bold text-gray-400">Descripción Adicional</span>
                 <p className="text-gray-700 text-sm leading-relaxed">{carga.descripcion}</p>
               </div>
             </CardContent>
@@ -515,9 +576,3 @@ export const CarrierCargoDetails = () => {
     </div>
   );
 };
-
-const Info = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);

@@ -1847,7 +1847,7 @@ export const TripDetails = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600">Temperatura:</span>
                       <div className="flex items-center">
-                        <span className="text-xs font-bold mr-2 uppercase">{carga.temperaturaRequerida}</span>
+                        <span className="text-xs font-bold mr-2">{carga.temperaturaRequerida}</span>
                         <CheckCircle className="h-3 w-3 text-green-500" />
                       </div>
                     </div>

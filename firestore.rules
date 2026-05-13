@@ -77,10 +77,16 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == resource.data.uid;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.uid == "4RpsZPaoDSa1MxHlsMIftHc7Gk22" ||
         request.auth.token.email == "vvendiya@gmail.com" ||
+        request.auth.token.email == "lurgia18yuar@gmail.com" ||
+        request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin')
       );
@@ -100,6 +106,10 @@ service cloud.firestore {
 
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -142,28 +152,37 @@ service cloud.firestore {
     }
 
     function isValidCargo(data) {
-      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt', 'categoria']) &&
+      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
              data.comercianteId == request.auth.uid &&
-             data.tipoCarga is string && data.tipoCarga.size() > 0 && data.tipoCarga.size() < 100 &&
+             data.tipoCarga is string &&
              data.peso is number && 
-             data.origen is string && data.origen.size() > 0 && data.origen.size() < 200 &&
-             data.destino is string && data.destino.size() > 0 && data.destino.size() < 200 &&
-             data.precioPropuesto is number && data.precioPropuesto > 0 && data.precioPropuesto < 1000000 &&
+             data.origen is string &&
+             data.destino is string &&
+             data.precioPropuesto is number &&
              data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
-             data.categoria in ['general', 'perecible', 'fragil', 'peligrosa'] &&
              data.createdAt is number &&
              (!('nombreProducto' in data) || (data.nombreProducto is string)) &&
+             (!('sectorProducto' in data) || (data.sectorProducto is string)) &&
              (!('lote' in data) || (data.lote is string)) &&
+             (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
+             (!('rucExportador' in data) || (data.rucExportador is string)) &&
+             (!('puertoDestino' in data) || (data.puertoDestino is string)) &&
+             (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number || data.fechaHoraLimitePuerto == null)) &&
+             (!('capacidadRequerida' in data) || (data.capacidadRequerida is string)) &&
+             (!('descripcion' in data) || (data.descripcion is string)) &&
+             (!('categoria' in data) || (data.categoria is string)) &&
              (!('certificacion' in data) || (data.certificacion is string)) &&
              (!('partidaArancelaria' in data) || (data.partidaArancelaria is string)) &&
              (!('temperaturaRequerida' in data) || (data.temperaturaRequerida is string)) &&
              (!('tipoVehiculoRequerido' in data) || (data.tipoVehiculoRequerido is string)) &&
              (!('condicionSanitaria' in data) || (data.condicionSanitaria is bool)) &&
-             (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
-             (!('puertoDestino' in data) || (data.puertoDestino is string)) &&
-             (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number)) &&
              (!('numeroContenedor' in data) || (data.numeroContenedor is string)) &&
-             (!('descripcion' in data) || (data.descripcion is string && data.descripcion.size() < 1000));
+             (!('seguroCarga' in data) || (data.seguroCarga is string)) &&
+             (!('cuidadoEspecial' in data) || (data.cuidadoEspecial is string)) &&
+             (!('origenCoords' in data) || (data.origenCoords is map || data.origenCoords == null)) &&
+             (!('destinoCoords' in data) || (data.destinoCoords is map || data.destinoCoords == null)) &&
+             (!('comercianteNombre' in data) || (data.comercianteNombre is string)) &&
+             (!('ofertasCount' in data) || (data.ofertasCount is number));
     }
 
     function isValidOffer(data) {
@@ -175,33 +194,46 @@ service cloud.firestore {
     }
 
     function isValidTrip(data) {
-      return hasRequiredFields(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'comision', 'estado', 'createdAt']) &&
+      return hasRequiredFields(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'estado', 'createdAt']) &&
              data.cargoId is string &&
              data.comercianteId is string &&
              data.transportistaId is string &&
-             data.origen is string && data.origen.size() < 500 &&
-             data.destino is string && data.destino.size() < 500 &&
-             data.precioFinal is number && data.precioFinal > 0 &&
-             data.comision is number && data.comision >= 0 &&
+             data.precioFinal is number &&
              data.estado in ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
-             data.createdAt is number &&
+             (!('comision' in data) || (data.comision is number)) &&
+             (!('tipoCarga' in data) || (data.tipoCarga is string)) &&
              (!('alertas' in data) || data.alertas is map) &&
-             (!('evidencia' in data) || data.evidencia is map) &&
+             (!('checkpoints' in data) || data.checkpoints is list) &&
              (!('nombreProducto' in data) || (data.nombreProducto is string)) &&
+             (!('sectorProducto' in data) || (data.sectorProducto is string)) &&
+             (!('rucExportador' in data) || (data.rucExportador is string)) &&
+             (!('seguroCarga' in data) || (data.seguroCarga is string)) &&
              (!('lote' in data) || (data.lote is string)) &&
              (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
              (!('temperaturaRequerida' in data) || (data.temperaturaRequerida is string)) &&
-             (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number)) &&
-             (!('lastTempUpdateAt' in data) || (data.lastTempUpdateAt is number)) &&
-             (!('recojoRealAt' in data) || (data.recojoRealAt is number)) &&
-             (!('entregaRealAt' in data) || (data.entregaRealAt is number)) &&
+             (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number || data.fechaHoraLimitePuerto == null)) &&
+             (!('lastTempUpdateAt' in data) || (data.lastTempUpdateAt is number || data.lastTempUpdateAt == null)) &&
+             (!('recojoRealAt' in data) || (data.recojoRealAt is number || data.recojoRealAt == null)) &&
+             (!('entregaRealAt' in data) || (data.entregaRealAt is number || data.entregaRealAt == null)) &&
              (!('llegadaAntesLimite' in data) || (data.llegadaAntesLimite is bool)) &&
              (!('temperaturaActual' in data) || (data.temperaturaActual is string)) &&
              (!('recojoEstado' in data) || (data.recojoEstado is string)) &&
              (!('recojoTemp' in data) || (data.recojoTemp is string)) &&
              (!('entregaEstado' in data) || (data.entregaEstado is string)) &&
              (!('entregaTemp' in data) || (data.entregaTemp is string)) &&
-             (!('seguimiento' in data) || data.seguimiento is map);
+             (!('seguimiento' in data) || data.seguimiento is map) &&
+             (!('transportistaNombre' in data) || (data.transportistaNombre is string)) &&
+             (!('comercianteNombre' in data) || (data.comercianteNombre is string)) &&
+             (!('vehiculo' in data) || (data.vehiculo is map)) &&
+             (!('tiempoEstimado' in data) || (data.tiempoEstimado is string)) &&
+             (!('fechaRecojo' in data) || (data.fechaRecojo is string)) &&
+             (!('horaRecojo' in data) || (data.horaRecojo is string)) &&
+             (!('pagoInfo' in data) || (data.pagoInfo is map)) &&
+             (!('payoutInfo' in data) || (data.payoutInfo is map)) &&
+             (!('ratingTransportista' in data) || (data.ratingTransportista is number)) &&
+             (!('comentarioTransportista' in data) || (data.comentarioTransportista is string)) &&
+             (!('ratingComerciante' in data) || (data.ratingComerciante is number)) &&
+             (!('comentarioComerciante' in data) || (data.comentarioComerciante is string));
     }
 
     // ===============================================================
@@ -216,7 +248,7 @@ service cloud.firestore {
         isOwner(userId) || 
         isAdmin() ||
         // Permitir que otros usuarios actualicen el rating (con precaución)
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'totalRatings', 'sumRatings', 'completedTrips'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'totalRatings', 'sumRatings', 'completedTrips', 'indiceConfiabilidad'])
       );
     }
 
@@ -256,7 +288,7 @@ service cloud.firestore {
         allow create: if canChat() && 
                       request.resource.data.senderId == request.auth.uid &&
                       (request.resource.data.type == 'text' || request.resource.data.type == 'audio') &&
-                      (request.resource.data.text is string || request.resource.data.audioUrl is string);
+                      (request.resource.data.text is string || request.resource.data.audioUrl is string || request.resource.data.type == 'audio');
       }
     }
 
