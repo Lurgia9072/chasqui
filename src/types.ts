@@ -85,23 +85,26 @@ export interface Cargo {
   
   // Datos Producto Exportable
   nombreProducto?: string;
+  sectorProducto?: string;
   lote?: string;
   certificacion?: 'organico' | 'globalgap' | 'fair_trade' | 'sin_certificacion';
   partidaArancelaria?: string;
 
   // Condiciones de Transporte
-  temperaturaRequerida?: 'ambiente' | 'refrigerado' | 'congelado' | 'controlado' | string;
+  temperaturaRequerida?: string;
   tipoVehiculoRequerido?: 'refrigerado' | 'seco' | 'isotermico' | 'indiferente';
-  condicionSanitaria?: boolean; // Vehículo con limpieza previa certificada
+  condicionSanitaria?: boolean; 
 
   // Datos de Exportación
+  rucExportador?: string;
   guiaRemision?: string;
   puertoDestino?: string;
   fechaHoraLimitePuerto?: number;
   numeroContenedor?: string;
+  seguroCarga?: string;
 
   cuidadoEspecial?: string;
-  peso: string;
+  peso: number;
   capacidadRequerida: string;
   descripcion: string;
   precioPropuesto: number;

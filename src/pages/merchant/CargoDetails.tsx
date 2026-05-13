@@ -231,43 +231,92 @@ export const MerchantCargoDetails = () => {
                 <div className="relative">
                   <div className="absolute -left-6 top-1 h-2 w-2 rounded-full bg-blue-500" />
                   <div className="space-y-0.5">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Destino</span>
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Destino / Puerto</span>
                     <p className="text-xs text-gray-900 font-medium leading-tight">{carga.destino}</p>
+                    {carga.puertoDestino && <p className="text-[10px] text-blue-600 font-bold uppercase mt-1">Terminal: {carga.puertoDestino}</p>}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Categoría</span>
-                  <p className="text-xs text-gray-900 font-bold capitalize">{carga.categoria || 'General'}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
-                  <p className="text-sm text-gray-900 font-medium">{carga.peso}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
-                  <p className="text-sm text-gray-900 font-medium whitespace-nowrap overflow-hidden text-ellipsis">{carga.capacidadRequerida}</p>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-gray-400">Propuesta</span>
-                  <p className="text-sm text-blue-600 font-bold">S/ {carga.precioPropuesto}</p>
+              <div className="pt-4 border-t border-gray-50 space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Package className="h-3 w-3" /> Detalle del Producto
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Producto</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoCarga}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Sector</span>
+                    <p className="text-xs text-gray-900 font-bold capitalize">{carga.sectorProducto || 'No especificado'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Lote</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.lote || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Certificación</span>
+                    <p className="text-xs text-gray-900 font-bold capitalize">{carga.certificacion?.replace('_', ' ') || 'Ninguna'}</p>
+                  </div>
                 </div>
               </div>
 
-              {carga.temperaturaRequerida && (
+              <div className="pt-4 border-t border-gray-50 space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Truck className="h-3 w-3" /> Logística y Exportación
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
+                    <p className="text-sm text-gray-900 font-bold">{carga.peso} t</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">RUC Exportador</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.rucExportador || user?.ruc || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Límite Puerto</span>
+                    <p className="text-[10px] text-red-600 font-black">
+                      {carga.fechaHoraLimitePuerto ? new Date(carga.fechaHoraLimitePuerto).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Póliza Seguro</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.seguroCarga || 'N/A'}</p>
+                  </div>
+                </div>
+                {carga.condicionSanitaria && (
+                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-emerald-600" />
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase">Vehículo con limpieza certificada</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Categoría Log.</span>
+                  <p className="text-xs text-gray-900 font-bold capitalize">{carga.categoria || 'General'}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-400">Propuesta</span>
+                  <p className="text-sm text-blue-600 font-black">S/ {carga.precioPropuesto}</p>
+                </div>
+              </div>
+
+              {(carga.temperaturaRequerida || (carga.categoria === 'perecible')) && (
                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-blue-700">
                     <Thermometer className="h-4 w-4" />
                     <span className="text-[10px] font-bold uppercase">Cadena de Frío</span>
                   </div>
-                  <span className="text-xs font-black text-blue-600">{carga.temperaturaRequerida}</span>
+                  <span className="text-xs font-black text-blue-600 uppercase">{carga.temperaturaRequerida || 'Ambiente'}</span>
                 </div>
               )}
 
               <div className="space-y-2 pt-4 border-t border-gray-50">
-                <span className="text-[10px] uppercase font-bold text-gray-400">Descripción</span>
+                <span className="text-[10px] uppercase font-bold text-gray-400">Descripción Detallada</span>
                 <p className="text-gray-700 text-xs leading-relaxed">{carga.descripcion}</p>
               </div>
             </CardContent>

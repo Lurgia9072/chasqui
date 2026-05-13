@@ -67,20 +67,26 @@
         "comercianteId": { "type": "string" },
         "tipoCarga": { "type": "string" },
         "peso": { "type": "number" },
+        "capacidadRequerida": { "type": "string" },
+        "cuidadoEspecial": { "type": "string" },
         "descripcion": { "type": "string" },
         "origen": { "type": "string" },
         "destino": { "type": "string" },
         "nombreProducto": { "type": "string" },
+        "sectorProducto": { "type": "string", "enum": ["agroindustrial", "pesca", "textil", "mineria", "quimico", "otros"] },
         "lote": { "type": "string" },
         "certificacion": { "type": "string", "enum": ["organico", "globalgap", "fair_trade", "sin_certificacion"] },
         "partidaArancelaria": { "type": "string" },
+        "categoria": { "type": "string", "enum": ["general", "perecible", "fragil", "peligrosa"] },
         "temperaturaRequerida": { "type": "string" },
         "tipoVehiculoRequerido": { "type": "string" },
         "condicionSanitaria": { "type": "boolean" },
+        "rucExportador": { "type": "string" },
         "guiaRemision": { "type": "string" },
         "puertoDestino": { "type": "string" },
         "fechaHoraLimitePuerto": { "type": "number" },
         "numeroContenedor": { "type": "string" },
+        "seguroCarga": { "type": "string" },
         "precioPropuesto": { "type": "number" },
         "estado": { "type": "string", "enum": ["disponible", "en_negociacion", "asignado", "completado"] },
         "createdAt": { "type": "number" }
@@ -226,6 +232,7 @@
       "description": "Real-time support messages",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
         "userId": { "type": "string" },
         "text": { "type": "string" },
         "senderId": { "type": "string" },
@@ -240,11 +247,11 @@
       "schema": "User",
       "description": "User profiles"
     },
-    "/cargos/{cargoId}": {
+    "/cargas/{cargoId}": {
       "schema": "Cargo",
       "description": "Cargo requests"
     },
-    "/cargos/{cargoId}/offers/{offerId}": {
+    "/cargas/{cargoId}/offers/{offerId}": {
       "schema": "Offer",
       "description": "Carrier offers for cargo"
     },
@@ -263,6 +270,10 @@
     "/support_chats/{chatId}": {
       "schema": "SupportChat",
       "description": "Support chat messages"
+    },
+    "/config/{configId}": {
+      "schema": "object",
+      "description": "System configuration"
     }
   }
 }
