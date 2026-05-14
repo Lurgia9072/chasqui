@@ -133,7 +133,7 @@ export const MerchantCargoDetails = () => {
         origen: carga.origen,
         destino: carga.destino,
         precioFinal: offer.precioOfertado,
-        comision: offer.precioOfertado * 0.1,
+        comision: offer.precioOfertado * 0.08 as 0.8, // 8% de comisión
         estado: 'pendiente_pago',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
         checkpoints: [],

@@ -1907,7 +1907,7 @@ export const TripDetails = () => {
                   <span className="font-bold text-gray-900">S/ {trip.precioFinal}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Comisión (10%)</span>
+                  <span className="text-gray-600">Comisión (8%)</span>
                   <span className="font-bold text-red-500">- S/ {trip.comision.toFixed(2)}</span>
                 </div>
                 <div className="pt-4 border-t border-gray-100 flex justify-between items-center">

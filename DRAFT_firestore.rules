@@ -1,0 +1,197 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // 0. Global Safety Net
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.uid == "4RpsZPaoDSa1MxHlsMIftHc7Gk22" ||
+        request.auth.token.email == "vvendiya@gmail.com" ||
+        request.auth.token.email == "lurgia18yuar@gmail.com" ||
+        request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
+        request.auth.token.email == "chasqui676@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin')
+      );
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isMerchant() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().tipoUsuario == 'comerciante';
+    }
+
+    function isCarrier() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().tipoUsuario == 'transportista';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ===============================================================
+    // Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'nombre', 'email', 'tipoUsuario', 'verificado', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.nombre is string && data.nombre.size() < 100 &&
+             data.email is string && data.email.size() < 100 &&
+             data.tipoUsuario in ['comerciante', 'transportista', 'admin'] &&
+             data.createdAt is number;
+    }
+
+    function isValidCargo(data) {
+      return data.keys().hasAll(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
+             data.comercianteId == request.auth.uid &&
+             data.tipoCarga is string && data.tipoCarga.size() < 200 &&
+             data.peso is number && 
+             data.origen is string && data.origen.size() < 500 &&
+             data.destino is string && data.destino.size() < 500 &&
+             data.precioPropuesto is number &&
+             data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
+             data.createdAt is number;
+    }
+
+    function isValidOffer(data) {
+      return data.keys().hasAll(['cargoId', 'transportistaId', 'precioOfertado', 'estado', 'createdAt']) &&
+             isValidId(data.cargoId) &&
+             data.transportistaId == request.auth.uid &&
+             data.precioOfertado is number && data.precioOfertado > 0 &&
+             data.estado in ['pendiente', 'aceptada', 'rechazada'] &&
+             data.createdAt is number;
+    }
+
+    function isValidTrip(data) {
+      return data.keys().hasAll(['cargoId', 'comercianteId', 'transportistaId', 'origen', 'destino', 'precioFinal', 'estado', 'createdAt']) &&
+             isValidId(data.cargoId) &&
+             data.precioFinal is number &&
+             data.estado in ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
+             data.createdAt is number;
+    }
+
+    function isValidConfig(data) {
+      return (data.yapeNumber is string && data.yapeNumber.size() < 20) &&
+             (data.yapeName is string && data.yapeName.size() < 100);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && (
+        isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['nombre', 'telefono', 'documento', 'ruc', 'razonSocial', 'documentosUrls', 'vehiculo', 'zonasOperacion', 'datosBancarios', 'photoUrl']) ||
+        isAdmin() ||
+        // Remote update for ratings
+        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'totalRatings', 'sumRatings', 'completedTrips', 'indiceConfiabilidad'])
+      );
+    }
+
+    match /cargas/{cargoId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isMerchant() && isValidCargo(incoming());
+      allow update: if isSignedIn() && (existing().comercianteId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+
+      match /offers/{offerId} {
+        allow read: if isSignedIn() && (
+          request.auth.uid == existing().transportistaId || 
+          request.auth.uid == get(/databases/$(database)/documents/cargas/$(cargoId)).data.comercianteId || 
+          isAdmin()
+        );
+        allow list: if isSignedIn();
+        allow create: if isCarrier() && isValidOffer(incoming());
+        allow update: if isSignedIn() && (
+          existing().transportistaId == request.auth.uid || 
+          get(/databases/$(database)/documents/cargas/$(cargoId)).data.comercianteId == request.auth.uid || 
+          isAdmin()
+        );
+      }
+    }
+
+    match /trips/{tripId} {
+      allow get: if isSignedIn() && (
+        existing().comercianteId == request.auth.uid || 
+        existing().transportistaId == request.auth.uid || 
+        isAdmin()
+      );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn(); // Usually created via cloud function or triggered by offer acceptance
+      allow update: if isSignedIn() && (
+        existing().comercianteId == request.auth.uid || 
+        existing().transportistaId == request.auth.uid || 
+        isAdmin()
+      );
+
+      match /messages/{messageId} {
+        allow read, create: if isSignedIn() && (
+          get(/databases/$(database)/documents/trips/$(tripId)).data.comercianteId == request.auth.uid || 
+          get(/databases/$(database)/documents/trips/$(tripId)).data.transportistaId == request.auth.uid || 
+          isAdmin()
+        );
+      }
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+    }
+
+    match /support_tickets/{ticketId} {
+      allow read: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /support_chats/{chatId} {
+      allow read: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && (configId != 'payment_methods' || isValidConfig(incoming()));
+    }
+  }
+}

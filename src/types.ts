@@ -139,7 +139,7 @@ export interface Trip {
   origen: string;
   destino: string;
   precioFinal: number;
-  comision: number;
+  comision: 0.8;
   estado: TripStatus;
   seguimiento?: Location;
   checkpoints: Checkpoint[];

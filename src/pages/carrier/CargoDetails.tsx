@@ -548,12 +548,12 @@ export const CarrierCargoDetails = () => {
 
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Comisión TransportaYa (10%)</span>
-                    <span>- S/ {(offerPrice * 0.1).toFixed(2)}</span>
+                    <span>Comisión TransportaYa (8%)</span>
+                    <span>- S/ {(offerPrice * 0.08).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-bold text-green-600 pt-2 border-t border-gray-100">
                     <span>Recibirás</span>
-                    <span>S/ {(offerPrice * 0.9).toFixed(2)}</span>
+                    <span>S/ {(offerPrice * 0.92).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
