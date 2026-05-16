@@ -672,11 +672,11 @@ export const CarrierDashboard = () => {
                 <CardHeader className="pb-4">
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-lg font-bold group-hover:text-blue-600 transition-colors">
-                      {carga.tipoCarga}
+                      {carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga}
                     </CardTitle>
                     <div className="flex flex-col items-end">
-                      <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Capacidad</span>
-                      <span className="text-xs font-bold text-blue-600">{carga.capacidadRequerida}</span>
+                      <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Peso / Unid</span>
+                      <span className="text-xs font-bold text-blue-600 truncate max-w-[80px]">{carga.vehiculo?.capacidad?.peso || carga.capacidadRequerida}</span>
                     </div>
                   </div>
                   <CardDescription className="flex items-center text-xs">

@@ -65,33 +65,46 @@
       "properties": {
         "id": { "type": "string" },
         "comercianteId": { "type": "string" },
-        "tipoCarga": { "type": "string" },
-        "peso": { "type": "number" },
-        "capacidadRequerida": { "type": "string" },
-        "cuidadoEspecial": { "type": "string" },
-        "descripcion": { "type": "string" },
+        "comercianteNombre": { "type": "string" },
         "origen": { "type": "string" },
         "destino": { "type": "string" },
+        "origenCoords": { "type": "object" },
+        "destinoCoords": { "type": "object" },
+        "tipoDeCarga": { "type": "string" },
+        "vehiculo": {
+          "type": "object",
+          "properties": {
+            "tipo": { "type": "string" },
+            "otroTipo": { "type": "string" },
+            "caracteristicas": { "type": "array", "items": { "type": "string" } },
+            "capacidad": {
+              "type": "object",
+              "properties": {
+                "peso": { "type": "string" },
+                "volumen": { "type": "string" },
+                "pallets": { "type": "string" },
+                "dimensiones": { "type": "string" }
+              }
+            }
+          }
+        },
         "nombreProducto": { "type": "string" },
-        "sectorProducto": { "type": "string", "enum": ["agroindustrial", "pesca", "textil", "mineria", "quimico", "otros"] },
-        "lote": { "type": "string" },
-        "certificacion": { "type": "string", "enum": ["organico", "globalgap", "fair_trade", "sin_certificacion"] },
-        "partidaArancelaria": { "type": "string" },
-        "categoria": { "type": "string", "enum": ["general", "perecible", "fragil", "peligrosa"] },
-        "temperaturaRequerida": { "type": "string" },
-        "tipoVehiculoRequerido": { "type": "string" },
-        "condicionSanitaria": { "type": "boolean" },
-        "rucExportador": { "type": "string" },
-        "guiaRemision": { "type": "string" },
-        "puertoDestino": { "type": "string" },
-        "fechaHoraLimitePuerto": { "type": "number" },
-        "numeroContenedor": { "type": "string" },
-        "seguroCarga": { "type": "string" },
+        "horario": { "type": "string" },
+        "descripcion": { "type": "string" },
         "precioPropuesto": { "type": "number" },
         "estado": { "type": "string", "enum": ["disponible", "en_negociacion", "asignado", "completado"] },
-        "createdAt": { "type": "number" }
+        "createdAt": { "type": "number" },
+        "lote": { "type": "string" },
+        "partidaArancelaria": { "type": "string" },
+        "puertoDestino": { "type": "string" },
+        "numeroContenedor": { "type": "string" },
+        "temperaturaRequerida": { "type": "string" },
+        "certificacion": { "type": "string" },
+        "eudr": { "type": "string" },
+        "guiaRemision": { "type": "string" },
+        "fechaHoraLimitePuerto": { "type": "number" }
       },
-      "required": ["comercianteId", "tipoCarga", "peso", "origen", "destino", "precioPropuesto", "estado", "createdAt"]
+      "required": ["comercianteId", "tipoDeCarga", "origen", "destino", "nombreProducto", "descripcion", "precioPropuesto", "estado", "createdAt"]
     },
     "Offer": {
       "title": "Offer",

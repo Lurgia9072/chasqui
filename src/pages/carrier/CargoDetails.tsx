@@ -11,6 +11,7 @@ import { Package, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, Alert
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { COMMISSION_RATE } from '../../lib/constants';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -146,6 +147,7 @@ export const CarrierCargoDetails = () => {
     try {
       await addDoc(collection(db, 'cargas', id, 'offers'), {
         cargoId: id,
+        comercianteId: carga.comercianteId,
         transportistaId: user.uid,
         transportistaNombre: user.nombre,
         transportistaRating: user.rating,
@@ -161,7 +163,7 @@ export const CarrierCargoDetails = () => {
       await addDoc(collection(db, 'notifications'), {
         userId: carga.comercianteId,
         titulo: 'Nueva Oferta Recibida',
-        mensaje: `${user.nombre} ha enviado una oferta de S/ ${offerPrice} (Recojo en ${pickupTime}) para tu carga de ${carga.tipoCarga}.`,
+        mensaje: `${user.nombre} ha enviado una oferta de S/ ${offerPrice} (Recojo en ${pickupTime}) para tu carga de ${carga.tipoDeCarga || carga.tipoCarga}.`,
         tipo: 'oferta_nueva',
         leido: false,
         link: `/merchant/cargo/${id}`,
@@ -261,7 +263,7 @@ export const CarrierCargoDetails = () => {
             <CardHeader className="pb-4">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <CardTitle className="text-2xl font-bold">{carga.tipoCarga}</CardTitle>
+                  <CardTitle className="text-2xl font-bold">{carga.tipoDeCarga || carga.tipoCarga}</CardTitle>
                   <CardDescription className="flex items-center text-xs">
                     <Clock className="h-3 w-3 mr-1" />
                     Publicado {formatDistanceToNow(carga.createdAt, { addSuffix: true, locale: es })}
@@ -380,15 +382,7 @@ export const CarrierCargoDetails = () => {
                     <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                       <div className="space-y-0.5">
                         <span className="text-[10px] uppercase font-bold text-gray-400">Producto</span>
-                        <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoCarga}</p>
-                      </div>
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] uppercase font-bold text-gray-400">Sector</span>
-                        <p className="text-xs text-gray-900 font-bold capitalize">{carga.sectorProducto || 'General'}</p>
-                      </div>
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] uppercase font-bold text-gray-400">Lote</span>
-                        <p className="text-xs text-gray-900 font-bold">{carga.lote || 'N/A'}</p>
+                        <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga}</p>
                       </div>
                       <div className="space-y-0.5">
                         <span className="text-[10px] uppercase font-bold text-gray-400">Certificación</span>
@@ -400,24 +394,24 @@ export const CarrierCargoDetails = () => {
                   {/* Detalle Logístico */}
                   <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      <Truck className="h-4 w-4" /> Requerimientos Logísticos
+                      <Truck className="h-4 w-4" /> Requerimientos del Vehículo
                     </h4>
                     <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                       <div className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Tipo</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.tipo || 'N/A'}</p>
+                      </div>
+                      <div className="space-y-0.5">
                         <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
-                        <p className="text-xs text-gray-900 font-bold">{carga.peso} t</p>
+                        <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.capacidad?.peso || 'N/A'}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <span className="text-[10px] uppercase font-bold text-gray-400">Capacidad</span>
-                        <p className="text-xs text-gray-900 font-bold">{carga.capacidadRequerida}</p>
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Volumen</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.capacidad?.volumen || 'N/A'}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <span className="text-[10px] uppercase font-bold text-gray-400">Tipo Vehículo</span>
-                        <p className="text-xs text-gray-900 font-bold capitalize">{carga.tipoVehiculoRequerido || 'Indiferente'}</p>
-                      </div>
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] uppercase font-bold text-gray-400">Tratamiento</span>
-                        <p className="text-xs text-gray-900 font-bold">{carga.cuidadoEspecial || 'Normal'}</p>
+                        <span className="text-[10px] uppercase font-bold text-gray-400">Pallets</span>
+                        <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.capacidad?.pallets || 'N/A'}</p>
                       </div>
                     </div>
                   </div>
@@ -434,10 +428,6 @@ export const CarrierCargoDetails = () => {
                       <p className="text-sm font-black text-orange-700">
                         {carga.fechaHoraLimitePuerto ? new Date(carga.fechaHoraLimitePuerto).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'No especificada'}
                       </p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-orange-400">RUC Exportador</span>
-                      <p className="text-sm font-bold text-gray-900">{carga.rucExportador || 'Ver al asignar'}</p>
                     </div>
                     <div className="space-y-1">
                       <span className="text-[10px] uppercase font-bold text-orange-400">Guía Remisión</span>
@@ -548,12 +538,12 @@ export const CarrierCargoDetails = () => {
 
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Comisión TransportaYa (8%)</span>
-                    <span>- S/ {(offerPrice * 0.08).toFixed(2)}</span>
+                    <span>Comisión TransportaYa ({Math.round(COMMISSION_RATE * 100)}%)</span>
+                    <span>- S/ {(offerPrice * COMMISSION_RATE).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-bold text-green-600 pt-2 border-t border-gray-100">
                     <span>Recibirás</span>
-                    <span>S/ {(offerPrice * 0.92).toFixed(2)}</span>
+                    <span>S/ {(offerPrice * (1 - COMMISSION_RATE)).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>

@@ -6,7 +6,7 @@ import { Button } from './Button';
 import { PriceTag } from './PriceTag';
 import { StatusBadge } from './StatusBadge';
 import { Cargo } from '../../types';
-import { format } from 'date-fns';
+import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface CargoCardProps {
@@ -34,9 +34,11 @@ export const CargoCard = ({ cargo, onClick, className, showOffers = true, offers
             </div>
             <div>
               <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                {cargo.tipoCarga}
+                {cargo.tipoDeCarga || cargo.tipoCarga}
               </h3>
-              <p className="text-sm text-gray-500">{cargo.peso} kg • {cargo.descripcion}</p>
+              <p className="text-sm text-gray-500">
+                {cargo.vehiculo?.capacidad?.peso || (cargo.peso ? `${cargo.peso} kg` : 'Peso N/E')} • {cargo.descripcion}
+              </p>
             </div>
           </div>
           <StatusBadge status={cargo.estado} />
@@ -65,7 +67,7 @@ export const CargoCard = ({ cargo, onClick, className, showOffers = true, offers
             <div className="flex items-center space-x-2 text-gray-500">
               <Calendar className="h-4 w-4" />
               <span className="text-xs">
-                {format(cargo.createdAt, "d 'de' MMMM", { locale: es })}
+                {dateFnsFormat(cargo.createdAt, "d 'de' MMMM", { locale: es })}
               </span>
             </div>
             <PriceTag amount={cargo.precioPropuesto} size="md" />

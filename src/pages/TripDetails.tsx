@@ -6,19 +6,18 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2 } from 'lucide-react';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2, CreditCard } from 'lucide-react';
 import { es } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
 import { useNotification } from '../components/ui/NotificationProvider';
-import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../lib/constants';
+import { ADMIN_EMAILS, COMMISSION_RATE, TRIP_STATUS_LABELS } from '../lib/constants';
 import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
 import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-
 
 // Fix Leaflet default icon issue
 // @ts-ignore
@@ -141,9 +140,6 @@ export const TripDetails = () => {
   const [signalStatus, setSignalStatus] = useState<'excelente' | 'pobre' | 'perdida'>('excelente');
 
   const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
-  const number_yape = '+51935444315';
-  const number_account = '821 3443364810';
-  const number_cci = '00382101344336481069';
 
   // Helper para calcular distancia entre dos coordenadas (Haversine)
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -455,7 +451,7 @@ export const TripDetails = () => {
             });
 
             // Alerta de Margen Crítico para Exportación
-            if (trip?.estado === 'en_camino_a_destino' && trip?.fechaHoraLimitePuerto) {
+            if (trip?.estado === 'en_camino_a_destino' && trip.fechaHoraLimitePuerto) {
               const limitTime = trip.fechaHoraLimitePuerto;
               const etaSeconds = route.duration;
               const now = Date.now();
@@ -463,12 +459,12 @@ export const TripDetails = () => {
               const margin = limitTime - estimatedArrival;
               const marginHours = margin / (3600000);
 
-              if (marginHours < 2 && !trip?.alertas?.riesgoLlegadaTardia) {
+              if (marginHours < 2 && !trip.alertas?.riesgoLlegadaTardia) {
                 updateDoc(doc(db, 'trips', trip.id), {
                   'alertas.riesgoLlegadaTardia': true
                 });
                 
-                addDoc(collection(db, 'trips', trip?.id, 'messages'), {
+                addDoc(collection(db, 'trips', trip.id, 'messages'), {
                   text: `🚨 ALERTA CRÍTICA: Margen de tiempo menor a 2 horas para llegar al puerto (${carga?.puertoDestino || 'destino'}). El transportista tiene un arribo estimado muy cercano al límite establecido.`,
                   senderId: 'system',
                   senderNombre: 'Chasqui Control',
@@ -626,7 +622,7 @@ export const TripDetails = () => {
         if (carga.categoria === 'perecible' && recojoTemp) updates.recojoTemp = recojoTemp;
         
         notificationTitle = 'Carga Recogida';
-        notificationMessage = `El transportista ha recogido tu carga de ${carga.nombreProducto || carga.tipoCarga} y está en camino al destino.`;
+        notificationMessage = `El transportista ha recogido tu carga de ${carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga} y está en camino al destino.`;
         checkpointMsg = `Carga recogida: ${recojoEstado}. ${recojoTemp ? `Temp: ${recojoTemp}°C.` : ''}`;
       } else if (newStatus === 'entregado_pendiente_confirmacion') {
         updates.tiempoEstimado = 'Esperando confirmación';
@@ -640,12 +636,12 @@ export const TripDetails = () => {
         }
 
         notificationTitle = 'Carga Entregada';
-        notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.nombreProducto || carga.tipoCarga}. Estado: ${entregaEstado}.`;
+        notificationMessage = `El transportista indica que ha entregado tu carga de ${carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga}. Estado: ${entregaEstado}.`;
         checkpointMsg = `Carga entregada: ${entregaEstado}. ${entregaTemp ? `Temp: ${entregaTemp}°C.` : ''} ${updates.llegadaAntesLimite ? '✓ Llegada a tiempo al puerto' : '⚠ Llegada fuera de plazo'}`;
       } else if (newStatus === 'en_camino_a_destino') {
         updates.tiempoEstimado = 'Calculando tiempo...';
         notificationTitle = 'En Tránsito';
-        notificationMessage = `Tu carga de ${carga.tipoCarga} está en camino al destino final.`;
+        notificationMessage = `Tu carga de ${carga.tipoDeCarga || carga.tipoCarga} está en camino al destino final.`;
         checkpointMsg = 'Inicio de tránsito troncal hacia el punto de destino.';
       } else if (newStatus === 'completado') {
         updates.tiempoEstimado = 'Viaje Finalizado';
@@ -838,7 +834,7 @@ export const TripDetails = () => {
       await addDoc(collection(db, 'notifications'), {
         userId: trip.transportistaId,
         titulo: '¡Pago Verificado!',
-        mensaje: `El pago para el viaje de ${trip.tipoCarga} ha sido verificado. Ya puedes iniciar el recojo.`,
+        mensaje: `El pago para el viaje de ${carga?.tipoDeCarga || trip.tipoCarga} ha sido verificado. Ya puedes iniciar el recojo.`,
         tipo: 'viaje_actualizado',
         leido: false,
         link: `/trip/${trip.id}`,
@@ -1021,6 +1017,7 @@ export const TripDetails = () => {
     if (!durationStr) return null;
     const now = new Date();
     let minutesToAdd = 0;
+    
     // Parse common duration formats from Google Maps
     const hourMatch = durationStr.match(/(\d+)\s*h/);
     const minMatch = durationStr.match(/(\d+)\s*min/);
@@ -1100,7 +1097,7 @@ export const TripDetails = () => {
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
                 {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
                 {trip.alertas.riesgoLlegadaTardia && "MARGEN CRÍTICO: El transportista podría no llegar antes del cierre en puerto. "}
-                {trip.alertas.retrasoCritico && "Se detectó un retraso atípico."}
+                {trip.alertas.retrasoCritico && "Se detectó un retraso crítico."}
               </p>
             </div>
           </div>
@@ -1216,36 +1213,113 @@ export const TripDetails = () => {
                     <span className="text-sm text-gray-500">Monto del Flete:</span>
                     <span className="text-lg font-bold text-gray-900">S/ {trip.precioFinal.toFixed(2)}</span>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold text-gray-400 uppercase">Métodos de Pago Disponibles:</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
-                        <div className="h-8 w-8 bg-purple-100 rounded flex items-center justify-center mr-3">
-                          <span className="text-[10px] font-bold text-purple-700">PLIN</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold">{number_yape}</p>
-                          <p className="text-[10px] text-gray-500 truncate">A nombre de: {appConfig?.yapeName || 'Lurgia Yupa A.'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center p-2 rounded border border-gray-100 bg-gray-50">
-                        <div className="h-8 w-8 bg-blue-100 rounded flex items-center justify-center mr-3">
-                          <span className="text-[10px] font-bold text-blue-700">{appConfig?.bcpBank?.substring(0, 4).toUpperCase() || 'Interbank'}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start">
-                            <p className="text-[10px] font-bold text-blue-800 uppercase">{appConfig?.bcpBank || 'Banco'}</p>
-                            <p className="text-[9px] text-gray-400 font-mono">{appConfig?.bcpDocType || 'NIT'}: {appConfig?.bcpDocNum || '...'}</p>
-                          </div>
-                          <p className="text-xs font-bold font-mono truncate">{number_account}</p>
-                          <p className="text-[10px] text-gray-500 truncate">CCI: {number_cci}</p>
-                          <p className="text-[9px] text-gray-400 truncate">Titular: {appConfig?.bcpName || 'Lurgia Yupa A.'}</p>
-                        </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-gray-400 uppercase">Métodos de Pago Oficiales:</p>
+                      <div className="flex items-center text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                        <ShieldCheck className="h-3 w-3 mr-1" />
+                        Cuentas Verificadas
                       </div>
                     </div>
-                    {appConfig?.bcpName && (
-                      <p className="text-[10px] text-gray-400 font-medium text-center">Titular BCP: {appConfig.bcpName}</p>
-                    )}
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Yape Account */}
+                      <div className="flex flex-col p-3 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-purple-200 transition-colors">
+                        <div className="flex items-center mb-2">
+                          <div className="h-7 w-7 bg-purple-100 rounded-lg flex items-center justify-center mr-2">
+                            <span className="text-[10px] font-black text-purple-700">YAPE</span>
+                          </div>
+                          <span className="text-xs font-bold text-gray-900">Pago Móvil</span>
+                        </div>
+                        <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100">
+                          <div>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase">Yape</p>
+                            <p className="text-sm font-black text-gray-900 tracking-wider">
+                              {appConfig?.yapeNumber || '960354149'}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(appConfig?.yapeNumber || '960354149');
+                              // Podríamos añadir un mini toast aquí
+                            }}
+                            className="p-1.5 hover:bg-purple-50 text-purple-600 rounded-md transition-colors"
+                            title="Copiar número"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2 flex items-center">
+                          <User className="h-3 w-3 mr-1" />
+                          Titular: <span className="font-bold text-gray-700 ml-1">{appConfig?.yapeName || 'Lurgia Yupa A.'}</span>
+                        </p>
+                      </div>
+
+                      {/* Bank Account */}
+                      <div className="flex flex-col p-3 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-blue-200 transition-colors">
+                        <div className="flex items-center mb-2 justify-between">
+                          <div className="flex items-center">
+                            <div className="h-7 w-15 bg-green-50 rounded-lg flex items-center justify-center mr-2">
+                              <span className="text-[10px] font-black text-green-500">
+                                {appConfig?.bcpBank?.substring(0, 3).toUpperCase() || 'Interbank'}
+                              </span>
+                            </div>
+                           {/*  <span className="text-xs font-bold text-gray-900">{appConfig?.bcpBank || 'Banco'}</span> */}
+                          </div>
+                          <span className="text-[9px] font-mono text-gray-400">
+                            {appConfig?.bcpDocType || 'RUC'}: {appConfig?.bcpDocNum || '...'}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[9px] font-bold text-gray-400 uppercase">Cuenta Corriente</p>
+                              <p className="text-xs font-black text-gray-900 font-mono truncate tracking-tight">
+                                {appConfig?.bcpAccount || ' 821 3443364810'}
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpAccount || ' 821 3443364810')}
+                              className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md transition-colors shrink-0 ml-1"
+                              title="Copiar cuenta"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg border border-blue-100/50">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[9px] font-bold text-blue-400 uppercase">CCI</p>
+                              <p className="text-[11px] font-black text-blue-900 font-mono truncate">
+                                {appConfig?.bcpCci || '00382101344336481069'}
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpCci || '00382101344336481069')}
+                              className="p-1.5 hover:bg-blue-100 text-blue-700 rounded-md transition-colors shrink-0 ml-1"
+                              title="Copiar CCI"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <p className="text-[10px] text-gray-500 mt-2 flex items-center">
+                          <ShieldCheck className="h-3 w-3 mr-1 text-green-500" />
+                          Titular: <span className="font-bold text-gray-700 ml-1 truncate">{appConfig?.bcpName || 'Lurgia Yupa A.'}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="flex items-start space-x-2">
+                        <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                        <p className="text-[10px] text-blue-800 leading-tight">
+                          <strong>Aviso de Seguridad:</strong> Transfiere únicamente a las cuentas mostradas arriba. Nunca compartiremos otros números de cuenta por chat o teléfono.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1321,7 +1395,7 @@ export const TripDetails = () => {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-700">Subir Boleta de Pago</p>
-                            <p className="text-xs text-gray-500">JPG, PNG o PDF (Máx. 5MB)</p>
+                            <p className="text-xs text-gray-500">JPG, PNG(Máx. 5MB)</p>
                           </div>
                         </div>
                       )}
@@ -1779,7 +1853,7 @@ export const TripDetails = () => {
                   { 
                     id: 'recojo_completado', 
                     label: TRIP_STATUS_LABELS.recojo_completado.label,
-                    desc: trip.temperaturaActual ? `${TRIP_STATUS_LABELS.recojo_completado.desc}. Temperatura: ${trip.temperaturaActual}` : TRIP_STATUS_LABELS.recojo_completado.desc
+                    desc: trip.evidencia?.recojoTemperatura ? `${TRIP_STATUS_LABELS.recojo_completado.desc}. Temperatura: ${trip.evidencia?.recojoTemperatura}` : TRIP_STATUS_LABELS.recojo_completado.desc
                   },
                   { ...TRIP_STATUS_LABELS.en_camino_a_destino, id: 'en_camino_a_destino' },
                   { ...TRIP_STATUS_LABELS.entregado_pendiente_confirmacion, id: 'entregado_pendiente_confirmacion' },
@@ -1849,12 +1923,12 @@ export const TripDetails = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600">Temperatura:</span>
                       <div className="flex items-center">
-                        <span className="text-xs font-bold mr-2">{carga.temperaturaRequerida}</span>
+                        <span className="text-xs font-bold mr-2 uppercase">{carga.temperaturaRequerida}</span>
                         <CheckCircle className="h-3 w-3 text-green-500" />
                       </div>
                     </div>
                   )}
-                  {carga.condicionSanitaria && (
+                  {carga.condicionSanitaria && (/* no existe en carga condicionSanitaria */
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600">Condición Sanitaria:</span>
                       <CheckCircle className="h-3 w-3 text-green-500" />
@@ -1907,7 +1981,7 @@ export const TripDetails = () => {
                   <span className="font-bold text-gray-900">S/ {trip.precioFinal}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Comisión (8%)</span>
+                  <span className="text-gray-600">Comisión ({Math.round(COMMISSION_RATE * 100)}%)</span>
                   <span className="font-bold text-red-500">- S/ {trip.comision.toFixed(2)}</span>
                 </div>
                 <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
@@ -2394,7 +2468,7 @@ export const TripDetails = () => {
                 className={cn("h-10 text-[11px]", trip.alertas?.retrasoCritico && "animate-pulse")}
                 onClick={async () => {
                   await updateDoc(doc(db, 'trips', trip.id), {
-                    'alertas.retraso': !trip.alertas?.retrasoCritico
+                    'alertas.retrasoCritico': !trip.alertas?.retrasoCritico
                   });
                 }}
               >
