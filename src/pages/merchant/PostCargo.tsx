@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,50 +12,45 @@ import { OperationType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
-import { Package, MapPin, DollarSign, Info, ArrowLeft, Truck, X, Navigation, AlertCircle } from 'lucide-react';
+import { Package, MapPin, DollarSign, Info, ArrowLeft, Truck, X, Navigation, AlertCircle, Box, Sprout, Factory, Thermometer, Layers, Settings, ChevronRight, User, Shield, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, cleanObject } from '../../lib/utils';
 
 const cargoSchema = z.object({
+  tipoDeCarga: z.string().min(1, 'Selecciona un tipo de carga'),
   origen: z.string().min(5, 'Dirección de origen inválida'),
   destino: z.string().min(5, 'Dirección de destino inválida'),
-  tipoCarga: z.string().min(3, 'Tipo de carga inválido'),
-  categoria: z.enum(['general', 'perecible', 'fragil', 'peligrosa']),
   
-  // Datos Producto Exportable (SECCIÓN 2)
-  nombreProducto: z.string().min(3, 'Nombre del producto requerido'),
-  sectorProducto: z.enum(['agroindustrial', 'pesca', 'textil', 'mineria', 'quimico', 'otros']),
-  lote: z.string().min(1, 'Código de lote requerido'),
-  certificacion: z.enum(['organico', 'globalgap', 'fair_trade', 'sin_certificacion']),
-  partidaArancelaria: z.string().optional(),
+  vehiculo: z.object({
+    tipo: z.string().min(1, 'Selecciona un tipo de vehículo'),
+    otroTipo: z.string().optional(),
+    caracteristicas: z.array(z.string()).default([]),
+    capacidad: z.object({
+      peso: z.string().optional(),
+      volumen: z.string().optional(),
+      pallets: z.string().optional(),
+      dimensiones: z.string().optional(),
+    }),
+  }),
 
-  // Condiciones de Transporte (SECCIÓN 3)
-  temperaturaRequerida: z.string().optional(),
-  tipoVehiculoRequerido: z.enum(['refrigerado', 'seco', 'isotermico', 'indiferente']),
-  condicionSanitaria: z.boolean().default(false),
-
-  // Datos de Exportación (SECCIÓN 4)
-  rucExportador: z.string().min(11, 'RUC debe tener 11 dígitos').max(11, 'RUC debe tener 11 dígitos'),
-  guiaRemision: z.string().min(1, 'Guía de remisión requerida'),
-  puertoDestino: z.string().min(1, 'Puerto de destino requerido'),
-  fechaHoraLimitePuerto: z.string().min(1, 'Fecha límite requerida'),
-  numeroContenedor: z.string().optional(),
-  seguroCarga: z.string().optional(),
-
-  // Logística (SECCIÓN 5)
-  peso: z.string()
-    .transform((val) => val.replace(/[^\d.]/g, ''))
-    .transform((val) => Number(val))
-    .pipe(z.number().min(0.1, 'El peso debe ser mayor a 0')),
-  capacidadRequerida: z.string().min(1, 'Capacidad requerida'),
-  cuidadoEspecial: z.string().optional(),
-  
-  // Oferta (SECCIÓN 6)
+  nombreProducto: z.string().min(1, 'Nombre del producto requerido'),
+  horario: z.string().optional(),
   descripcion: z.string().min(10, 'Descripción demasiado corta'),
   precioPropuesto: z.string()
     .transform((val) => val.replace(/[^\d.]/g, ''))
     .transform((val) => Number(val))
     .pipe(z.number().min(10, 'El precio debe ser mayor a S/ 10')),
+
+  // Avanzados (Agro)
+  lote: z.string().optional(),
+  partidaArancelaria: z.string().optional(),
+  puertoDestino: z.string().optional(),
+  numeroContenedor: z.string().optional(),
+  temperaturaRequerida: z.string().optional(),
+  certificacion: z.string().optional(),
+  eudr: z.string().optional(),
+  guiaRemision: z.string().optional(),
+  fechaHoraLimitePuerto: z.string().optional(),
 });
 
 type CargoFormValues = z.infer<typeof cargoSchema>;
@@ -90,6 +85,7 @@ export const PostCargo = () => {
   const [showMapModal, setShowMapModal] = useState<{ show: boolean; field: 'origen' | 'destino' }>({ show: false, field: 'origen' });
   const [tempLocation, setTempLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [coords, setCoords] = useState<{ origen?: { lat: number; lng: number }; destino?: { lat: number; lng: number } }>({});
+  const [step, setStep] = useState(1);
 
   const {
     register,
@@ -101,14 +97,44 @@ export const PostCargo = () => {
     resolver: zodResolver(cargoSchema),
     mode: 'onChange',
     defaultValues: {
-      tipoCarga: 'Carga General',
-      categoria: 'general',
-      sectorProducto: 'agroindustrial',
-      certificacion: 'sin_certificacion',
-      tipoVehiculoRequerido: 'indiferente',
-      condicionSanitaria: false
+      tipoDeCarga: '',
+      vehiculo: {
+        caracteristicas: [],
+        capacidad: {}
+      }
     }
   });
+
+  const selectedTipoCarga = watch('tipoDeCarga');
+  const selectedVehiculoTipo = watch('vehiculo.tipo');
+
+  const cargoTypes = [
+    { id: 'Carga General', icon: <Package />, label: 'Carga General', color: 'bg-blue-500' },
+    { id: 'Mudanza', icon: <Box />, label: 'Mudanza', color: 'bg-orange-500' },
+    { id: 'Agroexportación', icon: <Sprout />, label: 'Agroexportación', color: 'bg-emerald-500' },
+    { id: 'Carga Industrial', icon: <Factory />, label: 'Carga Industrial', color: 'bg-slate-700' },
+    { id: 'Cadena de Frío', icon: <Thermometer />, label: 'Cadena de Frío', color: 'bg-blue-400' },
+    { id: 'Repuestos / Mercadería', icon: <Settings />, label: 'Repuestos / Mercadería', color: 'bg-indigo-500' },
+    { id: 'Distribución Urbana', icon: <Truck />, label: 'Distribución Urbana', color: 'bg-yellow-500' },
+    { id: 'Carga Pesada', icon: <Layers />, label: 'Carga Pesada', color: 'bg-red-600' },
+  ];
+
+  const vehicleOptions = [
+    'Mototaxi', 'Minivan', 'Furgón', 'Furgón refrigerado', 'Camión 2T', 'Camión 5T', 'Camión 10T', 
+    'Semitrailer', 'Plataforma', 'Cama baja', 'Cisterna', 'Pickup', 'Indiferente', 'Otro'
+  ];
+
+  const vehicleFeatures = [
+    { id: 'Refrigeración', label: 'Refrigeración' },
+    { id: 'GPS', label: 'GPS' },
+    { id: 'Seguro de carga', label: 'Seguro de carga' },
+    { id: 'Unidad sellada', label: 'Unidad sellada' },
+    { id: 'Elevador hidráulico', label: 'Elevador hidráulico' },
+    { id: 'Carga frágil', label: 'Carga frágil' },
+    { id: 'Carga peligrosa', label: 'Carga peligrosa' },
+    { id: 'Ayudante de carga', label: 'Ayudante de carga' },
+    { id: 'Rastreo activo', label: 'Rastreo activo' },
+  ];
 
   const onSubmit = async (data: any) => {
     if (!user) return;
@@ -184,352 +210,302 @@ export const PostCargo = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => step > 1 ? setStep(1) : navigate(-1)}
         className="flex items-center text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
-        Volver
+        {step > 1 ? 'Cambiar tipo de carga' : 'Volver'}
       </button>
 
-      <Card className="shadow-xl border-none">
-        <CardHeader className="space-y-1 bg-gray-50/50 rounded-t-3xl border-b border-gray-100">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="h-12 w-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
-              <Package className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <CardTitle className="text-2xl font-bold text-gray-900">Publicar Nueva Carga</CardTitle>
-              <CardDescription>
-                Ingresa los detalles de tu envío para recibir ofertas de transportistas.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
+      {/* PROGRESS BAR */}
+      <div className="flex items-center gap-2 mb-8">
+        {[1, 2].map((i) => (
+          <div 
+            key={i} 
+            className={cn(
+              "h-1.5 flex-1 rounded-full transition-all duration-500",
+              step >= i ? "bg-blue-600" : "bg-gray-200"
+            )} 
+          />
+        ))}
+      </div>
 
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-8 p-8">
-            {/* SECCIÓN 1 — RUTA */}
-            <div className="space-y-6">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-red-500 pl-4 uppercase tracking-wider">SECCIÓN 1 — RUTA</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 text-sm font-bold text-gray-900 uppercase tracking-wider">
-                      <div className="h-2 w-2 rounded-full bg-red-500" />
-                      <span>Origen</span>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setShowMapModal({ show: true, field: 'origen' })}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg"
-                    >
-                      <Navigation className="h-3 w-3" />
-                      Mapa
-                    </button>
-                  </div>
-                  <Input
-                    placeholder="Ej: Av. Javier Prado 123, San Isidro, Lima"
-                    {...register('origen')}
-                    error={errors.origen?.message}
-                    className="h-12"
-                  />
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 text-sm font-bold text-gray-900 uppercase tracking-wider">
-                      <div className="h-2 w-2 rounded-full bg-blue-500" />
-                      <span>Destino</span>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setShowMapModal({ show: true, field: 'destino' })}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg"
-                    >
-                      <Navigation className="h-3 w-3" />
-                      Mapa
-                    </button>
-                  </div>
-                  <Input
-                    placeholder="Ej: Calle Real 456, Huancayo, Junín"
-                    {...register('destino')}
-                    error={errors.destino?.message}
-                    className="h-12"
-                  />
-                </div>
-              </div>
+      <AnimatePresence mode="wait">
+        {step === 1 ? (
+          <motion.div
+            key="step1"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="space-y-8"
+          >
+            <div className="text-center space-y-3">
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                PASO 1 — ¿Qué tipo de carga deseas transportar?
+              </h1>
+              <p className="text-slate-500 font-medium">Selecciona una categoría para personalizar tu solicitud.</p>
             </div>
 
-            {/* SECCIÓN 2 — PRODUCTO */}
-            <div className="space-y-6 pt-4">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-emerald-500 pl-4 uppercase tracking-wider">SECCIÓN 2 — PRODUCTO</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Input label="Nombre del Producto" placeholder="Ej: Palta Hass, Arándano" {...register('nombreProducto')} error={errors.nombreProducto?.message} />
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Sector Prod.</label>
-                  <select
-                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                    {...register('sectorProducto')}
-                  >
-                    <option value="agroindustrial">Agroindustrial</option>
-                    <option value="pesca">Pesca</option>
-                    <option value="textil">Textil</option>
-                    <option value="mineria">Minería</option>
-                    <option value="quimico">Químico</option>
-                    <option value="otros">Otros</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Carga</label>
-                  <select
-                    className={cn(
-                      "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium",
-                      errors.tipoCarga ? "border-red-500 shadow-sm shadow-red-50" : "border-gray-200"
-                    )}
-                    {...register('tipoCarga')}
-                  >
-                    <option value="">Seleccionar...</option>
-                    <option value="Carga General">Carga General</option>
-                    <option value="Granel Líquido">Granel Líquido</option>
-                    <option value="Granel Sólido">Granel Sólido</option>
-                    <option value="Refrigerada">Refrigerada</option>
-                    <option value="Peligrosa">Peligrosa</option>
-                  </select>
-                  {errors.tipoCarga && <p className="text-[10px] font-bold text-red-500 mt-1 uppercase tracking-tight">{errors.tipoCarga.message}</p>}
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="Código de Lote / Producción" placeholder="Ej: LOT-2026-X" {...register('lote')} error={errors.lote?.message} />
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Certificación</label>
-                  <select
-                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                    {...register('certificacion')}
-                  >
-                    <option value="sin_certificacion">Sin Certificación</option>
-                    <option value="organico">Orgánico</option>
-                    <option value="globalgap">GlobalGAP</option>
-                    <option value="fair_trade">Fair Trade</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="Partida Arancelaria (Opcional)" placeholder="Ej: 0804400000" {...register('partidaArancelaria')} />
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Categoría Logística</label>
-                  <select
-                    className={cn(
-                      "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium",
-                      errors.categoria ? "border-red-500 shadow-sm shadow-red-50" : "border-gray-200"
-                    )}
-                    {...register('categoria')}
-                  >
-                    <option value="general">Carga General</option>
-                    <option value="perecible">Perecible (Alimentos/Fármacos)</option>
-                    <option value="fragil">Frágil / Delicado</option>
-                    <option value="peligrosa">Material Peligroso (MATPEL)</option>
-                  </select>
-                  {errors.categoria && <p className="text-[10px] font-bold text-red-500 mt-1 uppercase tracking-tight">{errors.categoria.message}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* SECCIÓN 3 — CONDICIONES DE TRANSPORTE */}
-            <div className="space-y-6 pt-4">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-blue-500 pl-4 uppercase tracking-wider">SECCIÓN 3 — CONDICIONES DE TRANSPORTE</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Temperatura Requerida</label>
-                  <select
-                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                    {...register('temperaturaRequerida')}
-                  >
-                    <option value="ambiente">Ambiente</option>
-                    <option value="refrigerado">Refrigerado (2°C - 8°C)</option>
-                    <option value="congelado">Congelado (-18°C)</option>
-                    <option value="controlado">Controlado (8°C - 15°C)</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tipo de Vehículo</label>
-                  <select
-                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                    {...register('tipoVehiculoRequerido')}
-                  >
-                    <option value="indiferente">Indiferente</option>
-                    <option value="refrigerado">Refrigerado / Cámara</option>
-                    <option value="seco">Seco / Furgón</option>
-                    <option value="isotermico">Isotérmico</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <input type="checkbox" id="sanitaria" {...register('condicionSanitaria')} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                <label htmlFor="sanitaria" className="text-sm font-bold text-slate-700">Limpieza previa certificada</label>
-              </div>
-            </div>
-
-            {/* SECCIÓN 4 — DATOS DE EXPORTACIÓN */}
-            <div className="space-y-6 pt-4">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-orange-500 pl-4 uppercase tracking-wider">SECCIÓN 4 — DATOS DE EXPORTACIÓN</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="RUC Exportador" placeholder="Ej: 20123456789" {...register('rucExportador')} error={errors.rucExportador?.message} />
-                <Input label="Guía de Remisión" placeholder="Ej: T001-000123" {...register('guiaRemision')} error={errors.guiaRemision?.message} />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="Puerto / Punto de Embarque" placeholder="Ej: DP World Callao" {...register('puertoDestino')} error={errors.puertoDestino?.message} />
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Fecha y Hora Límite en Puerto</label>
-                  <Input type="datetime-local" {...register('fechaHoraLimitePuerto')} error={errors.fechaHoraLimitePuerto?.message} />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="Número de Contenedor (Opcional)" placeholder="Ej: MSKU1234567" {...register('numeroContenedor')} />
-                <Input label="Seguro de Carga (Opcional)" placeholder="Ej: Rimac Póliza #123" {...register('seguroCarga')} />
-              </div>
-            </div>
-
-            {/* SECCIÓN 5 — LOGÍSTICA */}
-            <div className="space-y-6 pt-4">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-indigo-500 pl-4 uppercase tracking-wider">SECCIÓN 5 — LOGÍSTICA</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Peso Aprox. (kg/t)</label>
-                  <Input
-                    placeholder="Ej: 5 Toneladas"
-                    {...register('peso')}
-                    error={errors.peso?.message}
-                    className="h-12"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Capacidad Requerida</label>
-                  <select
-                    className={cn(
-                      "w-full h-12 rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium",
-                      errors.capacidadRequerida ? "border-red-500 shadow-sm shadow-red-50" : "border-gray-200"
-                    )}
-                    {...register('capacidadRequerida')}
-                  >
-                    <option value="">Seleccionar...</option>
-                    <option value="Furgón Cerrado">Furgón Cerrado</option>
-                    <option value="Camión Baranda">Camión Baranda</option>
-                    <option value="Cámara Frigorífica">Cámara Frigorífica</option>
-                    <option value="Plataforma">Plataforma</option>
-                    <option value="Cisterna">Cisterna</option>
-                  </select>
-                  {errors.capacidadRequerida && <p className="text-[10px] font-bold text-red-500 mt-1 uppercase tracking-tight">{errors.capacidadRequerida.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Tratamiento Especial</label>
-                  <select
-                    className="w-full h-12 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                    {...register('cuidadoEspecial')}
-                  >
-                    <option value="Ninguno">Ninguno</option>
-                    <option value="Requiere Estiba">Requiere Estiba</option>
-                    <option value="Solo de Día">Solo de Día</option>
-                    <option value="Custodia">Requiere Custodia</option>
-                    <option value="Urgente">Prioridad Máxima</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* SECCIÓN 6 — OFERTA */}
-            <div className="space-y-6 pt-4">
-              <h3 className="text-lg font-black text-slate-900 border-l-4 border-yellow-500 pl-4 uppercase tracking-wider">SECCIÓN 6 — OFERTA</h3>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Descripción Detallada para el Transportista</label>
-                <textarea
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {cargoTypes.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => {
+                    setValue('tipoDeCarga', type.id);
+                    setStep(2);
+                  }}
                   className={cn(
-                    "w-full min-h-[120px] rounded-2xl border bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all",
-                    errors.descripcion ? "border-red-500" : "border-gray-200"
+                    "p-6 rounded-3xl border-2 text-left transition-all group flex flex-col gap-4 h-full",
+                    selectedTipoCarga === type.id 
+                      ? "border-blue-600 bg-blue-50/50 shadow-xl shadow-blue-900/5 ring-4 ring-blue-600/5" 
+                      : "border-slate-100 bg-white hover:border-blue-200 hover:shadow-lg"
                   )}
-                  placeholder="Se comunicativo con el transportista: especifica el volumen, fragilidad o cualquier detalle que le ayude a darte la mejor cotización..."
-                  {...register('descripcion')}
-                />
-                {errors.descripcion && (
-                  <p className="text-[10px] font-bold text-red-500 uppercase">{errors.descripcion.message}</p>
-                )}
-              </div>
-
-              {/* Precio */}
-              <div className="bg-blue-50 p-8 rounded-3xl border border-blue-100 shadow-inner">
-                <div className="flex items-center space-x-2 text-sm font-bold text-blue-900 uppercase tracking-wider mb-6">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
-                  <span>Tu Propuesta de Precio (S/.)</span>
-                </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-                  <div className="relative flex-1 w-full">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xl">S/</span>
-                    <input
-                      type="number"
-                      className="w-full h-16 pl-12 pr-4 rounded-2xl border-2 border-blue-200 bg-white text-3xl font-black text-gray-900 focus:outline-none focus:border-blue-500 transition-all shadow-sm"
-                      placeholder="0.00"
-                      {...register('precioPropuesto')}
-                    />
+                >
+                  <div className={cn(
+                    "h-12 w-12 rounded-2xl flex items-center justify-center text-white transition-transform group-hover:scale-110",
+                    type.color
+                  )}>
+                    {React.cloneElement(type.icon as React.ReactElement, { className: 'h-6 w-6' })}
                   </div>
-                  <div className="flex items-center space-x-3 text-xs text-blue-700 bg-white/50 p-4 rounded-2xl border border-blue-100 max-w-xs">
-                    <Info className="h-5 w-5 shrink-0 text-blue-500" />
-                    <p className="leading-relaxed">Define el monto que estás dispuesto a pagar. Los transportistas podrán negociar.</p>
+                  <div>
+                    <h3 className="font-black text-slate-900 mb-1">{type.label}</h3>
+                    <p className="text-[10px] text-slate-500 leading-relaxed font-medium uppercase tracking-wider">Transporte especializado</p>
                   </div>
-                </div>
-                {errors.precioPropuesto && (
-                  <p className="mt-3 text-[10px] font-bold text-red-500 uppercase">{errors.precioPropuesto.message}</p>
-                )}
-              </div>
+                </button>
+              ))}
             </div>
-          </CardContent>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="step2"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <Card className="shadow-2xl border-none overflow-hidden rounded-[2.5rem]">
+              <CardHeader className="p-8 bg-slate-900 text-white relative">
+                 <div className="absolute top-0 right-0 p-8 opacity-20">
+                    {cargoTypes.find(t => t.id === selectedTipoCarga)?.icon}
+                 </div>
+                 <div className="space-y-1 relative z-10">
+                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-black uppercase tracking-widest text-blue-400 mb-2">
+                     <Box className="h-3 w-3" />
+                     {selectedTipoCarga}
+                   </div>
+                   <CardTitle className="text-3xl font-black italic">Detalles de la Operación</CardTitle>
+                   <CardDescription className="text-slate-400 font-medium italic">Completa la información técnica para recibir ofertas precisas.</CardDescription>
+                 </div>
+              </CardHeader>
 
-          <CardFooter className="flex flex-col space-y-4 p-8 bg-gray-50/50 rounded-b-3xl border-t border-gray-100">
-            {Object.keys(errors).length > 0 && (
-              <div className="w-full p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 mb-4">
-                <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-red-800">Hay errores en el formulario</p>
-                  <p className="text-xs text-red-600">
-                    Por favor revisa los siguientes campos: {Object.keys(errors).map(key => {
-                      const labels: Record<string, string> = {
-                        origen: 'Origen',
-                        destino: 'Destino',
-                        nombreProducto: 'Nombre del Producto',
-                        tipoCarga: 'Tipo de Carga',
-                        lote: 'Lote',
-                        rucExportador: 'RUC Exportador',
-                        guiaRemision: 'Guía de Remisión',
-                        puertoDestino: 'Puerto de Destino',
-                        fechaHoraLimitePuerto: 'Fecha Límite',
-                        peso: 'Peso',
-                        capacidadRequerida: 'Capacidad Requerida',
-                        descripcion: 'Descripción',
-                        precioPropuesto: 'Precio Propuesto',
-                        categoria: 'Categoría'
-                      };
-                      return labels[key] || key;
-                    }).join(', ')}
-                  </p>
-                </div>
-              </div>
-            )}
-            <Button 
-              type="submit" 
-              className={cn(
-                "w-full h-16 text-xl font-bold shadow-xl transition-all",
-                isValid ? "bg-blue-600 hover:bg-blue-700 shadow-blue-200" : "bg-blue-400 opacity-70 hover:bg-blue-500"
-              )} 
-              isLoading={isLoading}
-              disabled={isLoading}
-            >
-              Publicar Carga Ahora
-            </Button>
-            <p className="text-center text-xs text-gray-500 font-medium">
-              Al publicar, aceptas nuestros términos y condiciones de servicio.
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <CardContent className="p-8 space-y-12">
+                  {/* SECCIÓN RUTA */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2 text-slate-900">
+                      <MapPin className="h-5 w-5 text-red-500" />
+                      <h3 className="text-lg font-black uppercase tracking-tighter italic">1. Ruta de Transporte</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center px-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Origen</label>
+                          <button type="button" onClick={() => setShowMapModal({ show: true, field: 'origen' })} className="text-[10px] font-bold text-blue-600 hover:underline">Ver mapa</button>
+                        </div>
+                        <Input placeholder="Punto de recojo..." {...register('origen')} error={errors.origen?.message} className="rounded-2xl" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center px-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Destino</label>
+                          <button type="button" onClick={() => setShowMapModal({ show: true, field: 'destino' })} className="text-[10px] font-bold text-blue-600 hover:underline">Ver mapa</button>
+                        </div>
+                        <Input placeholder="Punto de entrega..." {...register('destino')} error={errors.destino?.message} className="rounded-2xl" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN VEHÍCULO (CLAVE) */}
+                  <div className="space-y-6 bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-900">
+                      <Truck className="h-5 w-5 text-blue-600" />
+                      <h3 className="text-lg font-black uppercase tracking-tighter italic">2. Vehículo Requerido</h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo de Unidad</label>
+                        <select 
+                          {...register('vehiculo.tipo')}
+                          className="w-full h-14 rounded-2xl border-2 border-white bg-white px-4 text-sm font-bold shadow-sm focus:border-blue-500 transition-all"
+                        >
+                          <option value="">Selecciona vehículo...</option>
+                          {vehicleOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                        {selectedVehiculoTipo === 'Otro' && (
+                          <Input 
+                            placeholder="Especifica el tipo de vehículo..." 
+                            {...register('vehiculo.otroTipo')}
+                            className="h-12 rounded-xl"
+                          />
+                        )}
+
+                        <div className="pt-4 space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Capacidad Estimada</label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <Input placeholder="Peso (kg/t)" {...register('vehiculo.capacidad.peso')} className="h-12" />
+                            <Input placeholder="Volumen (m3)" {...register('vehiculo.capacidad.volumen')} className="h-12" />
+                            <Input placeholder="Pallets (cant.)" {...register('vehiculo.capacidad.pallets')} className="h-12" />
+                            <Input placeholder="Dimensiones" {...register('vehiculo.capacidad.dimensiones')} className="h-12" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Características Requeridas</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {vehicleFeatures.map(feat => (
+                            <label key={feat.id} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group">
+                              <input 
+                                type="checkbox" 
+                                value={feat.id}
+                                {...register('vehiculo.caracteristicas')}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
+                              />
+                              <span className="text-[11px] font-black text-slate-600 group-hover:text-slate-900 uppercase tracking-tight">{feat.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN GENERAL — CAMPOS QUE SIEMPRE APARECEN */}
+                  <div className="space-y-8">
+                    <div className="flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                      <Box className="h-5 w-5 text-indigo-600" />
+                      <h3 className="text-lg font-black uppercase tracking-tighter italic">3. Información de Carga</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <Input label="Nombre de la Mercadería" placeholder="Ej: 50 sacos de arándanos..." {...register('nombreProducto')} error={errors.nombreProducto?.message} />
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Horario Sugerido de Recojo</label>
+                        <Input type="datetime-local" {...register('horario')} className="h-12" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Descripción y Detalles del Envío</label>
+                      <textarea 
+                        {...register('descripcion')}
+                        className="w-full min-h-[120px] rounded-[2rem] border-2 border-slate-100 bg-slate-50 p-6 text-sm font-medium focus:bg-white focus:border-blue-500 transition-all placeholder:italic"
+                        placeholder="Específica si la carga es delicada, si requiere manipulación especial, o detalles de las evidencias requeridas al entregar..."
+                      />
+                      {errors.descripcion && <p className="text-xs text-red-500 font-bold px-4">{errors.descripcion.message}</p>}
+                    </div>
+
+                    <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden group">
+                       <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+                          <DollarSign className="h-20 w-20" />
+                       </div>
+                       <div className="relative z-10 space-y-6">
+                          <div className="flex items-center gap-2">
+                             <div className="h-8 w-8 rounded-lg bg-blue-500 flex items-center justify-center">
+                                <DollarSign className="h-4 w-4 text-white" />
+                             </div>
+                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Tu Presupuesto Sugerido (S/.)</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-center gap-6">
+                             <div className="relative flex-1 w-full">
+                                <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 text-3xl font-black italic">S/</span>
+                                <input 
+                                  type="number"
+                                  {...register('precioPropuesto')}
+                                  className="w-full h-20 pl-16 pr-8 rounded-2xl bg-white/5 border-2 border-white/10 text-4xl font-black text-white focus:border-blue-500 transition-all outline-none"
+                                  placeholder="0.00"
+                                />
+                             </div>
+                             <div className="max-w-xs text-sm text-slate-400 font-medium italic border-l-2 border-blue-500/50 pl-6">
+                                Este es un punto de partida para la negociación con los transportistas.
+                             </div>
+                          </div>
+                          {errors.precioPropuesto && <p className="text-xs text-red-400 font-bold tracking-tight">{errors.precioPropuesto.message}</p>}
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* CAMPOS AVANZADOS (Solo para Agroexportación) */}
+                  {selectedTipoCarga === 'Agroexportación' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-8 bg-blue-50/50 p-8 rounded-[2.5rem] border-2 border-blue-100"
+                    >
+                      <div className="flex items-center gap-2 text-slate-900 border-b border-blue-100 pb-4">
+                        <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-lg font-black uppercase tracking-tighter italic">4. Datos de Agroexportación</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <Input label="Código de Lote" placeholder="LOTE-XXXX" {...register('lote')} />
+                        <Input label="Partida Arancelaria" placeholder="08.04.40.00.00" {...register('partidaArancelaria')} />
+                        <Input label="Puerto Destino" placeholder="DP World / APM Terminals" {...register('puertoDestino')} />
+                        <Input label="Guía de Remisión" placeholder="T001-000000" {...register('guiaRemision')} />
+                        <Input label="Temp. Requerida (°C)" placeholder="Ej: 5°C" {...register('temperaturaRequerida')} />
+                        <Input label="N° de Contenedor" placeholder="MSCUXXXXX" {...register('numeroContenedor')} />
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Fecha Límite Puerto (Stacking)</label>
+                           <Input type="datetime-local" {...register('fechaHoraLimitePuerto')} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Certificación</label>
+                          <select {...register('certificacion')} className="w-full h-12 rounded-xl border border-blue-200 bg-white px-4 text-xs font-bold uppercase">
+                            <option value="">Ninguna</option>
+                            <option value="GlobalGAP">GlobalGAP</option>
+                            <option value="Fairtrade">Fairtrade</option>
+                            <option value="Orgánico">Orgánico</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">EUDR Compliance</label>
+                          <select {...register('eudr')} className="w-full h-12 rounded-xl border border-blue-200 bg-white px-4 text-xs font-bold uppercase">
+                            <option value="no">No requerido</option>
+                            <option value="yes">Cumple EUDR</option>
+                          </select>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </CardContent>
+
+                <CardFooter className="p-8 bg-slate-50 border-t border-slate-100 flex flex-col gap-6">
+                  {Object.keys(errors).length > 0 && (
+                    <div className="w-full p-6 bg-red-50 border border-red-100 rounded-[2rem] flex items-center gap-4">
+                      <AlertCircle className="h-6 w-6 text-red-500 shrink-0" />
+                      <div>
+                        <p className="text-sm font-black text-red-900 uppercase">Faltan datos críticos</p>
+                        <p className="text-xs text-red-600 font-medium italic">Revisa los campos en rojo para poder publicar la carga.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button 
+                    type="submit" 
+                    className={cn(
+                      "w-full h-20 text-2xl font-black italic rounded-3xl shadow-2xl transition-all uppercase tracking-tight",
+                      isValid ? "bg-slate-900 hover:bg-black text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    )}
+                    isLoading={isLoading}
+                  >
+                    Publicar Operación Logística
+                  </Button>
+                </CardFooter>
+              </form>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Map Modal */}
       <AnimatePresence>

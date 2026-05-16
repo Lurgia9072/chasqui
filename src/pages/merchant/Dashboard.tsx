@@ -103,7 +103,7 @@ export const MerchantDashboard = () => {
            <div className="space-y-4 text-center md:text-left">
               <div className="inline-flex items-center space-x-2 bg-blue-500/20 text-blue-300 px-4 py-1.5 rounded-full border border-blue-500/30 text-xs font-bold tracking-widest uppercase">
                  <ShieldCheck className="h-4 w-4" />
-                 <span>Panel de Control - Empresa Exportadora</span>
+                 <span>Panel de control de usuario</span>
               </div>
               <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-none italic">
                 {user?.nombre}
@@ -225,13 +225,13 @@ export const MerchantDashboard = () => {
                            )}
                         </div>
                         <h3 className="text-xl font-black text-slate-900 leading-tight">
-                           {trip.nombreProducto || trip.tipoCarga || 'Carga General'}
+                           {trip.nombreProducto || trip.tipoCarga || trip.tipoCarga || 'Carga General'}
                         </h3>
                         <p className="text-[10px] text-slate-500 font-bold uppercase">Lote: {trip.lote || 'PEN-77'}</p>
                       </div>
                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center min-w-[80px]">
                         <p className="text-[10px] uppercase font-bold text-slate-400">Puerto</p>
-                        <p className="text-xs font-black text-slate-900">{trip.puertoDestino || 'CALLAO'}</p>
+                        <p className="text-xs font-black text-slate-900">{trip.puertoDestino || 'CALLAO'}</p>{/* no existe en trip  puertoDestino*/}
                       </div>
                     </div>
 
@@ -382,7 +382,7 @@ export const MerchantDashboard = () => {
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-lg font-bold group-hover:text-green-600 transition-colors">
-                        {trip.nombreProducto || trip.tipoCarga || 'Carga Finalizada'}
+                        {trip.nombreProducto || trip.tipoCarga || trip.tipoCarga || 'Carga Finalizada'}
                       </CardTitle>
                       <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">
                         Entregado
@@ -440,7 +440,7 @@ export const MerchantDashboard = () => {
                   <CardHeader className="pb-4">
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-lg font-bold group-hover:text-blue-600 transition-colors">
-                        {carga.nombreProducto || carga.tipoCarga}
+                        {carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga}
                       </CardTitle>
                       <span className={cn(
                         "text-[10px] uppercase font-bold px-2 py-1 rounded-full",

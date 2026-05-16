@@ -23,9 +23,9 @@ service cloud.firestore {
     // Document ID: cargoId
     // Fields:
     //   - comercianteId: string (required)
-    //   - tipoCarga: string (required)
-    //   - peso: number (required)
-    //   - descripcion: string (optional)
+    //   - tipoDeCarga: string (required)
+    //   - nombreProducto: string (required)
+    //   - descripcion: string (required)
     //   - origen: string (required)
     //   - destino: string (required)
     //   - precioPropuesto: number (required)
@@ -137,16 +137,19 @@ service cloud.firestore {
     }
 
     function isValidCargo(data) {
-      return hasRequiredFields(['comercianteId', 'tipoCarga', 'peso', 'origen', 'destino', 'precioPropuesto', 'estado', 'createdAt']) &&
+      return hasRequiredFields(['comercianteId', 'tipoDeCarga', 'origen', 'destino', 'nombreProducto', 'descripcion', 'precioPropuesto', 'estado', 'createdAt']) &&
              data.comercianteId == request.auth.uid &&
-             data.tipoCarga is string &&
-             data.peso is number && 
+             data.tipoDeCarga is string &&
              data.origen is string &&
              data.destino is string &&
+             data.nombreProducto is string &&
+             data.descripcion is string &&
              data.precioPropuesto is number &&
              data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
              data.createdAt is number &&
-             (!('nombreProducto' in data) || (data.nombreProducto is string)) &&
+             (!('tipoCarga' in data) || (data.tipoCarga is string)) &&
+             (!('peso' in data) || (data.peso is number)) &&
+             (!('horario' in data) || (data.horario is string)) &&
              (!('sectorProducto' in data) || (data.sectorProducto is string)) &&
              (!('lote' in data) || (data.lote is string)) &&
              (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
@@ -154,7 +157,6 @@ service cloud.firestore {
              (!('puertoDestino' in data) || (data.puertoDestino is string)) &&
              (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number || data.fechaHoraLimitePuerto == null)) &&
              (!('capacidadRequerida' in data) || (data.capacidadRequerida is string)) &&
-             (!('descripcion' in data) || (data.descripcion is string)) &&
              (!('categoria' in data) || (data.categoria is string)) &&
              (!('certificacion' in data) || (data.certificacion is string)) &&
              (!('partidaArancelaria' in data) || (data.partidaArancelaria is string)) &&
@@ -164,9 +166,11 @@ service cloud.firestore {
              (!('numeroContenedor' in data) || (data.numeroContenedor is string)) &&
              (!('seguroCarga' in data) || (data.seguroCarga is string)) &&
              (!('cuidadoEspecial' in data) || (data.cuidadoEspecial is string)) &&
+             (!('eudr' in data) || (data.eudr is string)) &&
              (!('origenCoords' in data) || (data.origenCoords is map || data.origenCoords == null)) &&
              (!('destinoCoords' in data) || (data.destinoCoords is map || data.destinoCoords == null)) &&
              (!('comercianteNombre' in data) || (data.comercianteNombre is string)) &&
+             (!('vehiculo' in data) || (data.vehiculo is map || data.vehiculo == null)) &&
              (!('ofertasCount' in data) || (data.ofertasCount is number));
     }
 
@@ -175,7 +179,11 @@ service cloud.firestore {
              data.cargoId is string &&
              data.precioOfertado is number && data.precioOfertado > 0 && data.precioOfertado < 1000000 &&
              data.estado in ['pendiente', 'aceptada', 'rechazada'] &&
-             data.createdAt is number;
+             data.createdAt is number &&
+             (!('transportistaNombre' in data) || (data.transportistaNombre is string)) &&
+             (!('transportistaRating' in data) || (data.transportistaRating is number)) &&
+             (!('tiempoRecojoEstimado' in data) || (data.tiempoRecojoEstimado is string)) &&
+             (!('comercianteId' in data) || (data.comercianteId is string));
     }
 
     function isValidTrip(data) {
@@ -185,6 +193,7 @@ service cloud.firestore {
              data.transportistaId is string &&
              data.precioFinal is number &&
              data.estado in ['pendiente_pago', 'pago_en_revision', 'pago_rechazado', 'en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion', 'completado', 'cancelado'] &&
+             data.createdAt is number &&
              (!('comision' in data) || (data.comision is number)) &&
              (!('tipoCarga' in data) || (data.tipoCarga is string)) &&
              (!('alertas' in data) || data.alertas is map) &&
@@ -194,6 +203,7 @@ service cloud.firestore {
              (!('rucExportador' in data) || (data.rucExportador is string)) &&
              (!('seguroCarga' in data) || (data.seguroCarga is string)) &&
              (!('lote' in data) || (data.lote is string)) &&
+             (!('puertoDestino' in data) || (data.puertoDestino is string)) &&
              (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
              (!('temperaturaRequerida' in data) || (data.temperaturaRequerida is string)) &&
              (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number || data.fechaHoraLimitePuerto == null)) &&
@@ -232,9 +242,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isOwner(userId) || 
         isAdmin() ||
-        // Permitir que otros usuarios actualicen el rating (con precaución)
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'totalRatings', 'sumRatings', 'completedTrips', 'indiceConfiabilidad'])
       );
+      allow delete: if isAdmin();
     }
 
     match /cargas/{cargoId} {
@@ -259,7 +269,6 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
       allow delete: if isAdmin();
 
-      // Reglas para los mensajes del chat
       match /messages/{messageId} {
         function canChat() {
           return isAuthenticated() && (
@@ -285,10 +294,8 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow read, update, delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
-      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
     }
 
     match /support_tickets/{ticketId} {

@@ -32,10 +32,10 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('DOCUMENTO DE CONTROL LOGÍSTICO', 15, 18);
-  doc.setFontSize(12);
+  doc.setFontSize(14);
   doc.text('CHASQUI - PLATAFORMA DE TRANSPORTE', 15, 28);
   
   doc.setFontSize(9);
@@ -88,7 +88,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   doc.setFont('helvetica', 'bold');
   doc.text('Producto:', 15, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(cargo.nombreProducto || cargo.tipoCarga, 45, y);
+  doc.text(cargo.nombreProducto || cargo.tipoDeCarga || cargo.tipoCarga || 'N/A', 45, y);
 
   doc.setFont('helvetica', 'bold');
   doc.text('Lote:', 120, y);
@@ -115,7 +115,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   doc.setFont('helvetica', 'bold');
   doc.text('Peso / Cantidad:', 120, y);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${cargo.peso} / ${cargo.capacidadRequerida}`, 150, y);
+  doc.text(`${cargo.vehiculo?.capacidad?.peso || cargo.peso || 'N/A'} / ${cargo.vehiculo?.capacidad?.volumen || cargo.capacidadRequerida || 'N/A'}`, 150, y);
 
   // 3. Condiciones y Logística
   y += 12;
@@ -124,7 +124,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   doc.setFont('helvetica', 'bold');
   doc.text('Vehículo Req.:', 15, y);
   doc.setFont('helvetica', 'normal');
-  doc.text((cargo.tipoVehiculoRequerido || 'N/A').toUpperCase(), 45, y);
+  doc.text((cargo.vehiculo?.tipo || cargo.tipoVehiculoRequerido || 'N/A').toUpperCase(), 45, y);
 
   doc.setFont('helvetica', 'bold');
   doc.text('Placa:', 120, y);

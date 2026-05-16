@@ -2,6 +2,8 @@ export const ADMIN_EMAILS = [
   'vvendiya@gmail.com'
 ];
 
+export const COMMISSION_RATE = 0.08
+
 export const TRIP_STATUS_LABELS: Record<string, { label: string; desc: string }> = {
   pendiente_pago: { 
     label: 'Pendiente de Pago', 

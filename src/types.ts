@@ -80,36 +80,42 @@ export interface Cargo {
   destino: string;
   origenCoords?: Location;
   destinoCoords?: Location;
-  tipoCarga: string;
-  categoria: 'general' | 'perecible' | 'fragil' | 'peligrosa';
+  tipoDeCarga: string;
+  tipoCarga?: string; // Mantener para compatibilidad
+  categoria?: string; // Mantener para compatibilidad
+  peso?: number; // Mantener para compatibilidad
+  capacidadRequerida?: string; // Mantener para compatibilidad
+  tipoVehiculoRequerido?: string; // Mantener para compatibilidad
   
-  // Datos Producto Exportable
-  nombreProducto?: string;
-  sectorProducto?: string;
-  lote?: string;
-  certificacion?: 'organico' | 'globalgap' | 'fair_trade' | 'sin_certificacion';
-  partidaArancelaria?: string;
+  vehiculo: {
+    tipo: string;
+    otroTipo?: string;
+    caracteristicas: string[];
+    capacidad: {
+      peso?: string;
+      volumen?: string;
+      pallets?: string;
+      dimensiones?: string;
+    };
+  };
 
-  // Condiciones de Transporte
-  temperaturaRequerida?: string;
-  tipoVehiculoRequerido?: 'refrigerado' | 'seco' | 'isotermico' | 'indiferente';
-  condicionSanitaria?: boolean; 
-
-  // Datos de Exportación
-  rucExportador?: string;
-  guiaRemision?: string;
-  puertoDestino?: string;
-  fechaHoraLimitePuerto?: number;
-  numeroContenedor?: string;
-  seguroCarga?: string;
-
-  cuidadoEspecial?: string;
-  peso: number;
-  capacidadRequerida: string;
+  nombreProducto: string;
+  horario?: string;
   descripcion: string;
   precioPropuesto: number;
   estado: CargoStatus;
   createdAt: number;
+  
+  // Campos Avanzados / Exportación
+  lote?: string;
+  partidaArancelaria?: string;
+  puertoDestino?: string;
+  numeroContenedor?: string;
+  temperaturaRequerida?: string;
+  certificacion?: string;
+  eudr?: string;
+  guiaRemision?: string;
+  fechaHoraLimitePuerto?: number;
 }
 
 export interface Offer {
@@ -139,7 +145,7 @@ export interface Trip {
   origen: string;
   destino: string;
   precioFinal: number;
-  comision: 0.8;
+  comision: number;
   estado: TripStatus;
   seguimiento?: Location;
   checkpoints: Checkpoint[];
@@ -147,6 +153,7 @@ export interface Trip {
   // Trazabilidad Específica
   fechaHoraLimitePuerto?: number;
   nombreProducto?: string;
+  puertoDestino?: string;
   lote?: string;
   guiaRemision?: string;
   temperaturaRequerida?: string;

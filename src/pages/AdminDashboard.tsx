@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
-import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../lib/constants';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS, COMMISSION_RATE } from '../lib/constants';
 import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -78,16 +78,19 @@ export const AdminDashboard = () => {
 
     // Users Count
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docs = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((u: any) => !u.isDeleted); // Filtrar usuarios eliminados lógicamente
+      
       setPlatformUsers(docs);
       setStats(prev => ({ 
         ...prev, 
-        totalUsers: snap.size,
+        totalUsers: docs.length,
         pendingVerifications: docs.filter((u: any) => u.verificado === 'pendiente').length
       }));
     });
 
-    // Cargos Count
+    // Cargas Count
     const unsubCargos = onSnapshot(collection(db, 'cargas'), (snap) => {
       const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cargo));
       setPlatformCargas(docs);
@@ -144,11 +147,11 @@ export const AdminDashboard = () => {
       } else {
         // Initialize with defaults if not exists
         setAppConfig({
-          yapeNumber: '+51 960 354 149',
-          yapeName: 'Lurgia Yupa',
-          bcpAccount: '821 3443364810',
-          bcpCci: '00382101344336481069',
-          bcpName: 'Lurgia Yupa A.'
+          yapeNumber: '987 654 321',
+          yapeName: 'TransportaYa SAC',
+          bcpAccount: '191-98765432-0-11',
+          bcpCci: '00219100987654320111',
+          bcpName: 'TransportaYa SAC'
         });
       }
     });
@@ -415,9 +418,26 @@ export const AdminDashboard = () => {
     }
   };
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar al usuario ${userName}?`)) return;
+    
+    try {
+      // Usamos "Soft Delete" actualizando un flag en lugar de eliminar el doc físico
+      // Esto es porque las reglas de Firestore pueden estar restringidas para eliminación física
+      await updateDoc(doc(db, 'users', userId), { 
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user?.uid
+      });
+      alert('Usuario eliminado con éxito');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
   const handleViewDoc = (url: string, title: string) => {
     if (!url) return;
-    if (url.startsWith('data:') || url === 'pdf_file_uploaded') {
+    if (url.startsWith('data:') || url === 'pdf_file_uploaded' || url.includes('transportaya.appspot.com')) {
       setViewingDoc({ url, title });
     } else {
       window.open(url, '_blank');
@@ -477,7 +497,7 @@ export const AdminDashboard = () => {
         <div className="bg-purple-600 p-5 rounded-2xl border border-purple-500 shadow-lg shadow-purple-100">
           <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest mb-1">Comisiones (S/)</p>
           <p className="text-2xl font-black text-white">{stats.totalCommission.toLocaleString()}</p>
-          <p className="text-[10px] text-purple-100 font-bold mt-1">Tu ganancia neta (10%)</p>
+          <p className="text-[10px] text-purple-100 font-bold mt-1">Tu ganancia neta ({Math.round(COMMISSION_RATE * 100)}%)</p>
         </div>
         <div 
           className={cn(
@@ -704,6 +724,14 @@ export const AdminDashboard = () => {
                           <option value="verificado">Verificado</option>
                           <option value="rechazado">Rechazado</option>
                         </select>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-red-500 border-red-100 hover:bg-red-50"
+                          onClick={() => handleDeleteUser(u.id, u.nombre || 'Sin nombre')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
 
@@ -1398,12 +1426,33 @@ export const AdminDashboard = () => {
               </button>
             </div>
             <div className="flex-1 bg-black/40 rounded-b-2xl overflow-auto flex items-center justify-center p-4">
-              {viewingDoc.url === 'pdf_file_uploaded' ? (
+              {viewingDoc.url === 'pdf_file_uploaded' || viewingDoc.url.startsWith('data:application/pdf') ? (
                 <div className="text-center space-y-4 py-20">
                   <FileText className="h-20 w-20 text-red-500 mx-auto" />
-                  <p className="text-white font-bold">Este es un archivo PDF. No se puede previsualizar directamente.</p>
-                  <Button variant="outline" className="text-white border-white hover:bg-white/10">
-                    Descargar PDF
+                  <p className="text-white font-bold">Documento PDF detectado.</p>
+                  {viewingDoc.url.startsWith('data:') ? (
+                    <div className="space-y-4">
+                      <iframe src={viewingDoc.url} className="w-full h-[600px] border-none rounded-lg" title="PDF Viewer" />
+                      <a href={viewingDoc.url} download={`${viewingDoc.title}.pdf`} className="inline-block">
+                        <Button className="bg-white text-blue-600 hover:bg-blue-50">
+                          Descargar PDF
+                        </Button>
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-gray-400">Este archivo requiere una descarga manual o corregir la subida.</p>
+                  )}
+                </div>
+              ) : viewingDoc.url.includes('transportaya.appspot.com') ? (
+                <div className="text-center space-y-4 py-20 bg-white/5 p-8 rounded-2xl border border-white/10">
+                  <XCircle className="h-20 w-20 text-red-500 mx-auto" />
+                  <p className="text-white font-bold text-xl">Error de Documento</p>
+                  <p className="text-gray-300 max-w-sm">
+                    Este documento parece ser un enlace de prueba que ya no es válido o es inaccesible. 
+                    Por favor, solicita al usuario que vuelva a subir sus documentos desde su perfil.
+                  </p>
+                  <Button variant="outline" className="text-white border-white hover:bg-white/10" onClick={() => setViewingDoc(null)}>
+                    Cerrar
                   </Button>
                 </div>
               ) : (

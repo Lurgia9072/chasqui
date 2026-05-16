@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
 import { useNotification } from '../../components/ui/NotificationProvider';
+import { COMMISSION_RATE } from '../../lib/constants';
 
 export const MerchantCargoDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -124,7 +125,7 @@ export const MerchantCargoDetails = () => {
       // 1. Crear el viaje
       const tripData: Omit<Trip, 'id'> = {
         cargoId: id,
-        tipoCarga: carga.tipoCarga,
+        tipoCarga: carga.tipoDeCarga || carga.tipoCarga,
         comercianteId: user!.uid,
         comercianteNombre: user!.nombre,
         transportistaId: offer.transportistaId,
@@ -132,8 +133,11 @@ export const MerchantCargoDetails = () => {
         vehiculo: { tipo: 'Camión de Carga', placa: 'V3R-982' }, // Mocked for now
         origen: carga.origen,
         destino: carga.destino,
+        puertoDestino: carga.puertoDestino || '',
+        lote: carga.lote || '',
+        nombreProducto: carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga,
         precioFinal: offer.precioOfertado,
-        comision: offer.precioOfertado * 0.08 as 0.8, // 8% de comisión
+        comision: offer.precioOfertado * COMMISSION_RATE,
         estado: 'pendiente_pago',
         seguimiento: { lat: -12.046374, lng: -77.042793, updatedAt: Date.now() }, // Lima default
         checkpoints: [],
@@ -212,7 +216,7 @@ export const MerchantCargoDetails = () => {
           <Card>
             <CardHeader className="pb-4">
               <div className="space-y-1">
-                <CardTitle className="text-xl font-bold">{carga.tipoCarga}</CardTitle>
+                <CardTitle className="text-xl font-bold">{carga.tipoDeCarga || carga.tipoCarga}</CardTitle>
                 <CardDescription className="flex items-center text-xs">
                   <Clock className="h-3 w-3 mr-1" />
                   Publicado {formatDistanceToNow(carga.createdAt, { addSuffix: true, locale: es })}
@@ -245,15 +249,7 @@ export const MerchantCargoDetails = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-bold text-gray-400">Producto</span>
-                    <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoCarga}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Sector</span>
-                    <p className="text-xs text-gray-900 font-bold capitalize">{carga.sectorProducto || 'No especificado'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Lote</span>
-                    <p className="text-xs text-gray-900 font-bold">{carga.lote || 'N/A'}</p>
+                    <p className="text-xs text-gray-900 font-bold">{carga.nombreProducto || carga.tipoDeCarga || carga.tipoCarga}</p>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-bold text-gray-400">Certificación</span>
@@ -264,16 +260,20 @@ export const MerchantCargoDetails = () => {
 
               <div className="pt-4 border-t border-gray-50 space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Truck className="h-3 w-3" /> Logística y Exportación
+                  <Truck className="h-3 w-3" /> Logística y Unidad Requerida
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
-                    <p className="text-sm text-gray-900 font-bold">{carga.peso} t</p>
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Vehículo</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.tipo || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">RUC Exportador</span>
-                    <p className="text-xs text-gray-900 font-bold">{carga.rucExportador || user?.ruc || 'N/A'}</p>
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Peso</span>
+                    <p className="text-sm text-gray-900 font-bold">{carga.vehiculo?.capacidad?.peso || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Volumen</span>
+                    <p className="text-xs text-gray-900 font-bold">{carga.vehiculo?.capacidad?.volumen || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] uppercase font-bold text-gray-400">Límite Puerto</span>
@@ -282,14 +282,15 @@ export const MerchantCargoDetails = () => {
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Póliza Seguro</span>
-                    <p className="text-xs text-gray-900 font-bold">{carga.seguroCarga || 'N/A'}</p>
+                    <span className="text-[10px] uppercase font-bold text-gray-400">EUDR Compliance</span>
+                    <p className="text-xs text-gray-900 font-bold uppercase">{carga.eudr === 'yes' ? 'SÍ' : 'NO'}</p>
                   </div>
                 </div>
-                {carga.condicionSanitaria && (
-                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex items-center gap-2">
-                    <CheckCircle className="h-3 w-3 text-emerald-600" />
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase">Vehículo con limpieza certificada</span>
+                {carga.vehiculo?.caracteristicas?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {carga.vehiculo.caracteristicas.map(feat => (
+                      <span key={feat} className="text-[8px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full uppercase">{feat}</span>
+                    ))}
                   </div>
                 )}
               </div>
