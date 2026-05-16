@@ -29,6 +29,94 @@ import { ADMIN_EMAILS } from '../lib/constants';
 import { cn } from '../lib/utils';
 import { ChasquiLogo } from '../components/ChasquiLogo';
 
+const MiniStatusCard = ({ icon, title, status, variant }: { icon: React.ReactNode; title: string; status: string; variant: 'danger' | 'warning' | 'info' | 'success' }) => {
+  const bgColors = {
+    danger: 'bg-red-50 border-red-100 text-red-600',
+    warning: 'bg-orange-50 border-orange-100 text-orange-600',
+    info: 'bg-blue-50 border-blue-100 text-blue-600',
+    success: 'bg-emerald-50 border-emerald-100 text-emerald-600'
+  };
+
+  return (
+    <div className={cn("p-4 rounded-2xl border text-left space-y-1 transition-all hover:scale-[1.02]", bgColors[variant])}>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-[10px] font-black uppercase tracking-tight">{title}</span>
+      </div>
+      <p className="text-xs font-bold truncate leading-none">{status}</p>
+    </div>
+  );
+};
+
+const UseCaseItem = ({ icon, title, desc }: { icon: string; title: string; desc: string }) => (
+  <div className="flex gap-4 p-6 rounded-2xl bg-white border border-slate-100 hover:border-emerald-200 hover:shadow-lg transition-all group">
+    <div className="text-3xl flex-shrink-0 group-hover:scale-110 transition-transform">{icon}</div>
+    <div className="space-y-1">
+      <h4 className="font-black text-slate-900 group-hover:text-emerald-600 transition-colors uppercase tracking-tight text-sm">{title}</h4>
+      <p className="text-slate-500 text-xs font-medium leading-relaxed">{desc}</p>
+    </div>
+  </div>
+);
+
+const HeroBadge = ({ icon, label }: { icon: React.ReactNode; label: string }) => (
+  <div className="flex items-center justify-center gap-2 group cursor-default">
+    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-600 transition-colors group-hover:bg-slate-900 group-hover:text-white">
+      {icon}
+    </div>
+    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-left leading-tight group-hover:text-slate-900 transition-colors">{label}</span>
+  </div>
+);
+
+const ProblemItem = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-colors group">
+    <div className="h-8 w-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+      <X className="h-4 w-4" />
+    </div>
+    <p className="text-slate-600 font-bold tracking-tight">{text}</p>
+  </div>
+);
+
+const SolutionCard = ({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) => (
+  <motion.div 
+    whileHover={{ y: -5 }}
+    className="p-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex flex-col gap-6"
+  >
+    <div className="h-14 w-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
+      {icon}
+    </div>
+    <div className="space-y-3">
+      <h4 className="text-xl font-black text-slate-900 italic">{title}</h4>
+      <p className="text-sm text-slate-500 font-medium leading-relaxed">{text}</p>
+    </div>
+  </motion.div>
+);
+
+const OperationalStep = ({ number, title, text }: { number: string; title: string; text: string }) => (
+  <div className="space-y-6 group">
+    <div className="text-6xl font-black text-slate-100 group-hover:text-blue-100 transition-colors leading-none italic">{number}</div>
+    <div className="space-y-2">
+      <h4 className="text-xl font-black text-slate-900 leading-tight">{title}</h4>
+      <p className="text-sm text-slate-500 font-medium leading-relaxed">{text}</p>
+    </div>
+  </div>
+);
+
+const CheckItem = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-3">
+    <div className="h-5 w-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
+      <Check className="h-3 w-3" />
+    </div>
+    <span className="font-bold text-slate-700 text-sm">{text}</span>
+  </div>
+);
+
+const ImpactItem = ({ title, desc }: { title: string; desc: string }) => (
+  <div className="p-8 bg-white rounded-3xl border border-slate-100 space-y-3 hover:border-slate-200 transition-colors">
+    <h4 className="text-lg font-black text-slate-900">{title}</h4>
+    <p className="text-sm text-slate-500 font-medium leading-relaxed">{desc}</p>
+  </div>
+);
+
 export const Home = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -61,15 +149,15 @@ export const Home = () => {
             >
               <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] mb-4">
                 <Shield className="h-3 w-3" />
-                <span>Solución Logística B2B</span>
+                <span>Transporte de carga seguro</span>
               </div>
               
               <h1 className="text-5xl sm:text-7xl font-black tracking-tight text-slate-900 leading-[1.05]">
-                Trazabilidad y control logístico para <span className="text-blue-600 italic">carga agroexportadora</span>
+                Transporte de carga seguro, <span className="text-blue-600 italic">negociado y monitoreado</span>
               </h1>
               
               <p className="mt-8 text-xl text-slate-500 max-w-3xl mx-auto font-medium leading-relaxed">
-                Optimiza el transporte terrestre previo a la exportación con monitoreo en tiempo real, validación de actores y registro auditable de cada operación logística.
+                Conecta con transportistas verificados, negocia el precio y sigue tu carga minuto a minuto desde una mudanza hasta una exportación al puerto.
               </p>
             </motion.div>
 
@@ -115,10 +203,10 @@ export const Home = () => {
           <div className="max-w-4xl space-y-8">
             <h2 className="text-sm font-black uppercase tracking-[0.3em] text-blue-400">Propuesta de Valor</h2>
             <h3 className="text-4xl sm:text-5xl font-black leading-tight tracking-tight">
-              Diseñado para cadenas logísticas de exportación
+              Diseñado para cualquier carga en Perú
             </h3>
             <p className="text-xl text-slate-400 font-medium leading-relaxed max-w-2xl">
-              Chasqui permite a empresas agroexportadoras gestionar y monitorear el transporte terrestre de su carga desde origen (campo o almacén) hasta planta o punto de despacho, asegurando visibilidad, control operativo y trazabilidad en cada etapa.
+              Chasqui conecta a quienes necesitan transportar mercancías con transportistas verificados con trazabilidad completa, pago protegido y evidencia digital en cada operación.
             </p>
           </div>
         </div>
@@ -132,28 +220,58 @@ export const Home = () => {
               <div className="space-y-4">
                 <h2 className="text-sm font-black uppercase tracking-[0.3em] text-red-500">El Problema</h2>
                 <h3 className="text-4xl font-black text-slate-900 tracking-tight leading-tight">
-                  Falta de control y trazabilidad en el transporte terrestre.
+                  Conseguir transporte de carga confiable en Perú sigue siendo un caos
                 </h3>
               </div>
               <div className="space-y-1">
-                <ProblemItem text="Baja visibilidad del estado real de la carga en tránsito" />
-                <ProblemItem text="Procesos informales y descentralizados" />
-                <ProblemItem text="Riesgo operativo por incumplimientos o incidentes" />
-                <ProblemItem text="Falta de registro estructurado para auditoría" />
-                <ProblemItem text="Dependencia de comunicación manual (llamadas)" />
+                <ProblemItem text="Transportistas difíciles de encontrar fuera de tus contactos" />
+                <ProblemItem text="Sin garantía de que la carga llegue en buen estado" />
+                <ProblemItem text="Pagos inseguros sin respaldo ni evidencia" />
+                <ProblemItem text="Sin trazabilidad si algo sale mal" />
+                <ProblemItem text="Todo coordinado por WhatsApp sin control" />
               </div>
             </div>
-            <div className="bg-slate-50 p-12 rounded-[3rem] border border-slate-100 flex flex-col justify-between aspect-square lg:aspect-auto h-full">
-               <div className="space-y-6">
-                 <div className="h-16 w-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white">
+            <div className="bg-slate-50 p-8 sm:p-12 rounded-[2.5rem] sm:rounded-[3rem] border border-slate-100 flex flex-col justify-between h-auto lg:aspect-square mb-12 lg:mb-0 transform lg:translate-y-12 shadow-sm">
+              <div className="space-y-8">
+                <div className="space-y-6">
+                  <div className="h-16 w-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white">
                     <X className="h-8 w-8" />
-                 </div>
-                 <h4 className="text-2xl font-black text-slate-900">La informalidad cuesta caro.</h4>
-                 <p className="text-slate-500 font-medium leading-relaxed">
-                   En entornos de exportación, un error logístico no solo es dinero, es reputación internacional y pérdida de valor del producto.
-                 </p>
-               </div>
-               <div className="pt-12 text-slate-400 font-black italic tracking-widest text-xs uppercase">Chasqui Control System v1.0</div>
+                  </div>
+                  <h4 className="text-3xl font-black text-slate-900 tracking-tighter leading-tight">La informalidad cuesta caro.</h4>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    Cuando una carga se pierde, se retrasa o no tiene seguimiento, el problema no es solo económico: se pierde tiempo, confianza y control de la operación.
+                  </p>
+                </div>
+
+                {/* Mini cards visuales */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 pb-4">
+                  <MiniStatusCard 
+                    icon={<MapPin className="h-3 w-3 text-red-500" />} 
+                    title="GPS Desconectado" 
+                    status="Riesgo detectado" 
+                    variant="danger" 
+                  />
+                  <MiniStatusCard 
+                    icon={<Clock className="h-3 w-3 text-orange-500" />} 
+                    title="Demora detectada" 
+                    status="+48 min fuera de ruta" 
+                    variant="warning" 
+                  />
+                  <MiniStatusCard 
+                    icon={<Truck className="h-3 w-3 text-blue-500" />} 
+                    title="Viaje monitoreado" 
+                    status="Lima → Chiclayo" 
+                    variant="info" 
+                  />
+                  <MiniStatusCard 
+                    icon={<Lock className="h-3 w-3 text-emerald-500" />} 
+                    title="Pago protegido" 
+                    status="Fondos en custodia" 
+                    variant="success" 
+                  />
+                </div>
+              </div>
+              <div className="pt-8 text-slate-400 font-black italic tracking-widest text-[10px] uppercase border-t border-slate-100/50 mt-4">Chasqui Control System v1.0</div>
             </div>
           </div>
         </div>
@@ -209,24 +327,31 @@ export const Home = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
             <div className="relative z-10 space-y-10">
               <div className="space-y-4">
-                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-emerald-600">Enfoque Sectorial</h2>
-                <h3 className="text-4xl font-black text-slate-900 tracking-tight italic">Caso de uso Agroexportador</h3>
+                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-emerald-600">Casos de Uso</h2>
+                <h3 className="text-4xl font-black text-slate-900 tracking-tight italic">¿Para quién es Chasqui?</h3>
               </div>
-              <p className="text-lg text-slate-500 font-medium leading-relaxed">
-                Una empresa agroexportadora requiere trasladar productos desde <span className="font-bold text-slate-900 underline decoration-emerald-500 decoration-4 underline-offset-4">campo → planta → puerto.</span>
-              </p>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <CheckItem text="Asigna transporte validado" />
-                <CheckItem text="Monitorea el traslado en vivo" />
-                <CheckItem text="Detecta incidencias operativas" />
-                <CheckItem text="Registra evidencia (Fotos/GPS)" />
-                <CheckItem text="Genera historial auditable" />
+              <div className="grid grid-cols-1 gap-6">
+                <UseCaseItem 
+                  icon="📦" 
+                  title="Comerciante / Empresa" 
+                  desc="Traslada tu mercancía con transportista verificado, tracking en tiempo real y pago protegido." 
+                />
+                <UseCaseItem 
+                  icon="🚛" 
+                  title="Exportador Agroexportador" 
+                  desc="Lleva tu carga al puerto con trazabilidad certificable, control de temperatura y reporte auditable." 
+                />
+                <UseCaseItem 
+                  icon="🏠" 
+                  title="Mudanza" 
+                  desc="Registra tus pertenencias, elige el transportista con mejor calificación y monitorea el traslado completo." 
+                />
               </div>
               
               <div className="p-8 bg-emerald-900 text-white rounded-[2rem] shadow-xl shadow-emerald-900/20">
                 <p className="text-xl font-bold leading-snug">
-                  👉 Resultado: mayor control, reducción de riesgos y trazabilidad total del proceso.
+                  👉 Resultado: seguridad total y confianza en cada envío, sin importar el tamaño.
                 </p>
               </div>
             </div>
@@ -350,7 +475,7 @@ export const Home = () => {
       <section className="py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16 space-y-4">
-            <h2 className="text-4xl font-black text-slate-900 italic">Impacto para empresas exportadoras</h2>
+            <h2 className="text-4xl font-black text-slate-900 italic">¿Por qué elegir Chasqui?</h2>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -359,7 +484,7 @@ export const Home = () => {
              <ImpactItem title="Auditoría Estructurada" desc="Registro histórico detallado de cada movimiento de carga realizado." />
              <ImpactItem title="Optimización Operativa" desc="Eliminación de la comunicación manual ineficiente (llamadas/WhatsApp)." />
              <ImpactItem title="Garantía de Pago" desc="Seguridad financiera absoluta mediante nuestro sistema de custodia." />
-             <ImpactItem title="Confianza Regional" desc="Sistema diseñado específicamente para la geografía y desafíos de Perú." />
+             <ImpactItem title="Para todo Perú" desc="Desde Lima hasta provincias, Chasqui funciona para cualquier ruta y cualquier tipo de carga en Perú." />
           </div>
         </div>
       </section>
@@ -380,7 +505,7 @@ export const Home = () => {
                 Digitaliza y asegura tu <span className="text-blue-400 underline underline-offset-8 decoration-blue-500/50">operación logística</span>
               </h2>
               <p className="text-slate-400 text-xl font-medium max-w-2xl mx-auto">
-                Chasqui permite transformar el transporte terrestre en un proceso controlado, trazable y confiable para entornos de exportación.
+                Chasqui permite transformar el transporte terrestre en un proceso controlado, trazable y confiable para todo tipo de carga.
               </p>
             </div>
 
@@ -419,69 +544,11 @@ export const Home = () => {
              <Link to="/legal" className="hover:text-slate-900 transition-colors">Aviso Legal</Link>
              <Link to="/support" className="hover:text-slate-900 transition-colors">Centro de Ayuda</Link>
           </div>
-          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">© 2026 Chasqui Logística SAC. Diseñado para el comercio inteligente en Perú.</p>
+          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">© 2026 Chasqui. Transporte seguro para todos en Perú.</p>
+          <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.5em] mt-2">Carga general · Exportación · Mudanzas</p>
         </div>
       </footer>
     </div>
   );
 };
-
-const HeroBadge = ({ icon, label }: { icon: React.ReactNode; label: string }) => (
-  <div className="flex items-center justify-center gap-2 group cursor-default">
-    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-600 transition-colors group-hover:bg-slate-900 group-hover:text-white">
-      {icon}
-    </div>
-    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-left leading-tight group-hover:text-slate-900 transition-colors">{label}</span>
-  </div>
-);
-
-const ProblemItem = ({ text }: { text: string }) => (
-  <div className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-colors group">
-    <div className="h-8 w-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-      <X className="h-4 w-4" />
-    </div>
-    <p className="text-slate-600 font-bold tracking-tight">{text}</p>
-  </div>
-);
-
-const SolutionCard = ({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) => (
-  <motion.div 
-    whileHover={{ y: -5 }}
-    className="p-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex flex-col gap-6"
-  >
-    <div className="h-14 w-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
-      {icon}
-    </div>
-    <div className="space-y-3">
-      <h4 className="text-xl font-black text-slate-900 italic">{title}</h4>
-      <p className="text-sm text-slate-500 font-medium leading-relaxed">{text}</p>
-    </div>
-  </motion.div>
-);
-
-const OperationalStep = ({ number, title, text }: { number: string; title: string; text: string }) => (
-  <div className="space-y-6 group">
-    <div className="text-6xl font-black text-slate-100 group-hover:text-blue-100 transition-colors leading-none italic">{number}</div>
-    <div className="space-y-2">
-      <h4 className="text-xl font-black text-slate-900 leading-tight">{title}</h4>
-      <p className="text-sm text-slate-500 font-medium leading-relaxed">{text}</p>
-    </div>
-  </div>
-);
-
-const CheckItem = ({ text }: { text: string }) => (
-  <div className="flex items-center gap-3">
-    <div className="h-5 w-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
-      <Check className="h-3 w-3" />
-    </div>
-    <span className="font-bold text-slate-700 text-sm">{text}</span>
-  </div>
-);
-
-const ImpactItem = ({ title, desc }: { title: string; desc: string }) => (
-  <div className="p-8 bg-white rounded-3xl border border-slate-100 space-y-3 hover:border-slate-200 transition-colors">
-    <h4 className="text-lg font-black text-slate-900">{title}</h4>
-    <p className="text-sm text-slate-500 font-medium leading-relaxed">{desc}</p>
-  </div>
-);
 
