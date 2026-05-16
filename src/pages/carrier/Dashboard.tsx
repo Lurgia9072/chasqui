@@ -142,20 +142,71 @@ export const CarrierDashboard = () => {
     setFiles(prev => ({ ...prev, [type]: file }));
   };
 
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // If it's a PDF, we can't compress it with canvas, but for simplicity in this environment
+      // we will just convert it to base64 directly
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.onerror = reject;
+      };
+      reader.onerror = reject;
+    });
+  };
+
   const handleUpload = async () => {
     if (!user) return;
+    
+    const hasDni = files.dni || user.documentosUrls?.dni;
+    const hasLicencia = files.licencia || user.documentosUrls?.licencia;
+    const hasTarjeta = files.tarjetaPropiedad || user.documentosUrls?.tarjetaPropiedad;
+    
+    if (!hasDni || !hasLicencia || !hasTarjeta) {
+      alert("Por favor, sube todos los documentos obligatorios (DNI, Licencia y Tarjeta de Propiedad).");
+      return;
+    }
+
     setUploading(true);
     try {
-      // Simular tiempo de subida
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
+      const dniUrl = files.dni ? await compressImage(files.dni) : user.documentosUrls?.dni;
+      const licenciaUrl = files.licencia ? await compressImage(files.licencia) : user.documentosUrls?.licencia;
+      const tarjetaUrl = files.tarjetaPropiedad ? await compressImage(files.tarjetaPropiedad) : user.documentosUrls?.tarjetaPropiedad;
+      
       const userRef = doc(db, 'users', user.uid);
       const updatedData = {
         verificado: 'pendiente' as const,
         documentosUrls: {
-          dni: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Fdni.jpg?alt=media',
-          licencia: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Flicencia.jpg?alt=media',
-          tarjetaPropiedad: 'https://firebasestorage.googleapis.com/v0/b/transportaya.appspot.com/o/docs%2Ftarjeta.jpg?alt=media'
+          ...user.documentosUrls,
+          dni: dniUrl,
+          licencia: licenciaUrl,
+          tarjetaPropiedad: tarjetaUrl
         }
       };
       await updateDoc(userRef, updatedData);
@@ -401,7 +452,11 @@ export const CarrierDashboard = () => {
                     <Button 
                       className="w-full h-12 text-lg shadow-lg shadow-blue-200"
                       onClick={handleUpload}
-                      disabled={!files.dni || !files.licencia || !files.tarjetaPropiedad || uploading}
+                      disabled={uploading || 
+                        !(files.dni || user?.documentosUrls?.dni) || 
+                        !(files.licencia || user?.documentosUrls?.licencia) || 
+                        !(files.tarjetaPropiedad || user?.documentosUrls?.tarjetaPropiedad)
+                      }
                       isLoading={uploading}
                     >
                       {uploading ? "Subiendo..." : "Enviar para Verificación"}
