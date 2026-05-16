@@ -512,7 +512,7 @@ export const Home = () => {
             <div className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
               <Link to="/register?role=comerciante" className="w-full sm:w-auto">
                 <Button size="lg" className="w-full sm:w-auto h-16 px-12 text-lg bg-blue-600 hover:bg-blue-500 rounded-2xl shadow-xl shadow-blue-600/40 border-0 font-black">
-                  Solicitar Demo / Registrar Carga
+                  Registrar Carga
                 </Button>
               </Link>
               <Link to="/support" className="w-full sm:w-auto">
