@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, addDoc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { ADMIN_EMAILS, TRIP_STATUS_LABELS, COMMISSION_RATE } from '../lib/constants';
@@ -7,7 +7,7 @@ import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -78,11 +78,14 @@ export const AdminDashboard = () => {
 
     // Users Count
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docs = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((u: any) => !u.isDeleted); // Filtrar usuarios eliminados lógicamente
+      
       setPlatformUsers(docs);
       setStats(prev => ({ 
         ...prev, 
-        totalUsers: snap.size,
+        totalUsers: docs.length,
         pendingVerifications: docs.filter((u: any) => u.verificado === 'pendiente').length
       }));
     });
@@ -415,6 +418,23 @@ export const AdminDashboard = () => {
     }
   };
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar al usuario ${userName}?`)) return;
+    
+    try {
+      // Usamos "Soft Delete" actualizando un flag en lugar de eliminar el doc físico
+      // Esto es porque las reglas de Firestore pueden estar restringidas para eliminación física
+      await updateDoc(doc(db, 'users', userId), { 
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user?.uid
+      });
+      alert('Usuario eliminado con éxito');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
   const handleViewDoc = (url: string, title: string) => {
     if (!url) return;
     if (url.startsWith('data:') || url === 'pdf_file_uploaded' || url.includes('transportaya.appspot.com')) {
@@ -704,6 +724,14 @@ export const AdminDashboard = () => {
                           <option value="verificado">Verificado</option>
                           <option value="rechazado">Rechazado</option>
                         </select>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-red-500 border-red-100 hover:bg-red-50"
+                          onClick={() => handleDeleteUser(u.id, u.nombre || 'Sin nombre')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
 
@@ -807,7 +835,7 @@ export const AdminDashboard = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Publicado por: {c.comercianteNombre}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-purple-600">S/ {c.precioPropuesto}</p>
+                      <p className="text-sm font-bold text-purple-600">S/ {c.precioSugerido}</p>
                       <span className={cn(
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
                         c.estado === 'abierta' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"

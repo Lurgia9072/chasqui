@@ -244,6 +244,7 @@ service cloud.firestore {
         isAdmin() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'totalRatings', 'sumRatings', 'completedTrips', 'indiceConfiabilidad'])
       );
+      allow delete: if isAdmin();
     }
 
     match /cargas/{cargoId} {
