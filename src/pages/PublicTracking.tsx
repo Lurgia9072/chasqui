@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { TRIP_STATUS_LABELS } from '../lib/constants';
 import { Trip, Cargo, Checkpoint } from '../types';
@@ -61,6 +61,7 @@ export const PublicTracking = () => {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [carga, setCarga] = useState<Cargo | null>(null);
   const [merchantName, setMerchantName] = useState<string>('');
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(false);
@@ -127,7 +128,18 @@ export const PublicTracking = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubscribeCheckpoints = onSnapshot(
+      query(collection(db, 'trips', id, 'checkpoints'), orderBy('timestamp', 'desc')),
+      (snapshot) => {
+        const cps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Checkpoint));
+        setCheckpoints(cps);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubscribeCheckpoints();
+    };
   }, [id]);
 
   useEffect(() => {
@@ -276,15 +288,15 @@ export const PublicTracking = () => {
 
               {/* Quick Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Temperatura Última</p>
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-red-50 rounded-xl flex items-center justify-center">
                       <Thermometer className="h-5 w-5 text-red-600" />
                     </div>
-                    <span className="text-1xl font-black text-gray-900">{trip.temperaturaActual || 'Sin temperatura'}</span>
+                    <span className="text-2xl font-black text-gray-900">{trip.temperaturaActual || 'N/A'}</span>
                   </div>
-                </div> */}
+                </div>
                 
                 <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">ETA Estimado</p>
@@ -292,7 +304,7 @@ export const PublicTracking = () => {
                     <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center">
                       <Clock className="h-5 w-5 text-blue-600" />
                     </div>
-                    <span className="text-1xl font-black text-gray-900">
+                    <span className="text-2xl font-black text-gray-900">
                       {trip.estado === 'completado' ? 'Entregado' : (trip.tiempoEstimado || '--')}
                     </span>
                   </div>
@@ -304,7 +316,7 @@ export const PublicTracking = () => {
                     <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center">
                       <Package className="h-5 w-5 text-green-600" />
                     </div>
-                    <span className="text-1xl font-black text-gray-900 uppercase">Conforme</span>
+                    <span className="text-xl font-black text-gray-900 uppercase">Conforme</span>
                   </div>
                 </div>
               </div>
@@ -345,7 +357,7 @@ export const PublicTracking = () => {
             <div className="space-y-6 relative ml-2">
               <div className="absolute left-[7px] top-2 bottom-0 w-0.5 bg-gray-100"></div>
               
-              {trip.checkpoints?.sort((a,b) => b.timestamp - a.timestamp).map((cp, idx) => (
+              {checkpoints.map((cp, idx) => (
                 <div key={cp.id} className="relative pl-6">
                   <div className={cn(
                     "absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm z-10",
@@ -358,6 +370,16 @@ export const PublicTracking = () => {
                     {TRIP_STATUS_LABELS[cp.estado]?.label || cp.estado.replace(/_/g, ' ')}
                   </p>
                   <p className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">{cp.mensaje}</p>
+                  {cp.evidenciaUrl && (
+                    <div className="mt-2">
+                       <img 
+                         src={cp.evidenciaUrl} 
+                         alt="Evidencia" 
+                         className="h-20 w-32 object-cover rounded-lg border border-gray-100" 
+                         referrerPolicy="no-referrer"
+                       />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -366,12 +388,12 @@ export const PublicTracking = () => {
       </div>
 
       {/* Verification Badge */}
-     {/*  <div className="max-w-5xl mx-auto px-6 mt-12 text-center">
+      <div className="max-w-5xl mx-auto px-6 mt-12 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200/50 rounded-full border border-slate-300">
           <ShieldCheck className="h-4 w-4 text-slate-600" />
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Documento y Trazabilidad Certificados con Hash SHA-256</span>
         </div>
-      </div> */}
+      </div>
     </div>
   );
 };

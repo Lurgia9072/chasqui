@@ -18,14 +18,16 @@
         "sumRatings": { "type": "number" },
         "completedTrips": { "type": "number" },
         "indiceConfiabilidad": { "type": "number" },
-        "datosBancarios": {
+        "metodoPago": { "type": "string", "enum": ["bank", "yape", "plin"] },
+        "datosPago": {
           "type": "object",
           "properties": {
             "banco": { "type": "string" },
-            "tipoCuenta": { "type": "string" },
             "numeroCuenta": { "type": "string" },
             "cci": { "type": "string" },
-            "titular": { "type": "string" }
+            "titular": { "type": "string" },
+            "celular": { "type": "string" },
+            "fotoUrl": { "type": "string" }
           }
         },
         "ruc": { "type": "string" },

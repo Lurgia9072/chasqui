@@ -1,12 +1,12 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { Trip, Cargo, User } from '../types';
+import { Trip, Cargo, User, Checkpoint } from '../types';
 import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { TRIP_STATUS_LABELS } from './constants';
 
-export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: User, carrier: User) => {
+export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: User, carrier: User, checkpoints: Checkpoint[] = []) => {
   const doc = new jsPDF();
   const primaryColor = [15, 23, 42]; // slate-900
   const secondaryColor = [37, 99, 235]; // blue-600
@@ -189,7 +189,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   y += 10;
 
   // 5. Historial de Eventos (Checkpoints)
-  const tableRows = trip.checkpoints?.sort((a,b) => a.timestamp - b.timestamp).map(cp => [
+  const tableRows = (checkpoints || []).sort((a,b) => a.timestamp - b.timestamp).map(cp => [
     dateFnsFormat(cp.timestamp, 'dd/MM HH:mm', { locale: es }),
     (TRIP_STATUS_LABELS[cp.estado as any]?.label || cp.estado.replace(/_/g, ' ')).toUpperCase(),
     cp.mensaje,

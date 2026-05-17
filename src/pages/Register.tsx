@@ -12,7 +12,7 @@ import { Input } from '../components/ui/Input';
 import { Truck, AlertCircle, Briefcase, FileText, Mail, CheckCircle2, Upload, Landmark, Eye, EyeOff, Zap, ShieldCheck, Lock, User, Check } from 'lucide-react';
 import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User as UserType, AccountType } from '../types';
-import { cn, cleanObject } from '../lib/utils';
+import { cn, cleanObject, compressImage } from '../lib/utils';
 import { ADMIN_EMAILS } from '../lib/constants';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -45,12 +45,6 @@ const registerSchema = z.object({
   licenciaDoc: z.string().optional(),
   tarjetaPropiedadDoc: z.string().optional(),
   soatDoc: z.string().optional(),
-  // Campos Bancarios
-  banco: z.string().optional(),
-  tipoCuentaBancaria: z.string().optional(),
-  numeroCuenta: z.string().optional(),
-  cci: z.string().optional(),
-  titularCuenta: z.string().optional(),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -184,26 +178,6 @@ export const Register = () => {
           tarjetaPropiedad: tarjetaPropiedadUrl || '',
           soat: soatUrl || '',
         };
-
-        if (data.banco) {
-          newUser.datosBancarios = {
-            banco: data.banco,
-            tipoCuenta: data.tipoCuentaBancaria || 'ahorros',
-            numeroCuenta: data.numeroCuenta || '',
-            cci: data.cci || '',
-            titular: data.titularCuenta || data.nombre,
-          };
-        }
-      } else if (data.tipoUsuario === 'comerciante') {
-        if (data.banco) {
-          newUser.datosBancarios = {
-            banco: data.banco,
-            tipoCuenta: data.tipoCuentaBancaria || 'ahorros',
-            numeroCuenta: data.numeroCuenta || '',
-            cci: data.cci || '',
-            titular: data.titularCuenta || data.nombre,
-          };
-        }
       }
 
       console.log('Enviando documento a Firestore:', cleanObject(newUser));
@@ -262,7 +236,7 @@ export const Register = () => {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressedBase64 = await compressImage(file);
+        const compressedBase64 = await compressImage(file, 800, 800, 0.5);
         if (type === 'dni') setDniUrl(compressedBase64);
         if (type === 'licencia') setLicenciaUrl(compressedBase64);
         if (type === 'tarjetaPropiedad') setTarjetaPropiedadUrl(compressedBase64);
@@ -271,35 +245,6 @@ export const Register = () => {
         setError('Error al procesar la imagen.');
       }
     }
-  };
-
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-          } else {
-            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-          }
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        };
-        img.onerror = reject;
-      };
-      reader.onerror = reject;
-    });
   };
 
   const prevStep = () => {
@@ -519,35 +464,6 @@ export const Register = () => {
                        <h3 className="text-xl font-black">Verificación de Identidad</h3>
                        <p className="text-sm text-slate-500 font-medium">Sube una foto clara de tu DNI o RUC para mayor seguridad en la plataforma.</p>
                        <UploadBox id="dni-m" active={!!dniUrl} label="Foto del DNI" onChange={(e) => handleFileUpload(e, 'dni')} />
-                       
-                       <div className="w-full space-y-6 pt-6 border-t border-slate-100 text-left">
-                         <h3 className="text-lg font-black flex items-center gap-2"><Landmark className="h-5 w-5 text-blue-600" /> Datos Bancarios (Opcional)</h3>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                           <div className="space-y-2">
-                              <label className="text-sm font-bold text-slate-700">Banco</label>
-                              <select {...register('banco')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
-                                <option value="">Selecciona...</option>
-                                <option value="BCP">BCP</option>
-                                <option value="Interbank">Interbank</option>
-                                <option value="BBVA">BBVA</option>
-                                <option value="Scotiabank">Scotiabank</option>
-                                <option value="Banco de la Nación">Banco de la Nación</option>
-                              </select>
-                           </div>
-                           <div className="space-y-2">
-                              <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
-                              <select {...register('tipoCuentaBancaria')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
-                                <option value="ahorros">Ahorros</option>
-                                <option value="corriente">Corriente</option>
-                              </select>
-                           </div>
-                         </div>
-                         <Input label="Número de Cuenta" placeholder="Ej: 191-..." {...register('numeroCuenta')} />
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                           <Input label="CCI" placeholder="002-..." {...register('cci')} />
-                           <Input label="Titular de la Cuenta" placeholder="Nombre completo" {...register('titularCuenta')} />
-                         </div>
-                       </div>
                     </div>
                     <div className="flex justify-between pt-6">
                       <Button variant="ghost" onClick={prevStep} className="font-bold">Atrás</Button>
@@ -568,35 +484,6 @@ export const Register = () => {
                     <UploadBox id="lic" size="small" active={!!licenciaUrl} label="Licencia" onChange={(e) => handleFileUpload(e, 'licencia')} />
                     <UploadBox id="tar" size="small" active={!!tarjetaPropiedadUrl} label="Tarjeta P." onChange={(e) => handleFileUpload(e, 'tarjetaPropiedad')} />
                     <UploadBox id="soat" size="small" active={!!soatUrl} label="SOAT" onChange={(e) => handleFileUpload(e, 'soat')} />
-                  </div>
-                </div>
-
-                <div className="space-y-6 pt-8 border-t border-slate-100">
-                  <h3 className="text-xl font-black flex items-center gap-2"><Landmark className="h-5 w-5 text-blue-600" /> Datos de Pago</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-sm font-bold text-slate-700">Banco</label>
-                       <select {...register('banco')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
-                         <option value="">Selecciona...</option>
-                         <option value="BCP">BCP</option>
-                         <option value="Interbank">Interbank</option>
-                         <option value="BBVA">BBVA</option>
-                         <option value="Scotiabank">Scotiabank</option>
-                         <option value="Banco de la Nación">Banco de la Nación</option>
-                       </select>
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-sm font-bold text-slate-700">Tipo de Cuenta</label>
-                       <select {...register('tipoCuentaBancaria')} className="w-full h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold">
-                         <option value="ahorros">Ahorros</option>
-                         <option value="corriente">Corriente</option>
-                       </select>
-                    </div>
-                  </div>
-                  <Input label="Número de Cuenta" placeholder="Ej: 191-..." {...register('numeroCuenta')} />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input label="CCI (Opcional)" placeholder="002-..." {...register('cci')} />
-                    <Input label="Titular de la Cuenta" placeholder="Nombre completo" {...register('titularCuenta')} />
                   </div>
                 </div>
 

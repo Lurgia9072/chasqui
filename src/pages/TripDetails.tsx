@@ -1,23 +1,23 @@
 import { useState, useEffect, ChangeEvent, useRef } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
-import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit, increment } from 'firebase/firestore';
-import { db, handleFirestoreError } from '../firebase';
+import { doc, getDoc, onSnapshot, updateDoc, addDoc, collection, query, orderBy, limit } from 'firebase/firestore';
+import { db, handleFirestoreError, increment } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
+import { ADMIN_EMAILS, TRIP_STATUS_LABELS, COMMISSION_RATE } from '../lib/constants';
 import { Trip, Cargo, OperationType, TripStatus, Checkpoint } from '../types';
 import { Button } from '../components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
-import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2, CreditCard } from 'lucide-react';
-import { es } from 'date-fns/locale';
-import { cn } from '../lib/utils';
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
-import { Chat } from '../components/ui/Chat';
 import { Input } from '../components/ui/Input';
-import { useNotification } from '../components/ui/NotificationProvider';
-import { ADMIN_EMAILS, COMMISSION_RATE, TRIP_STATUS_LABELS } from '../lib/constants';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
+import { Truck, MapPin, DollarSign, ArrowLeft, Clock, User, ShieldCheck, CheckCircle, Navigation, Phone, MessageSquare, Package, Star, Calendar, Info, AlertCircle, X, Banknote, Receipt, FileText, ExternalLink, Share2, Copy, CreditCard, ChevronRight, Upload } from 'lucide-react';
+import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { motion, AnimatePresence } from 'motion/react';
+import { cn, compressImage } from '../lib/utils';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { generateAuditReport } from '../lib/pdfGenerator';
-import { formatDistanceToNow, format as dateFnsFormat } from 'date-fns';
-import { motion, AnimatePresence } from 'motion/react';
+import { useNotification } from '../components/ui/NotificationProvider';
+import { Chat } from '../components/ui/Chat';
 
 // Fix Leaflet default icon issue
 // @ts-ignore
@@ -113,6 +113,11 @@ export const TripDetails = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showPaymentPreferenceModal, setShowPaymentPreferenceModal] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'bank' | 'yape' | 'plin' | null>(null);
+  const [paymentData, setPaymentData] = useState({ bank: '', accountNumber: '', cci: '', titular: '', phone: '' });
+  const [paymentEvidenceFile, setPaymentEvidenceFile] = useState<File | null>(null);
+  const [paymentEvidenceUrl, setPaymentEvidenceUrl] = useState<string>('');
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
@@ -133,13 +138,19 @@ export const TripDetails = () => {
   const [newTemp, setNewTemp] = useState('');
   const [isUpdatingTemp, setIsUpdatingTemp] = useState(false);
 
+  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
   const isCarrier = user?.tipoUsuario === 'transportista';
+  const isAssignedCarrier = isCarrier && trip?.transportistaId === user?.uid;
+  const isAssignedMerchant = !isCarrier && trip?.comercianteId === user?.uid;
+  const isAdminUser = isAdmin;
+  
   const [payoutRef, setPayoutRef] = useState('');
   const [showGpsEnforcement, setShowGpsEnforcement] = useState(false);
   const [gpsErrorCount, setGpsErrorCount] = useState(0);
   const [signalStatus, setSignalStatus] = useState<'excelente' | 'pobre' | 'perdida'>('excelente');
 
-  const isAdmin = user?.tipoUsuario === 'admin' || (user?.email && (typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : []).includes(user.email.toLowerCase()));
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+
 
   // Helper para calcular distancia entre dos coordenadas (Haversine)
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -181,6 +192,7 @@ export const TripDetails = () => {
       try {
         if (snapshot.exists()) {
           const tripData = { id: snapshot.id, ...snapshot.data() } as Trip;
+          console.log("Trip Data Loaded:", tripData.id, "Transportista:", tripData.transportistaId, "User:", user?.uid);
           setTrip(tripData);
           
           // Fetch merchant data if not already fetched
@@ -227,7 +239,21 @@ export const TripDetails = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    const unsubscribeCheckpoints = onSnapshot(
+      query(collection(db, 'trips', id, 'checkpoints'), orderBy('timestamp', 'asc')),
+      (snapshot) => {
+        const cps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Checkpoint));
+        setCheckpoints(cps);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, `trips/${id}/checkpoints`);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubscribeCheckpoints();
+    };
   }, [id, user]);
 
   // Fetch App Config for Payment Methods
@@ -542,7 +568,6 @@ export const TripDetails = () => {
     }
 
     const checkpoint: any = {
-      id: Math.random().toString(36).substr(2, 9),
       estado: newStatus,
       timestamp: Date.now(),
       location: location,
@@ -554,48 +579,11 @@ export const TripDetails = () => {
       checkpoint.evidenciaUrl = evidenceUrl;
     }
 
-    const updatedCheckpoints = [...(trip.checkpoints || []), checkpoint];
-    return updatedCheckpoints;
-  };
-
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Max dimensions reduced to fit more images in 1MB doc
-          const MAX_WIDTH = 600;
-          const MAX_HEIGHT = 600;
-          
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          // Quality 0.4 is enough for evidence and keeps Base64 strings small (approx 30-50KB)
-          resolve(canvas.toDataURL('image/jpeg', 0.4));
-        };
-        img.src = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      await addDoc(collection(db, 'trips', trip.id, 'checkpoints'), checkpoint);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `trips/${trip.id}/checkpoints`);
+    }
   };
 
   const updateTripStatus = async (newStatus: TripStatus) => {
@@ -609,8 +597,10 @@ export const TripDetails = () => {
       let evidenceUrl = '';
 
       // Handle evidence upload if file exists
+      console.log("Updating trip status to:", newStatus, "Has evidence file:", !!evidenceFile);
       if (isCarrier && evidenceFile) {
         evidenceUrl = await compressImage(evidenceFile);
+        console.log("Evidence compressed. URL length:", evidenceUrl.length);
         setEvidenceFile(null);
       }
       
@@ -659,10 +649,14 @@ export const TripDetails = () => {
         });
       }
 
-      const updatedCheckpoints = await createCheckpoint(newStatus, checkpointMsg, evidenceUrl);
-      updates.checkpoints = updatedCheckpoints;
- 
-      await updateDoc(doc(db, 'trips', trip.id), updates);
+      await createCheckpoint(newStatus, checkpointMsg, evidenceUrl);
+      
+      try {
+        await updateDoc(doc(db, 'trips', trip.id), updates);
+      } catch (err) {
+        console.error("Update Trip Doc failed. Trip ID:", trip.id, "User UID:", user?.uid, "Updates:", updates);
+        throw err;
+      }
 
       addNotification({
         title: 'Estado Actualizado',
@@ -691,13 +685,42 @@ export const TripDetails = () => {
   };
 
   useEffect(() => {
-    if (trip?.estado === 'completado') {
-      const hasRated = isCarrier ? !!trip.ratingComerciante : !!trip.ratingTransportista;
+    if (!trip || !id || !user) return;
+    
+    // Migración de emergencia: Si el documento principal aún tiene el array de checkpoints, 
+    // lo borramos para evitar errores de tamaño (1MB limit).
+    // Ya que ahora usamos una subcolección.
+    if (Array.isArray(trip.checkpoints) && trip.checkpoints.length > 0 && isAdmin) {
+      console.log('Migración: Limpiando array de checkpoints del documento principal para ahorrar espacio.');
+      const tripRef = doc(db, 'trips', id);
+      
+      // No podemos borrarlo fácilmente sin FieldValue.delete(), pero podemos vaciarlo 
+      // para que el documento sea pequeño de nuevo.
+      updateDoc(tripRef, { checkpoints: [] }).catch(err => console.error("Error en migración:", err));
+    }
+  }, [trip?.checkpoints, id, isAdmin]);
+
+  useEffect(() => {
+    if (trip?.estado === 'completado' && isCarrier && carrierData) {
+      const hasPaymentInfo = carrierData.metodoPago && (carrierData.datosPago?.numeroCuenta || carrierData.datosPago?.celular);
+      const isAlreadyPaid = trip.payoutInfo?.estado === 'pagado';
+      
+      if (!hasPaymentInfo && !isAlreadyPaid) {
+        setShowPaymentPreferenceModal(true);
+      } else {
+        setShowPaymentPreferenceModal(false);
+        const hasRated = !!trip.ratingComerciante;
+        if (!hasRated) {
+          setShowRatingModal(true);
+        }
+      }
+    } else if (trip?.estado === 'completado' && trip && !isCarrier) {
+      const hasRated = !!trip.ratingTransportista;
       if (!hasRated) {
         setShowRatingModal(true);
       }
     }
-  }, [trip?.estado, isCarrier, trip?.ratingComerciante, trip?.ratingTransportista]);
+  }, [trip?.estado, isCarrier, trip?.ratingComerciante, trip?.ratingTransportista, carrierData, trip?.payoutInfo?.estado]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -897,6 +920,62 @@ export const TripDetails = () => {
     }
   };
 
+  const handleSavePaymentPreference = async () => {
+    if (!user || !selectedPaymentMethod) return;
+    setIsUpdating(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const datosPago: any = {};
+      
+      let fotoUrl = '';
+      if (paymentEvidenceFile) {
+        fotoUrl = await compressImage(paymentEvidenceFile);
+      }
+      
+      if (selectedPaymentMethod === 'bank') {
+        datosPago.banco = paymentData.bank;
+        datosPago.numeroCuenta = paymentData.accountNumber;
+        datosPago.cci = paymentData.cci;
+        datosPago.titular = paymentData.titular;
+      } else {
+        datosPago.celular = paymentData.phone;
+        datosPago.titular = paymentData.titular; // Important even for Yape
+      }
+
+      if (fotoUrl) {
+        datosPago.fotoUrl = fotoUrl;
+      }
+
+      await updateDoc(userRef, {
+        metodoPago: selectedPaymentMethod,
+        datosPago: datosPago,
+        updatedAt: Date.now()
+      });
+
+      addNotification({
+        title: 'Método de pago guardado',
+        message: 'Tus datos han sido guardados para futuros cobros.',
+        type: 'success'
+      });
+
+      setShowPaymentPreferenceModal(false);
+      
+      // After saving payment, if not rated, show rating modal
+      if (trip?.estado === 'completado' && !trip.ratingComerciante) {
+        setShowRatingModal(true);
+      }
+    } catch (err) {
+      console.error('Error saving payment preference:', err);
+      addNotification({
+        title: 'Error',
+        message: 'No se pudieron guardar tus datos de pago.',
+        type: 'error'
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleRate = async () => {
     if (!trip || !user) return;
     setIsUpdating(true);
@@ -1086,6 +1165,24 @@ export const TripDetails = () => {
         Volver
       </Button>
 
+      {/* Warning if not assigned */}
+      {user && trip && !isAssignedCarrier && !isAssignedMerchant && !isAdminUser && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-sm mb-6">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="h-6 w-6 text-amber-600" />
+            <div>
+              <p className="text-sm font-bold text-amber-900 uppercase">Usuario no asignado</p>
+              <p className="text-xs text-amber-700">
+                Estás viendo este viaje pero no eres el transportista ni el comerciante asignado. 
+                Es posible que no puedas realizar actualizaciones o ver información sensible.
+                <br />
+                <span className="text-[10px] opacity-70">Tu ID: {user.uid} | ID Asignado: {trip.transportistaId}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ALERTAS SMART */}
       {trip.alertas && (trip.alertas.desvioRuta || trip.alertas.paradaNoAutorizada || trip.alertas.retrasoCritico || trip.alertas.riesgoLlegadaTardia) && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm animate-in slide-in-from-top duration-300">
@@ -1147,7 +1244,7 @@ export const TripDetails = () => {
             className="hidden md:flex bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
             onClick={async () => {
               if (trip && carga && merchantData && carrierData) {
-                await generateAuditReport(trip, carga, merchantData, carrierData);
+                await generateAuditReport(trip, carga, merchantData, carrierData, checkpoints);
               }
             }}
           >
@@ -1233,14 +1330,14 @@ export const TripDetails = () => {
                         </div>
                         <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100">
                           <div>
-                            <p className="text-[9px] font-bold text-gray-400 uppercase">Yape</p>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase">Número Yape</p>
                             <p className="text-sm font-black text-gray-900 tracking-wider">
-                              {appConfig?.yapeNumber || '960354149'}
+                              {appConfig?.yapeNumber || '987 654 321'}
                             </p>
                           </div>
                           <button 
                             onClick={() => {
-                              navigator.clipboard.writeText(appConfig?.yapeNumber || '960354149');
+                              navigator.clipboard.writeText(appConfig?.yapeNumber || '987 654 321');
                               // Podríamos añadir un mini toast aquí
                             }}
                             className="p-1.5 hover:bg-purple-50 text-purple-600 rounded-md transition-colors"
@@ -1251,7 +1348,7 @@ export const TripDetails = () => {
                         </div>
                         <p className="text-[10px] text-gray-500 mt-2 flex items-center">
                           <User className="h-3 w-3 mr-1" />
-                          Titular: <span className="font-bold text-gray-700 ml-1">{appConfig?.yapeName || 'Lurgia Yupa A.'}</span>
+                          Titular: <span className="font-bold text-gray-700 ml-1">{appConfig?.yapeName || 'Chasqui SAC'}</span>
                         </p>
                       </div>
 
@@ -1259,12 +1356,12 @@ export const TripDetails = () => {
                       <div className="flex flex-col p-3 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-blue-200 transition-colors">
                         <div className="flex items-center mb-2 justify-between">
                           <div className="flex items-center">
-                            <div className="h-7 w-15 bg-green-50 rounded-lg flex items-center justify-center mr-2">
-                              <span className="text-[10px] font-black text-green-500">
-                                {appConfig?.bcpBank?.substring(0, 3).toUpperCase() || 'Interbank'}
+                            <div className="h-7 w-7 bg-blue-100 rounded-lg flex items-center justify-center mr-2">
+                              <span className="text-[10px] font-black text-blue-700">
+                                {appConfig?.bcpBank?.substring(0, 3).toUpperCase() || 'BCP'}
                               </span>
                             </div>
-                           {/*  <span className="text-xs font-bold text-gray-900">{appConfig?.bcpBank || 'Banco'}</span> */}
+                            <span className="text-xs font-bold text-gray-900">{appConfig?.bcpBank || 'Banco'}</span>
                           </div>
                           <span className="text-[9px] font-mono text-gray-400">
                             {appConfig?.bcpDocType || 'RUC'}: {appConfig?.bcpDocNum || '...'}
@@ -1276,11 +1373,11 @@ export const TripDetails = () => {
                             <div className="flex-1 min-w-0">
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Cuenta Corriente</p>
                               <p className="text-xs font-black text-gray-900 font-mono truncate tracking-tight">
-                                {appConfig?.bcpAccount || ' 821 3443364810'}
+                                {appConfig?.bcpAccount || '191-98765432-0-11'}
                               </p>
                             </div>
                             <button 
-                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpAccount || ' 821 3443364810')}
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpAccount || '191-98765432-0-11')}
                               className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md transition-colors shrink-0 ml-1"
                               title="Copiar cuenta"
                             >
@@ -1292,11 +1389,11 @@ export const TripDetails = () => {
                             <div className="flex-1 min-w-0">
                               <p className="text-[9px] font-bold text-blue-400 uppercase">CCI</p>
                               <p className="text-[11px] font-black text-blue-900 font-mono truncate">
-                                {appConfig?.bcpCci || '00382101344336481069'}
+                                {appConfig?.bcpCci || '00219100987654320111'}
                               </p>
                             </div>
                             <button 
-                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpCci || '00382101344336481069')}
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpCci || '00219100987654320111')}
                               className="p-1.5 hover:bg-blue-100 text-blue-700 rounded-md transition-colors shrink-0 ml-1"
                               title="Copiar CCI"
                             >
@@ -1307,7 +1404,7 @@ export const TripDetails = () => {
                         
                         <p className="text-[10px] text-gray-500 mt-2 flex items-center">
                           <ShieldCheck className="h-3 w-3 mr-1 text-green-500" />
-                          Titular: <span className="font-bold text-gray-700 ml-1 truncate">{appConfig?.bcpName || 'Lurgia Yupa A.'}</span>
+                          Titular: <span className="font-bold text-gray-700 ml-1 truncate">{appConfig?.bcpName || 'Chasqui SAC'}</span>
                         </p>
                       </div>
                     </div>
@@ -1395,7 +1492,7 @@ export const TripDetails = () => {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-700">Subir Boleta de Pago</p>
-                            <p className="text-xs text-gray-500">JPG, PNG(Máx. 5MB)</p>
+                            <p className="text-xs text-gray-500">JPG, PNG o PDF (Máx. 5MB)</p>
                           </div>
                         </div>
                       )}
@@ -1783,13 +1880,13 @@ export const TripDetails = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {trip.checkpoints && trip.checkpoints.length > 0 ? (
+                {checkpoints && checkpoints.length > 0 ? (
                   <div className="flow-root">
                     <ul role="list" className="-mb-8">
-                      {trip.checkpoints.sort((a,b) => b.timestamp - a.timestamp).map((cp, cpIdx) => (
+                      {checkpoints.slice().sort((a,b) => b.timestamp - a.timestamp).map((cp, cpIdx) => (
                         <li key={cp.id}>
                           <div className="relative pb-8">
-                            {cpIdx !== trip.checkpoints.length - 1 ? (
+                            {cpIdx !== checkpoints.length - 1 ? (
                               <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />
                             ) : null}
                             <div className="relative flex space-x-3">
@@ -1928,7 +2025,7 @@ export const TripDetails = () => {
                       </div>
                     </div>
                   )}
-                  {carga.condicionSanitaria && (/* no existe en carga condicionSanitaria */
+                  {carga.condicionSanitaria && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600">Condición Sanitaria:</span>
                       <CheckCircle className="h-3 w-3 text-green-500" />
@@ -2072,7 +2169,16 @@ export const TripDetails = () => {
                       />
                       {evidenceFile ? (
                         <div className="space-y-2">
-                          <CheckCircle className="h-6 w-6 text-green-500 mx-auto" />
+                          <div className="relative inline-block">
+                             <img 
+                               src={URL.createObjectURL(evidenceFile)} 
+                               alt="Preview evidencia" 
+                               className="h-32 w-auto object-cover rounded-xl shadow-lg border-2 border-white"
+                             />
+                             <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1 shadow-md">
+                               <CheckCircle className="h-4 w-4" />
+                             </div>
+                          </div>
                           <p className="text-xs text-green-700 font-bold">Evidencia cargada: {evidenceFile.name}</p>
                         </div>
                       ) : (
@@ -2468,12 +2574,12 @@ export const TripDetails = () => {
                 className={cn("h-10 text-[11px]", trip.alertas?.retrasoCritico && "animate-pulse")}
                 onClick={async () => {
                   await updateDoc(doc(db, 'trips', trip.id), {
-                    'alertas.retrasoCritico': !trip.alertas?.retrasoCritico
+                    'alertas.retraso': !trip.alertas?.retraso
                   });
                 }}
               >
                 <AlertCircle className="h-3 w-3 mr-2" />
-                {trip.alertas?.retrasoCritico ? 'Detener Alerta Retraso' : 'Simular Retraso'}
+                {trip.alertas?.retraso ? 'Detener Alerta Retraso' : 'Simular Retraso'}
               </Button>
             </div>
           </CardContent>
@@ -2614,6 +2720,208 @@ export const TripDetails = () => {
         </div>
       )}
 
+      {/* Payment Preference Modal */}
+      {showPaymentPreferenceModal && (
+        <div className="fixed inset-0 z-[10003] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+          >
+            <div className="p-8 text-center space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-gray-900">¡Entrega confirmada! 🎉</h3>
+                <p className="text-gray-600">
+                  Tu pago de <span className="font-bold text-blue-600 text-lg">S/. {((trip.precioFinal - trip.comision)).toFixed(2)}</span> está listo para transferirse.
+                </p>
+              </div>
+
+              {!selectedPaymentMethod ? (
+                <div className="space-y-4">
+                  <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">¿Cómo prefieres cobrar?</p>
+                  <div className="grid grid-cols-1 gap-3">
+                    <button 
+                      onClick={() => setSelectedPaymentMethod('bank')}
+                      className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                          <CreditCard className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">Cuenta bancaria</p>
+                          <p className="text-xs text-gray-500">BCP, Interbank, etc.</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-300" />
+                    </button>
+
+                    <button 
+                      onClick={() => setSelectedPaymentMethod('yape')}
+                      className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-purple-500 hover:bg-purple-50 transition-all text-left group"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                          <span className="text-sm font-black text-purple-600">YAPE</span>
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">Yape</p>
+                          <p className="text-xs text-gray-500">Solo número de celular</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-300" />
+                    </button>
+
+                    <button 
+                      onClick={() => setSelectedPaymentMethod('plin')}
+                      className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-cyan-500 hover:bg-cyan-50 transition-all text-left group"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="h-12 w-12 bg-cyan-100 rounded-xl flex items-center justify-center group-hover:bg-cyan-200 transition-colors">
+                          <span className="text-sm font-black text-cyan-600">PLIN</span>
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">Plin</p>
+                          <p className="text-xs text-gray-500">Solo número de celular</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-300" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6 text-left animate-in fade-in slide-in-from-right duration-300">
+                  <button 
+                    onClick={() => setSelectedPaymentMethod(null)}
+                    className="text-xs font-bold text-blue-600 hover:underline flex items-center"
+                  >
+                    <ArrowLeft className="h-3 w-3 mr-1" />
+                    Cambiar método
+                  </button>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-sm font-bold text-gray-700">Titular de la cuenta:</label>
+                       <Input 
+                         placeholder="Nombre completo del titular"
+                         value={paymentData.titular}
+                         onChange={(e) => setPaymentData({...paymentData, titular: e.target.value})}
+                       />
+                       <p className="text-[10px] text-amber-600 font-bold">⚠️ Debe coincidir con tu nombre legal para evitar rechazos en el pago.</p>
+                    </div>
+
+                    {selectedPaymentMethod === 'bank' ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-gray-700">Banco:</label>
+                            <Input 
+                              placeholder="BCP, BBVA..."
+                              value={paymentData.bank}
+                              onChange={(e) => setPaymentData({...paymentData, bank: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-gray-700">N° de Cuenta:</label>
+                            <Input 
+                              placeholder="Cuenta corriente/ahorros"
+                              value={paymentData.accountNumber}
+                              onChange={(e) => setPaymentData({...paymentData, accountNumber: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-gray-700">CCI (Cuenta Interbancaria):</label>
+                          <Input 
+                            placeholder="Introduce tu CCI de 20 dígitos"
+                            value={paymentData.cci}
+                            onChange={(e) => setPaymentData({...paymentData, cci: e.target.value})}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">Número de Celular ({selectedPaymentMethod === 'yape' ? 'Yape' : 'Plin'}):</label>
+                        <Input 
+                          type="tel"
+                          placeholder="999 999 999"
+                          value={paymentData.phone}
+                          onChange={(e) => setPaymentData({...paymentData, phone: e.target.value})}
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-gray-700">Foto de cuenta/tarjeta (Opcional):</label>
+                      <div 
+                        className={cn(
+                          "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all",
+                          paymentEvidenceFile ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+                        )}
+                        onClick={() => document.getElementById('payment-evidence-upload')?.click()}
+                      >
+                        <input 
+                          id="payment-evidence-upload"
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setPaymentEvidenceFile(file);
+                              const reader = new FileReader();
+                              reader.onload = (ev) => setPaymentEvidenceUrl(ev.target?.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                        {paymentEvidenceUrl ? (
+                          <div className="flex items-center justify-center space-x-2">
+                            <img src={paymentEvidenceUrl} alt="Preview" className="h-10 w-10 object-cover rounded border" referrerPolicy="no-referrer" />
+                            <span className="text-xs text-green-700 font-bold truncate max-w-[200px]">{paymentEvidenceFile?.name}</span>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPaymentEvidenceFile(null);
+                                setPaymentEvidenceUrl('');
+                              }}
+                              className="text-red-500 p-1 hover:bg-red-100 rounded"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center">
+                            <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                            <span className="text-xs text-gray-500">Subir foto para mayor seguridad</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className={cn(
+                      "w-full h-12 text-lg shadow-xl",
+                      selectedPaymentMethod === 'bank' 
+                        ? (paymentData.bank && paymentData.accountNumber && paymentData.cci && paymentData.titular ? (selectedPaymentMethod === 'bank' ? "bg-blue-600" : "bg-purple-600") : "bg-gray-300 cursor-not-allowed")
+                        : (paymentData.phone && paymentData.titular ? (selectedPaymentMethod === 'yape' ? "bg-purple-600" : "bg-cyan-600") : "bg-gray-300 cursor-not-allowed")
+                    )}
+                    disabled={
+                      isUpdating || 
+                      (selectedPaymentMethod === 'bank' ? !(paymentData.bank && paymentData.accountNumber && paymentData.cci && paymentData.titular) : !(paymentData.phone && paymentData.titular))
+                    }
+                    onClick={handleSavePaymentPreference}
+                  >
+                    {isUpdating ? 'Guardando...' : 'Guardar y Continuar'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Rating Modal */}
       {showRatingModal && (
         <div className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
@@ -2725,4 +3033,3 @@ export const TripDetails = () => {
   </div>
   );
 };
-
