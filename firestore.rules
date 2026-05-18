@@ -76,10 +76,10 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.uid == "4RpsZPaoDSa1MxHlsMIftHc7Gk22" ||
-        request.auth.token.email == "vvendiya@gmail.com" ||
-        request.auth.token.email == "lurgia18yuar@gmail.com" ||
-        request.auth.token.email == "lurgiaalidayupa@gmail.com" ||
-        request.auth.token.email == "chasqui676@gmail.com" ||
+        request.auth.token.email.lower() == "vvendiya@gmail.com" ||
+        request.auth.token.email.lower() == "lurgia18yuar@gmail.com" ||
+        request.auth.token.email.lower() == "lurgiaalidayupa@gmail.com" ||
+        request.auth.token.email.lower() == "chasqui676@gmail.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tipoUsuario == 'admin')
       );
@@ -111,7 +111,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'nombre', 'email', 'tipoUsuario', 'verificado', 'createdAt']) &&
-             data.uid == request.auth.uid &&
+             (data.uid == request.auth.uid || isAdmin()) &&
              data.nombre is string && data.nombre.size() > 0 && data.nombre.size() < 100 &&
              isValidEmail(data.email) &&
              data.tipoUsuario in ['comerciante', 'transportista', 'admin'] &&
@@ -133,12 +133,17 @@ service cloud.firestore {
              (!('sumRatings' in data) || data.sumRatings is number) &&
              (!('completedTrips' in data) || data.completedTrips is number) &&
              (!('datosBancarios' in data) || data.datosBancarios is map) &&
+             (!('metodoPago' in data) || (data.metodoPago in ['bank', 'yape', 'plin'])) &&
+             (!('datosPago' in data) || data.datosPago is map) &&
+             (!('isDeleted' in data) || data.isDeleted is bool) &&
+             (!('deletedAt' in data) || data.deletedAt is number || data.deletedAt is timestamp) &&
+             (!('deletedBy' in data) || data.deletedBy is string) &&
              (!('indiceConfiabilidad' in data) || data.indiceConfiabilidad is number);
     }
 
     function isValidCargo(data) {
       return hasRequiredFields(['comercianteId', 'tipoDeCarga', 'origen', 'destino', 'nombreProducto', 'descripcion', 'precioPropuesto', 'estado', 'createdAt']) &&
-             data.comercianteId == request.auth.uid &&
+             (data.comercianteId == request.auth.uid || isAdmin()) &&
              data.tipoDeCarga is string &&
              data.origen is string &&
              data.destino is string &&
@@ -225,10 +230,14 @@ service cloud.firestore {
              (!('horaRecojo' in data) || (data.horaRecojo is string)) &&
              (!('pagoInfo' in data) || (data.pagoInfo is map)) &&
              (!('payoutInfo' in data) || (data.payoutInfo is map)) &&
+             (!('metodoPago' in data) || (data.metodoPago in ['bank', 'yape', 'plin'])) &&
+             (!('datosPago' in data) || data.datosPago is map) &&
              (!('ratingTransportista' in data) || (data.ratingTransportista is number)) &&
              (!('comentarioTransportista' in data) || (data.comentarioTransportista is string)) &&
              (!('ratingComerciante' in data) || (data.ratingComerciante is number)) &&
-             (!('comentarioComerciante' in data) || (data.comentarioComerciante is string));
+             (!('comentarioComerciante' in data) || (data.comentarioComerciante is string)) &&
+             (!('comercianteEmail' in data) || (data.comercianteEmail is string)) &&
+             (!('transportistaEmail' in data) || (data.transportistaEmail is string));
     }
 
     // ===============================================================
@@ -238,7 +247,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if true;
       allow list: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow create: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
       allow update: if isAuthenticated() && (
         isOwner(userId) || 
         isAdmin() ||
@@ -250,7 +259,7 @@ service cloud.firestore {
     match /cargas/{cargoId} {
       allow get: if true;
       allow list: if isAuthenticated();
-      allow create: if isMerchant() && isValidCargo(request.resource.data);
+      allow create: if (isMerchant() || isAdmin()) && isValidCargo(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || isAdmin());
       allow delete: if isAdmin();
 
@@ -262,27 +271,49 @@ service cloud.firestore {
       }
     }
 
+    function isTripParticipant(tripId) {
+      let trip = get(/databases/$(database)/documents/trips/$(tripId)).data;
+      return isAuthenticated() && (
+        request.auth.uid == trip.comercianteId || 
+        request.auth.uid == trip.transportistaId ||
+        (request.auth.token.email_verified == true && (
+          request.auth.token.email.lower() == trip.comercianteEmail ||
+          request.auth.token.email.lower() == trip.transportistaEmail
+        ))
+      );
+    }
+
     match /trips/{tripId} {
       allow get: if true;
-      allow list: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
-      allow create: if isAuthenticated() && isValidTrip(request.resource.data);
-      allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || request.auth.uid == resource.data.transportistaId || isAdmin());
+      allow list: if isAuthenticated() && (
+        request.auth.uid == resource.data.comercianteId || 
+        request.auth.uid == resource.data.transportistaId || 
+        isAdmin() ||
+        (request.auth.token.email_verified == true && (
+          request.auth.token.email.lower() == resource.data.comercianteEmail ||
+          request.auth.token.email.lower() == resource.data.transportistaEmail
+        ))
+      );
+      allow create: if isAuthenticated() || isAdmin();
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.comercianteId || 
+        request.auth.uid == resource.data.transportistaId || 
+        isAdmin() ||
+        (request.auth.token.email_verified == true && (
+          request.auth.token.email.lower() == resource.data.comercianteEmail ||
+          request.auth.token.email.lower() == resource.data.transportistaEmail
+        ))
+      );
       allow delete: if isAdmin();
 
+      match /checkpoints/{checkpointId} {
+        allow read: if true;
+        allow create: if isTripParticipant(tripId) || isAdmin();
+        allow update, delete: if isAdmin();
+      }
+
       match /messages/{messageId} {
-        function canChat() {
-          return isAuthenticated() && (
-            request.auth.uid == get(/databases/$(database)/documents/trips/$(tripId)).data.comercianteId || 
-            request.auth.uid == get(/databases/$(database)/documents/trips/$(tripId)).data.transportistaId ||
-            isAdmin()
-          );
-        }
-        
-        allow read: if canChat();
-        allow create: if canChat() && 
-                      request.resource.data.senderId == request.auth.uid &&
-                      (request.resource.data.type == 'text' || request.resource.data.type == 'audio') &&
-                      (request.resource.data.text is string || request.resource.data.audioUrl is string || request.resource.data.type == 'audio');
+        allow read, create: if isTripParticipant(tripId) || isAdmin();
       }
     }
 

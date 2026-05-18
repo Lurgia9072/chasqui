@@ -7,11 +7,11 @@ import { Trip, OperationType, TripStatus, Cargo } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt, Trash2 } from 'lucide-react';
+import { ShieldCheck, Clock, CheckCircle, ExternalLink, Search, Filter, AlertCircle, XCircle, FileText, Check, X, Package, Banknote, Truck, CreditCard, MessageSquare, Headphones, Send, User, Receipt, Trash2, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '../lib/utils';
+import { cn, compressImage } from '../lib/utils';
 
 type AdminTab = 'revision' | 'confirmado' | 'rechazado' | 'pendiente' | 'payouts' | 'todos' | 'users' | 'cargas' | 'soporte' | 'config';
 type UserVerificationFilter = 'todos' | 'pendiente' | 'verificado' | 'rechazado';
@@ -801,24 +801,64 @@ export const AdminDashboard = () => {
                       </div>
                     )}
 
-                    {/* Datos Bancarios del Usuario */}
-                    {u.datosBancarios && (
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 ml-16 grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase">Banco</p>
-                          <p className="text-xs font-bold text-gray-800">{u.datosBancarios.banco}</p>
+                    {/* Datos de Pago del Usuario */}
+                    {(u.metodoPago || u.datosPago) && (
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 ml-16 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-3">
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+                            u.metodoPago === 'bank' ? "bg-blue-100" : 
+                            u.metodoPago === 'yape' ? "bg-purple-100" : "bg-cyan-100"
+                          )}>
+                            {u.metodoPago === 'bank' ? <CreditCard className="h-5 w-5 text-blue-600" /> : 
+                             u.metodoPago === 'yape' ? <span className="text-[10px] font-black text-purple-600">YAPE</span> : 
+                             <span className="text-[10px] font-black text-cyan-600">PLIN</span>}
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase">Método de Cobro</p>
+                            <p className="text-xs font-bold text-gray-800 uppercase">{u.metodoPago || 'No especificado'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase">Cuenta</p>
-                          <p className="text-xs font-mono font-bold text-gray-800">{u.datosBancarios.numeroCuenta}</p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase">CCI</p>
-                          <p className="text-xs font-mono font-bold text-gray-800">{u.datosBancarios.cci || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase">Titular</p>
-                          <p className="text-xs font-bold text-gray-800 truncate">{u.datosBancarios.titular}</p>
+                        <div className="flex flex-col justify-center space-y-2">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase">Información de Pago</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                            <div>
+                              <p className="text-[8px] text-gray-400 uppercase">Titular</p>
+                              <p className="text-xs font-bold text-gray-900">{u.datosPago?.titular || 'No especificado'}</p>
+                            </div>
+                            {u.metodoPago === 'bank' ? (
+                              <>
+                                <div>
+                                  <p className="text-[8px] text-gray-400 uppercase">Banco y Cuenta</p>
+                                  <p className="text-xs font-bold text-gray-900">{u.datosPago?.banco} - {u.datosPago?.numeroCuenta}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <p className="text-[8px] text-gray-400 uppercase">CCI</p>
+                                  <p className="text-xs font-mono font-bold text-blue-600">{u.datosPago?.cci || 'No registrado'}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <div>
+                                <p className="text-[8px] text-gray-400 uppercase">Celular {u.metodoPago?.toUpperCase()}</p>
+                                <p className="text-xs font-bold text-gray-900 flex items-center">
+                                  <Phone className="h-3 w-3 mr-1 text-gray-400" />
+                                  {u.datosPago?.celular}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {u.datosPago?.fotoUrl && (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                               <p className="text-[8px] text-gray-400 uppercase mb-1">Evidencia de Cuenta/Tarjeta</p>
+                               <button 
+                                 onClick={() => handleViewDoc(u.datosPago.fotoUrl, `Evidencia Pago - ${u.nombre}`)}
+                                 className="h-12 w-20 rounded border border-gray-200 overflow-hidden hover:opacity-80 transition-opacity"
+                               >
+                                 <img src={u.datosPago.fotoUrl} alt="Evidencia" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                               </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -835,7 +875,7 @@ export const AdminDashboard = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Publicado por: {c.comercianteNombre}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-purple-600">S/ {c.precioSugerido}</p>
+                      <p className="text-sm font-bold text-purple-600">S/ {c.precioPropuesto}</p>
                       <span className={cn(
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
                         c.estado === 'abierta' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
@@ -1034,25 +1074,90 @@ export const AdminDashboard = () => {
                             <span className="text-[10px] bg-white border border-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">Monto: S/ {(trip.precioFinal - trip.comision).toFixed(2)}</span>
                           </div>
                           {(() => {
-                            const carrier = platformUsers.find(u => u.uid === trip.transportistaId);
-                            if (!carrier?.datosBancarios) return <p className="text-xs text-red-600 font-bold">El transportista no ha configurado sus datos bancarios.</p>;
+                            const carrier = platformUsers.find(u => u.uid === trip.transportistaId || u.id === trip.transportistaId);
+                            const hasPaymentInfo = carrier && carrier.datosPago && (carrier.metodoPago || carrier.datosPago.banco || carrier.datosPago.celular);
+                            
+                            if (!hasPaymentInfo) {
+                              return (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-red-600 font-bold flex items-center">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    El transportista aún no ha configurado sus datos de pago.
+                                  </p>
+                                  {carrier && (
+                                    <p className="text-[9px] text-gray-500 italic">
+                                      Usuario: {carrier.nombre} ({carrier.telefono})
+                                    </p>
+                                  )}
+                                  {!carrier && (
+                                    <p className="text-[9px] text-red-400 italic">
+                                      Error: No se encontró la ficha del transportista (ID: {trip.transportistaId?.substring(0, 8)}...)
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            }
+                            
+                            const d = carrier.datosPago;
+                            const m = carrier.metodoPago || (d.banco ? 'bank' : 'yape');
+
                             return (
-                              <div className="grid grid-cols-2 gap-4 text-xs">
-                                <div>
-                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Banco</p>
-                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.banco}</p>
+                              <div className="space-y-4">
+                                <div className="flex items-center space-x-2">
+                                  <div className={cn(
+                                    "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+                                    m === 'bank' ? "bg-blue-100" : 
+                                    m === 'yape' ? "bg-purple-100" : "bg-cyan-100"
+                                  )}>
+                                    {m === 'bank' ? <CreditCard className="h-4 w-4 text-blue-600" /> : 
+                                     m === 'yape' ? <span className="text-[8px] font-black text-purple-600">YAPE</span> : 
+                                     <span className="text-[8px] font-black text-cyan-600">PLIN</span>}
+                                  </div>
+                                  <p className="text-xs font-bold text-gray-800 uppercase">{m === 'bank' ? 'Cuenta Bancaria' : m.toUpperCase()}</p>
                                 </div>
-                                <div>
-                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Número de Cuenta</p>
-                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.numeroCuenta}</p>
-                                </div>
-                                <div>
-                                  <p className="text-gray-400 font-bold uppercase text-[9px]">CCI</p>
-                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.cci || 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-gray-400 font-bold uppercase text-[9px]">Titular</p>
-                                  <p className="font-bold text-gray-900">{carrier.datosBancarios.titular}</p>
+
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs bg-white/50 p-3 rounded-xl border border-gray-100">
+                                  <div className="col-span-2">
+                                    <p className="text-gray-400 font-bold uppercase text-[9px]">Titular</p>
+                                    <p className="font-bold text-gray-900">{d.titular || carrier.nombre}</p>
+                                  </div>
+                                  
+                                  {m === 'bank' ? (
+                                    <>
+                                      <div>
+                                        <p className="text-gray-400 font-bold uppercase text-[9px]">Banco</p>
+                                        <p className="font-bold text-gray-900">{d.banco}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-gray-400 font-bold uppercase text-[9px]">Número de Cuenta</p>
+                                        <p className="font-bold text-gray-900">{d.numeroCuenta}</p>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <p className="text-gray-400 font-bold uppercase text-[9px]">CCI (Interbancaria)</p>
+                                        <p className="font-bold text-blue-600 font-mono">{d.cci || 'N/A'}</p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="col-span-2">
+                                      <p className="text-gray-400 font-bold uppercase text-[9px]">Celular vinculando</p>
+                                      <div className="flex items-center space-x-2">
+                                        <Phone className="h-3 w-3 text-gray-400" />
+                                        <p className="font-bold text-gray-900">{d.celular}</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {d.fotoUrl && (
+                                    <div className="col-span-2 pt-2 mt-2 border-t border-gray-100">
+                                      <p className="text-gray-400 font-bold uppercase text-[9px] mb-1">Foto de Cuenta / Tarjeta</p>
+                                      <button 
+                                        onClick={() => handleViewDoc(d.fotoUrl, `Cuenta - ${carrier.nombre}`)}
+                                        className="h-10 w-16 rounded border border-gray-200 overflow-hidden hover:opacity-80 transition-opacity"
+                                      >
+                                        <img src={d.fotoUrl} alt="Thumbnail" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1139,7 +1244,7 @@ export const AdminDashboard = () => {
                           <Button 
                             className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
                             onClick={() => setPayingTrip(trip)}
-                            disabled={isUpdating === trip.id || !platformUsers.find(u => u.uid === trip.transportistaId)?.datosBancarios}
+                            disabled={isUpdating === trip.id || !platformUsers.find(u => u.uid === trip.transportistaId)?.datosPago}
                           >
                             <Banknote className="h-4 w-4 mr-2" />
                             Procesar Reembolso
@@ -1321,13 +1426,12 @@ export const AdminDashboard = () => {
                     type="file" 
                     className="hidden" 
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
                         setPayoutFile(file);
-                        const reader = new FileReader();
-                        reader.onloadend = () => setPayoutProofUrl(reader.result as string);
-                        reader.readAsDataURL(file);
+                        const compressed = await compressImage(file);
+                        setPayoutProofUrl(compressed);
                       }
                     }}
                   />

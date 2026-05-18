@@ -6,22 +6,35 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Cargo, OperationType, Trip } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
-import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2, Navigation, FileText, Landmark } from 'lucide-react';
+import { Truck, MapPin, Clock, ChevronRight, AlertCircle, RefreshCw, ShieldCheck, Upload, X, CheckCircle2, Navigation, FileText, Landmark, CreditCard, ArrowLeft, Phone } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '../../lib/utils';
+import { cn, compressImage } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { ADMIN_EMAILS, TRIP_STATUS_LABELS } from '../../lib/constants';
 import { NearbyCargoMap } from '../../components/NearbyCargoMap';
 import { StatusBadge } from '../../components/ui/StatusBadge';
+import { Input } from '../../components/ui/Input';
+import { useNotification } from '../../components/ui/NotificationProvider';
+import { limit } from 'firebase/firestore';
 
 export const CarrierDashboard = () => {
   const { user } = useAuthStore();
+  const { addNotification } = useNotification();
   const navigate = useNavigate();
   const [cargas, setCargas] = useState<Cargo[]>([]);
   const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
+  const [completedTrips, setCompletedTrips] = useState<Trip[]>([]);
+  const [pendingPayoutTrips, setPendingPayoutTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
+
+  const [showPaymentPreferenceModal, setShowPaymentPreferenceModal] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'bank' | 'yape' | 'plin' | null>(null);
+  const [paymentData, setPaymentData] = useState({ bank: '', accountNumber: '', cci: '', titular: '', phone: '' });
+  const [paymentEvidenceFile, setPaymentEvidenceFile] = useState<File | null>(null);
+  const [paymentEvidenceUrl, setPaymentEvidenceUrl] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
@@ -44,15 +57,6 @@ export const CarrierDashboard = () => {
     dni: null,
     licencia: null,
     tarjetaPropiedad: null
-  });
-  const [showBankModal, setShowBankModal] = useState(false);
-  const [savingBank, setSavingBank] = useState(false);
-  const [bankData, setBankData] = useState({
-    banco: user?.datosBancarios?.banco || '',
-    tipoCuenta: user?.datosBancarios?.tipoCuenta || 'ahorros',
-    numeroCuenta: user?.datosBancarios?.numeroCuenta || '',
-    cci: user?.datosBancarios?.cci || '',
-    titular: user?.datosBancarios?.titular || user?.nombre || ''
   });
 
   const fetchCargas = () => {
@@ -111,14 +115,48 @@ export const CarrierDashboard = () => {
     return unsubscribe;
   };
 
+  const fetchCompletedTrips = () => {
+    if (!user || user.verificado !== 'verificado') return;
+
+    const q = query(
+      collection(db, 'trips'),
+      where('transportistaId', '==', user.uid),
+      where('estado', '==', 'completado'),
+      orderBy('entregaRealAt', 'desc'),
+      limit(30)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      setCompletedTrips(docs);
+      
+      const pending = docs.filter(trip => trip.payoutInfo?.estado !== 'pagado');
+      setPendingPayoutTrips(pending);
+      
+      // Check if we should show payment modal
+      const hasPaymentInfo = user?.metodoPago && (user?.datosPago?.numeroCuenta || user?.datosPago?.celular);
+      const hasUnpaidCompletedTrips = pending.length > 0;
+      
+      if (hasUnpaidCompletedTrips && !hasPaymentInfo) {
+        setShowPaymentPreferenceModal(true);
+      } else {
+        setShowPaymentPreferenceModal(false);
+      }
+    });
+
+    return unsubscribe;
+  };
+
   useEffect(() => {
     const unsubscribeCargas = fetchCargas();
     const unsubscribeTrips = fetchActiveTrips();
+    const unsubscribeCompleted = fetchCompletedTrips();
     return () => {
       unsubscribeCargas?.();
       unsubscribeTrips?.();
+      unsubscribeCompleted?.();
     };
-  }, [user?.uid, user?.verificado]);
+  }, [user?.uid, user?.verificado, user?.metodoPago]);
 
   const handleFileChange = (type: string, e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,45 +178,6 @@ export const CarrierDashboard = () => {
     }
 
     setFiles(prev => ({ ...prev, [type]: file }));
-  };
-
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      // If it's a PDF, we can't compress it with canvas, but for simplicity in this environment
-      // we will just convert it to base64 directly
-      if (file.type === 'application/pdf') {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-          } else {
-            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-          }
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        };
-        img.onerror = reject;
-      };
-      reader.onerror = reject;
-    });
   };
 
   const handleUpload = async () => {
@@ -224,26 +223,6 @@ export const CarrierDashboard = () => {
     }
   };
 
-  const handleSaveBank = async () => {
-    if (!user) return;
-    setSavingBank(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        datosBancarios: bankData
-      });
-      useAuthStore.getState().setUser({
-        ...user,
-        datosBancarios: bankData
-      });
-      setShowBankModal(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-    } finally {
-      setSavingBank(false);
-    }
-  };
-
   const handleAdminApprove = async () => {
     if (!user) return;
     setUploading(true);
@@ -258,10 +237,60 @@ export const CarrierDashboard = () => {
     }
   };
 
+  const handleSavePaymentPreference = async () => {
+    if (!user || !selectedPaymentMethod) return;
+    setIsUpdating(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const datosPago: any = {};
+      
+      let fotoUrl = '';
+      if (paymentEvidenceFile) {
+        fotoUrl = await compressImage(paymentEvidenceFile);
+      }
+      
+      if (selectedPaymentMethod === 'bank') {
+        datosPago.banco = paymentData.bank;
+        datosPago.numeroCuenta = paymentData.accountNumber;
+        datosPago.cci = paymentData.cci;
+        datosPago.titular = paymentData.titular;
+      } else {
+        datosPago.celular = paymentData.phone;
+        datosPago.titular = paymentData.titular;
+      }
+
+      if (fotoUrl) {
+        datosPago.fotoUrl = fotoUrl;
+      }
+
+      await updateDoc(userRef, {
+        metodoPago: selectedPaymentMethod,
+        datosPago: datosPago,
+        updatedAt: Date.now()
+      });
+
+      addNotification({
+        title: 'Método de pago guardado',
+        message: 'Tus datos han sido guardados para futuros cobros.',
+        type: 'success'
+      });
+
+      setShowPaymentPreferenceModal(false);
+    } catch (err) {
+      console.error('Error saving payment preference:', err);
+      addNotification({
+        title: 'Error',
+        message: 'No se pudieron guardar tus datos de pago.',
+        type: 'error'
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (user?.verificado !== 'verificado') {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Banner de Verificación Pendiente */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -279,7 +308,7 @@ export const CarrierDashboard = () => {
               <p className="text-blue-100 text-lg max-w-2xl">
                 {user?.verificado === 'pendiente' 
                   ? "¡Excelente! Hemos recibido tus documentos. Nuestro equipo los está revisando minuciosamente. Este proceso suele demorar menos de 24 horas."
-                  : "Para empezar a recibir ofertas y ganar dinero, necesitamos verificar tu identidad y documentos del vehículo."}
+                  : "Para empezar de ganar dinero, necesitamos verificar tu identidad y documentos del vehículo."}
               </p>
               {user?.verificado !== 'pendiente' && (
                 <Button 
@@ -296,7 +325,6 @@ export const CarrierDashboard = () => {
               </div>
             </div>
           </div>
-          {/* Decorative circles */}
           <div className="absolute -right-10 -top-10 h-40 w-40 bg-white/10 rounded-full blur-3xl" />
           <div className="absolute -left-10 -bottom-10 h-40 w-40 bg-blue-400/20 rounded-full blur-3xl" />
         </motion.div>
@@ -315,25 +343,22 @@ export const CarrierDashboard = () => {
                 description="Revisamos tu DNI, Licencia y Tarjeta de Propiedad."
                 status={user?.verificado === 'pendiente' ? 'in_progress' : 'pending'}
               />
-              <Card 
-                className="cursor-pointer hover:border-blue-300 transition-all"
-                onClick={() => setShowBankModal(true)}
-              >
+              <Card className="bg-gray-50/50 border-dashed">
                 <CardContent className="p-5 flex items-start space-x-4">
-                  <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                    <Landmark className="h-6 w-6 text-blue-600" />
+                  <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Landmark className="h-6 w-6 text-gray-400" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-sm font-bold text-gray-900">Datos Bancarios</h4>
+                    <h4 className="text-sm font-bold text-gray-900">Método de Cobro</h4>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {user?.datosBancarios?.banco ? `${user.datosBancarios.banco} - ${user.datosBancarios.numeroCuenta}` : "Configura tu cuenta para recibir pagos."}
+                      {user?.metodoPago ? `Configurado (${user.metodoPago.toUpperCase()})` : "Se configurará automáticamente al completar tu primer viaje."}
                     </p>
                     <div className="mt-3">
                       <span className={cn(
                         "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
-                        user?.datosBancarios?.numeroCuenta ? "text-green-600 bg-green-50" : "text-gray-400 bg-gray-50"
+                        user?.metodoPago ? "text-green-600 bg-green-50" : "text-gray-400 bg-gray-50"
                       )}>
-                        {user?.datosBancarios?.numeroCuenta ? "Configurado" : "Pendiente"}
+                        {user?.metodoPago ? "Configurado" : "Pendiente"}
                       </span>
                     </div>
                   </div>
@@ -472,94 +497,203 @@ export const CarrierDashboard = () => {
         </AnimatePresence>
 
         <AnimatePresence>
-          {showBankModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          {showPaymentPreferenceModal && completedTrips.length > 0 && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
               <motion.div 
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
                 className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
               >
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                  <h2 className="text-xl font-bold text-gray-900">Datos Bancarios</h2>
-                  <button onClick={() => setShowBankModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                    <X className="h-5 w-5 text-gray-500" />
-                  </button>
-                </div>
-                
-                <div className="p-6 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700 uppercase">Banco</label>
-                      <select 
-                        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
-                        value={bankData.banco}
-                        onChange={(e) => setBankData(prev => ({ ...prev, banco: e.target.value }))}
-                      >
-                        <option value="">Selecciona...</option>
-                        <option value="BCP">BCP</option>
-                        <option value="Interbank">Interbank</option>
-                        <option value="BBVA">BBVA</option>
-                        <option value="Scotiabank">Scotiabank</option>
-                        <option value="Banco de la Nación">Banco de la Nación</option>
-                      </select>
+                <div className="p-8 text-center space-y-6">
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black text-gray-900">¡Entrega confirmada! 🎉</h3>
+                    <p className="text-gray-600">
+                      Tu pago de <span className="font-bold text-blue-600 text-lg">S/. {(completedTrips[0].precioFinal - completedTrips[0].comision).toFixed(2)}</span> está listo para transferirse.
+                    </p>
+                  </div>
+
+                  {!selectedPaymentMethod ? (
+                    <div className="space-y-4">
+                      <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">¿Cómo prefieres cobrar?</p>
+                      <div className="grid grid-cols-1 gap-3">
+                        <button 
+                          onClick={() => setSelectedPaymentMethod('bank')}
+                          className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                              <CreditCard className="h-6 w-6 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">Cuenta bancaria</p>
+                              <p className="text-xs text-gray-500">BCP, Interbank, etc.</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-gray-300" />
+                        </button>
+
+                        <button 
+                          onClick={() => setSelectedPaymentMethod('yape')}
+                          className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-purple-500 hover:bg-purple-50 transition-all text-left group"
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                              <span className="text-sm font-black text-purple-600">YAPE</span>
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">Yape</p>
+                              <p className="text-xs text-gray-500">Solo número de celular</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-gray-300" />
+                        </button>
+
+                        <button 
+                          onClick={() => setSelectedPaymentMethod('plin')}
+                          className="flex items-center justify-between p-4 rounded-2xl border-2 border-gray-100 hover:border-cyan-500 hover:bg-cyan-50 transition-all text-left group"
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className="h-12 w-12 bg-cyan-100 rounded-xl flex items-center justify-center group-hover:bg-cyan-200 transition-colors">
+                              <span className="text-sm font-black text-cyan-600">PLIN</span>
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">Plin</p>
+                              <p className="text-xs text-gray-500">Solo número de celular</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-gray-300" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-700 uppercase">Tipo</label>
-                      <select 
-                        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
-                        value={bankData.tipoCuenta}
-                        onChange={(e) => setBankData(prev => ({ ...prev, tipoCuenta: e.target.value }))}
+                  ) : (
+                    <div className="space-y-6 text-left animate-in fade-in slide-in-from-right duration-300">
+                      <button 
+                        onClick={() => setSelectedPaymentMethod(null)}
+                        className="text-xs font-bold text-blue-600 hover:underline flex items-center"
                       >
-                        <option value="ahorros">Ahorros</option>
-                        <option value="corriente">Corriente</option>
-                      </select>
+                        <ArrowLeft className="h-3 w-3 mr-1" />
+                        Cambiar método
+                      </button>
+
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                           <label className="text-sm font-bold text-gray-700">Titular de la cuenta:</label>
+                           <Input 
+                             placeholder="Nombre completo del titular"
+                             value={paymentData.titular}
+                             onChange={(e) => setPaymentData({...paymentData, titular: e.target.value})}
+                           />
+                           <p className="text-[10px] text-amber-600 font-bold">⚠️ Debe coincidir con tu nombre legal para evitar rechazos en el pago.</p>
+                        </div>
+
+                        {selectedPaymentMethod === 'bank' ? (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Banco:</label>
+                                <Input 
+                                  placeholder="Ej: BCP, Interbank..."
+                                  value={paymentData.bank}
+                                  onChange={(e) => setPaymentData({...paymentData, bank: e.target.value})}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">N° Cuenta:</label>
+                                <Input 
+                                  placeholder="Cuenta corriente/ahorros"
+                                  value={paymentData.accountNumber}
+                                  onChange={(e) => setPaymentData({...paymentData, accountNumber: e.target.value})}
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-bold text-gray-700">CCI (Interbancaria):</label>
+                              <Input 
+                                placeholder="Introduce tu CCI de 20 dígitos"
+                                value={paymentData.cci}
+                                onChange={(e) => setPaymentData({...paymentData, cci: e.target.value})}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-gray-700">Número de Celular ({selectedPaymentMethod === 'yape' ? 'Yape' : 'Plin'}):</label>
+                            <Input 
+                              type="tel"
+                              placeholder="999 999 999"
+                              value={paymentData.phone}
+                              onChange={(e) => setPaymentData({...paymentData, phone: e.target.value})}
+                            />
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-gray-700">Foto de cuenta/tarjeta (Opcional):</label>
+                          <div 
+                            className={cn(
+                              "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all",
+                              paymentEvidenceFile ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+                            )}
+                            onClick={() => document.getElementById('payment-evidence-upload-dash')?.click()}
+                          >
+                            <input 
+                              id="payment-evidence-upload-dash"
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setPaymentEvidenceFile(file);
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => setPaymentEvidenceUrl(ev.target?.result as string);
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                            {paymentEvidenceUrl ? (
+                              <div className="flex items-center justify-center space-x-2">
+                                <img src={paymentEvidenceUrl} alt="Preview" className="h-10 w-10 object-cover rounded border" referrerPolicy="no-referrer" />
+                                <span className="text-xs text-green-700 font-bold truncate max-w-[200px]">{paymentEvidenceFile?.name}</span>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPaymentEvidenceFile(null);
+                                    setPaymentEvidenceUrl('');
+                                  }}
+                                  className="text-red-500 p-1 hover:bg-red-100 rounded"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center">
+                                <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                                <span className="text-xs text-gray-500">Subir foto para mayor seguridad</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button 
+                        className={cn(
+                          "w-full h-12 text-lg shadow-xl",
+                          selectedPaymentMethod === 'bank' 
+                            ? (paymentData.bank && paymentData.accountNumber && paymentData.cci && paymentData.titular ? "bg-blue-600" : "bg-gray-300 cursor-not-allowed")
+                            : (paymentData.phone && paymentData.titular ? (selectedPaymentMethod === 'yape' ? "bg-purple-600" : "bg-cyan-600") : "bg-gray-300 cursor-not-allowed")
+                        )}
+                        disabled={
+                          isUpdating || 
+                          (selectedPaymentMethod === 'bank' ? !(paymentData.bank && paymentData.accountNumber && paymentData.cci && paymentData.titular) : !(paymentData.phone && paymentData.titular))
+                        }
+                        onClick={handleSavePaymentPreference}
+                      >
+                        {isUpdating ? 'Guardando...' : 'Guardar y Continuar'}
+                      </Button>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-700 uppercase">Número de Cuenta</label>
-                    <input 
-                      type="text"
-                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
-                      placeholder="Ej: 191-..."
-                      value={bankData.numeroCuenta}
-                      onChange={(e) => setBankData(prev => ({ ...prev, numeroCuenta: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-700 uppercase">CCI (Opcional)</label>
-                    <input 
-                      type="text"
-                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
-                      placeholder="002-..."
-                      value={bankData.cci}
-                      onChange={(e) => setBankData(prev => ({ ...prev, cci: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-700 uppercase">Titular de la Cuenta</label>
-                    <input 
-                      type="text"
-                      className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold"
-                      placeholder="Nombre tal cual en el banco"
-                      value={bankData.titular}
-                      onChange={(e) => setBankData(prev => ({ ...prev, titular: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="pt-4">
-                    <Button 
-                      className="w-full h-12 text-lg shadow-lg"
-                      onClick={handleSaveBank}
-                      disabled={!bankData.banco || !bankData.numeroCuenta || !bankData.titular || savingBank}
-                      isLoading={savingBank}
-                    >
-                      {savingBank ? "Guardando..." : "Guardar Datos Bancarios"}
-                    </Button>
-                  </div>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -571,6 +705,77 @@ export const CarrierDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {/* Pagos Pendientes - Reembolsos */}
+      {pendingPayoutTrips.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-5 w-5 text-amber-600 animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Pagos Pendientes de Cobro</h2>
+            </div>
+            <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              {pendingPayoutTrips.length} Pendiente{pendingPayoutTrips.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pendingPayoutTrips.map((trip) => (
+              <Link key={trip.id} to={`/trip/${trip.id}`}>
+                <Card className="border-2 border-amber-200 hover:border-amber-500 transition-all bg-amber-50/30 overflow-hidden group">
+                  <div className="bg-amber-500 h-1 w-full" />
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                           <p className="text-[10px] uppercase font-bold text-amber-600 tracking-widest">Viaje Finalizado</p>
+                           <StatusBadge status="completado" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{trip.destino}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Por Cobrar</p>
+                        <p className="text-xl font-black text-amber-600">S/ {(trip.precioFinal - (trip.comision || 0)).toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center text-xs text-gray-500">
+                        <MapPin className="h-3 w-3 mr-1 text-gray-400" />
+                        <span className="truncate">{trip.origen}</span>
+                        <ChevronRight className="h-3 w-3 mx-1 text-gray-300" />
+                        <span className="truncate">{trip.destino}</span>
+                      </div>
+                      <div className="flex items-center text-[10px] text-gray-400">
+                        <Clock className="h-3 w-3 mr-1" />
+                        Completado el {trip.entregaRealAt ? new Date(trip.entregaRealAt).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className={cn(
+                          "h-2 w-2 rounded-full mr-2",
+                          trip.payoutInfo?.estado === 'procesando' ? "bg-blue-500 animate-pulse" : "bg-amber-500"
+                        )} />
+                        <span className="text-[10px] font-bold uppercase text-gray-500 italic">
+                          {trip.payoutInfo?.estado === 'procesando' ? 'En procesamiento' : 'Reembolso pendiente'}
+                        </span>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-8 text-[10px] font-bold text-amber-600 hover:bg-amber-100">
+                        VER DETALLES
+                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Viajes en Curso */}
       {activeTrips.length > 0 && (
         <section className="space-y-6">

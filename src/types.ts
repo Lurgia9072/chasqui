@@ -62,12 +62,14 @@ export interface User {
     tarjetaPropiedad?: string;
     soat?: string;
   };
-  datosBancarios?: {
-    banco: string;
-    tipoCuenta: string;
-    numeroCuenta: string;
+  metodoPago?: 'bank' | 'yape' | 'plin';
+  datosPago?: {
+    banco?: string;
+    numeroCuenta?: string;
     cci?: string;
-    titular: string;
+    titular?: string;
+    celular?: string;
+    fotoUrl?: string;
   };
   createdAt: number;
 }
@@ -106,6 +108,8 @@ export interface Cargo {
   estado: CargoStatus;
   createdAt: number;
   
+  sectorProducto?: string;
+  rucExportador?: string;
   // Campos Avanzados / Exportación
   lote?: string;
   partidaArancelaria?: string;

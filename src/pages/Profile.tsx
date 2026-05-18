@@ -3,14 +3,15 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, handleFirestoreError } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { OperationType, Review, User as UserType } from '../types';
+import { OperationType, Review, User as UserType, Trip } from '../types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare, FileText, CheckCircle, XCircle, Upload, Clock, ArrowLeft } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { format } from 'date-fns';
+import { User, Phone, Mail, CreditCard, ShieldCheck, Camera, Check, AlertCircle, Building2, Landmark, Star, Truck, MessageSquare, FileText, CheckCircle, XCircle, Upload, Clock, ArrowLeft, Briefcase, Anchor, UserRound, FileDown } from 'lucide-react';
+import { cn, cleanObject, compressImage } from '../lib/utils';
+import { format as dateFnsFormat } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { generateMonthlyReport } from '../lib/pdfGenerator';
 
 export const Profile = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ export const Profile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
+  const [completedTrips, setCompletedTrips] = useState<Trip[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isOwnProfile = !id || id === currentUser?.uid;
@@ -30,13 +32,6 @@ export const Profile = () => {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
-
-  // Bank states
-  const [banco, setBanco] = useState('');
-  const [tipoCuenta, setTipoCuenta] = useState('');
-  const [numeroCuenta, setNumeroCuenta] = useState('');
-  const [cci, setCci] = useState('');
-  const [titular, setTitular] = useState('');
 
   // Verification states
   const [dniUrl, setDniUrl] = useState('');
@@ -52,11 +47,6 @@ export const Profile = () => {
         setNombre(currentUser?.nombre || '');
         setTelefono(currentUser?.telefono || '');
         setPhotoUrl(currentUser?.photoUrl || '');
-        setBanco(currentUser?.datosBancarios?.banco || '');
-        setTipoCuenta(currentUser?.datosBancarios?.tipoCuenta || '');
-        setNumeroCuenta(currentUser?.datosBancarios?.numeroCuenta || '');
-        setCci(currentUser?.datosBancarios?.cci || '');
-        setTitular(currentUser?.datosBancarios?.titular || '');
         setDniUrl(currentUser?.documentosUrls?.dni || '');
         setLicenciaUrl(currentUser?.documentosUrls?.licencia || '');
         setTarjetaPropiedadUrl(currentUser?.documentosUrls?.tarjetaPropiedad || '');
@@ -103,18 +93,41 @@ export const Profile = () => {
     return () => unsubscribe();
   }, [id, currentUser?.uid]);
 
+  // Fetch Completed Trips for Report
+  useEffect(() => {
+    if (!profileUser || profileUser.tipoUsuario !== 'comerciante' || !isOwnProfile) return;
+
+    const q = query(
+      collection(db, 'trips'),
+      where('comercianteId', '==', profileUser.uid),
+      where('estado', '==', 'completado')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      setCompletedTrips(docs);
+    });
+
+    return () => unsubscribe();
+  }, [profileUser?.uid, profileUser?.tipoUsuario, isOwnProfile]);
+
+  const handleExportMonthly = () => {
+    if (completedTrips.length === 0) {
+      alert('No hay viajes completados para exportar este mes.');
+      return;
+    }
+    generateMonthlyReport(completedTrips, profileUser as any);
+  };
+
   const handlePhotoClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImage(file, 200, 200, 0.5);
+      setPhotoUrl(compressed);
     }
   };
 
@@ -126,7 +139,7 @@ export const Profile = () => {
       const file = e.target.files?.[0];
       if (file) {
         try {
-          const compressedBase64 = await compressImage(file);
+          const compressedBase64 = await compressImage(file, 800, 800, 0.5);
           if (type === 'dni') setDniUrl(compressedBase64);
           if (type === 'licencia') setLicenciaUrl(compressedBase64);
           if (type === 'tarjetaPropiedad') setTarjetaPropiedadUrl(compressedBase64);
@@ -139,62 +152,16 @@ export const Profile = () => {
     input.click();
   };
 
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(dataUrl);
-        };
-        img.onerror = (err) => reject(err);
-      };
-      reader.onerror = (err) => reject(err);
-    });
-  };
-
   const handleSave = async () => {
     if (!currentUser) return;
     setIsSaving(true);
 
     try {
       const userRef = doc(db, 'users', currentUser.uid);
-      const updatedData = {
+      const updatedData = cleanObject({
         nombre,
         telefono,
         photoUrl,
-        datosBancarios: {
-          banco,
-          tipoCuenta,
-          numeroCuenta,
-          cci,
-          titular
-        },
         documentosUrls: {
           dni: dniUrl,
           licencia: licenciaUrl,
@@ -205,7 +172,7 @@ export const Profile = () => {
         verificado: (dniUrl && (currentUser.tipoUsuario === 'comerciante' || (licenciaUrl && tarjetaPropiedadUrl))) 
           ? (currentUser.verificado === 'verificado' ? 'verificado' : 'pendiente')
           : currentUser.verificado
-      };
+      });
 
       await updateDoc(userRef, updatedData);
       
@@ -305,6 +272,16 @@ export const Profile = () => {
           </div>
         </div>
         <div className="flex space-x-3">
+          {isOwnProfile && profileUser.tipoUsuario === 'comerciante' && !isEditing && (
+            <Button 
+              variant="outline" 
+              onClick={handleExportMonthly}
+              className="border-blue-200 text-blue-600 hover:bg-blue-50"
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              Reporte Mensual
+            </Button>
+          )}
           {isOwnProfile && (
             isEditing ? (
               <>
@@ -376,77 +353,6 @@ export const Profile = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Bank Info (Only for own profile) */}
-          {isOwnProfile && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  <CreditCard className="h-5 w-5 mr-2 text-emerald-600" />
-                  Datos Bancarios
-                </CardTitle>
-                <CardDescription>Información necesaria para recibir tus reembolsos.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase">Banco</label>
-                    {isEditing ? (
-                      <Input value={banco} onChange={(e) => setBanco(e.target.value)} placeholder="Ej: BCP, BBVA, Interbank" />
-                    ) : (
-                      <p className="font-medium text-gray-900 flex items-center">
-                        <Landmark className="h-4 w-4 mr-2 text-gray-400" />
-                        {profileUser.datosBancarios?.banco || 'No configurado'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase">Tipo de Cuenta</label>
-                    {isEditing ? (
-                      <select 
-                        className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={tipoCuenta}
-                        onChange={(e) => setTipoCuenta(e.target.value)}
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="Ahorros">Ahorros</option>
-                        <option value="Corriente">Corriente</option>
-                      </select>
-                    ) : (
-                      <p className="font-medium text-gray-900">{profileUser.datosBancarios?.tipoCuenta || 'No configurado'}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase">Número de Cuenta</label>
-                    {isEditing ? (
-                      <Input value={numeroCuenta} onChange={(e) => setNumeroCuenta(e.target.value)} />
-                    ) : (
-                      <p className="font-medium font-mono text-gray-900">{profileUser.datosBancarios?.numeroCuenta || 'No configurado'}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase">CCI (Interbancario)</label>
-                    {isEditing ? (
-                      <Input value={cci} onChange={(e) => setCci(e.target.value)} />
-                    ) : (
-                      <p className="font-medium font-mono text-gray-900">{profileUser.datosBancarios?.cci || 'No configurado'}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase">Titular de la Cuenta</label>
-                    {isEditing ? (
-                      <Input value={titular} onChange={(e) => setTitular(e.target.value)} />
-                    ) : (
-                      <p className="font-medium text-gray-900 flex items-center">
-                        <User className="h-4 w-4 mr-2 text-gray-400" />
-                        {profileUser.datosBancarios?.titular || 'No configurado'}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Verification Center (Only for own profile) */}
           {isOwnProfile && (
@@ -648,7 +554,7 @@ export const Profile = () => {
                               {review.reviewerNombre}
                             </p>
                             <p className="text-[10px] text-gray-500">
-                              {format(review.createdAt, "d 'de' MMMM, yyyy", { locale: es })}
+                              {dateFnsFormat(review.createdAt, "d 'de' MMMM, yyyy", { locale: es })}
                             </p>
                           </div>
                         </Link>
@@ -724,14 +630,7 @@ export const Profile = () => {
             </CardContent>
           </Card>
 
-          {isOwnProfile && (
-            <div className="bg-yellow-50 border border-yellow-100 p-4 rounded-2xl flex items-start space-x-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-yellow-800">
-                <strong>Nota:</strong> Mantener tus datos bancarios actualizados es crucial para asegurar que recibas tus reembolsos sin retrasos.
-              </p>
-            </div>
-          )}
+
         </div>
       </div>
     </div>
