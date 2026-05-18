@@ -700,17 +700,17 @@ export const TripDetails = () => {
     }
   }, [trip?.checkpoints, id, isAdmin]);
 
+  // Manage automatic modals after trip completion
   useEffect(() => {
     if (trip?.estado === 'completado' && isCarrier && carrierData) {
       const hasPaymentInfo = carrierData.metodoPago && (carrierData.datosPago?.numeroCuenta || carrierData.datosPago?.celular);
       const isAlreadyPaid = trip.payoutInfo?.estado === 'pagado';
       
-      if (!hasPaymentInfo && !isAlreadyPaid) {
-        setShowPaymentPreferenceModal(true);
-      } else {
-        setShowPaymentPreferenceModal(false);
+      if (!hasPaymentInfo && !isAlreadyPaid && !showPaymentPreferenceModal) {
+        openPaymentPreferenceModal();
+      } else if (hasPaymentInfo || isAlreadyPaid) {
         const hasRated = !!trip.ratingComerciante;
-        if (!hasRated) {
+        if (!hasRated && !showPaymentPreferenceModal) {
           setShowRatingModal(true);
         }
       }
@@ -720,7 +720,7 @@ export const TripDetails = () => {
         setShowRatingModal(true);
       }
     }
-  }, [trip?.estado, isCarrier, trip?.ratingComerciante, trip?.ratingTransportista, carrierData, trip?.payoutInfo?.estado]);
+  }, [trip?.estado, isCarrier, trip?.ratingComerciante, trip?.ratingTransportista, carrierData, trip?.payoutInfo?.estado, showPaymentPreferenceModal]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -918,6 +918,21 @@ export const TripDetails = () => {
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const openPaymentPreferenceModal = () => {
+    if (carrierData) {
+      setSelectedPaymentMethod(carrierData.metodoPago || null);
+      setPaymentData({
+        bank: carrierData.datosPago?.banco || '',
+        accountNumber: carrierData.datosPago?.numeroCuenta || '',
+        cci: carrierData.datosPago?.cci || '',
+        titular: carrierData.datosPago?.titular || carrierData.nombre || '',
+        phone: carrierData.datosPago?.celular || ''
+      });
+    }
+    setShowPaymentPreferenceModal(true);
+    setShowRatingModal(false);
   };
 
   const handleSavePaymentPreference = async () => {
@@ -1194,7 +1209,7 @@ export const TripDetails = () => {
                 {trip.alertas.desvioRuta && "Se detectó desvío de la ruta establecida. "}
                 {trip.alertas.paradaNoAutorizada && "Se detectó una detención prolongada no programada. "}
                 {trip.alertas.riesgoLlegadaTardia && "MARGEN CRÍTICO: El transportista podría no llegar antes del cierre en puerto. "}
-                {trip.alertas.retrasoCritico && "Se detectó un retraso crítico."}
+                {trip.alertas.retrasoCritico && "Se detectó un retraso atípico."}
               </p>
             </div>
           </div>
@@ -1332,12 +1347,12 @@ export const TripDetails = () => {
                           <div>
                             <p className="text-[9px] font-bold text-gray-400 uppercase">Número Yape</p>
                             <p className="text-sm font-black text-gray-900 tracking-wider">
-                              {appConfig?.yapeNumber || '987 654 321'}
+                              {appConfig?.yapeNumber || '+51 960 354 149'}
                             </p>
                           </div>
                           <button 
                             onClick={() => {
-                              navigator.clipboard.writeText(appConfig?.yapeNumber || '987 654 321');
+                              navigator.clipboard.writeText(appConfig?.yapeNumber || '+51 960 354 149');
                               // Podríamos añadir un mini toast aquí
                             }}
                             className="p-1.5 hover:bg-purple-50 text-purple-600 rounded-md transition-colors"
@@ -1348,7 +1363,7 @@ export const TripDetails = () => {
                         </div>
                         <p className="text-[10px] text-gray-500 mt-2 flex items-center">
                           <User className="h-3 w-3 mr-1" />
-                          Titular: <span className="font-bold text-gray-700 ml-1">{appConfig?.yapeName || 'Chasqui SAC'}</span>
+                          Titular: <span className="font-bold text-gray-700 ml-1">{appConfig?.yapeName || 'Lurgia Yupa A.'}</span>
                         </p>
                       </div>
 
@@ -1356,12 +1371,12 @@ export const TripDetails = () => {
                       <div className="flex flex-col p-3 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-blue-200 transition-colors">
                         <div className="flex items-center mb-2 justify-between">
                           <div className="flex items-center">
-                            <div className="h-7 w-7 bg-blue-100 rounded-lg flex items-center justify-center mr-2">
+                            <div className="h-7 w-15 bg-blue-100 rounded-lg flex items-center justify-center mr-2">
                               <span className="text-[10px] font-black text-blue-700">
-                                {appConfig?.bcpBank?.substring(0, 3).toUpperCase() || 'BCP'}
+                                {appConfig?.bcpBank?.substring(0, 3).toUpperCase() || 'Interbank'}
                               </span>
                             </div>
-                            <span className="text-xs font-bold text-gray-900">{appConfig?.bcpBank || 'Banco'}</span>
+                         {/*    <span className="text-xs font-bold text-gray-900">{appConfig?.bcpBank || 'Banco'}</span> */}
                           </div>
                           <span className="text-[9px] font-mono text-gray-400">
                             {appConfig?.bcpDocType || 'RUC'}: {appConfig?.bcpDocNum || '...'}
@@ -1373,11 +1388,11 @@ export const TripDetails = () => {
                             <div className="flex-1 min-w-0">
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Cuenta Corriente</p>
                               <p className="text-xs font-black text-gray-900 font-mono truncate tracking-tight">
-                                {appConfig?.bcpAccount || '191-98765432-0-11'}
+                                {appConfig?.bcpAccount || ' 821 3443364810'}
                               </p>
                             </div>
                             <button 
-                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpAccount || '191-98765432-0-11')}
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpAccount || ' 821 3443364810')}
                               className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md transition-colors shrink-0 ml-1"
                               title="Copiar cuenta"
                             >
@@ -1389,11 +1404,11 @@ export const TripDetails = () => {
                             <div className="flex-1 min-w-0">
                               <p className="text-[9px] font-bold text-blue-400 uppercase">CCI</p>
                               <p className="text-[11px] font-black text-blue-900 font-mono truncate">
-                                {appConfig?.bcpCci || '00219100987654320111'}
+                                {appConfig?.bcpCci || '00382101344336481069'}
                               </p>
                             </div>
                             <button 
-                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpCci || '00219100987654320111')}
+                              onClick={() => navigator.clipboard.writeText(appConfig?.bcpCci || '00382101344336481069')}
                               className="p-1.5 hover:bg-blue-100 text-blue-700 rounded-md transition-colors shrink-0 ml-1"
                               title="Copiar CCI"
                             >
@@ -1404,7 +1419,7 @@ export const TripDetails = () => {
                         
                         <p className="text-[10px] text-gray-500 mt-2 flex items-center">
                           <ShieldCheck className="h-3 w-3 mr-1 text-green-500" />
-                          Titular: <span className="font-bold text-gray-700 ml-1 truncate">{appConfig?.bcpName || 'Chasqui SAC'}</span>
+                          Titular: <span className="font-bold text-gray-700 ml-1 truncate">{appConfig?.bcpName || 'Lurgia Yupa A.'}</span>
                         </p>
                       </div>
                     </div>
@@ -1492,7 +1507,7 @@ export const TripDetails = () => {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-700">Subir Boleta de Pago</p>
-                            <p className="text-xs text-gray-500">JPG, PNG o PDF (Máx. 5MB)</p>
+                            <p className="text-xs text-gray-500">JPG, PNG (Máx. 5MB)</p>
                           </div>
                         </div>
                       )}
@@ -2448,9 +2463,20 @@ export const TripDetails = () => {
                           )}
                         </>
                       ) : (
-                        <p className="text-xs text-blue-700 italic">
-                          El administrador está procesando tu pago a tu cuenta bancaria configurada.
-                        </p>
+                        <div className="space-y-3">
+                          <p className="text-xs text-blue-700 italic">
+                            El administrador está procesando tu pago a tu cuenta bancaria configurada.
+                          </p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full h-9 text-[10px] uppercase font-bold border-blue-200 text-blue-600 hover:bg-blue-50"
+                            onClick={openPaymentPreferenceModal}
+                          >
+                            <CreditCard className="h-3.5 w-3.5 mr-2" />
+                            Cambiar datos de cobro
+                          </Button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -2574,12 +2600,12 @@ export const TripDetails = () => {
                 className={cn("h-10 text-[11px]", trip.alertas?.retrasoCritico && "animate-pulse")}
                 onClick={async () => {
                   await updateDoc(doc(db, 'trips', trip.id), {
-                    'alertas.retraso': !trip.alertas?.retraso
+                    'alertas.retraso': !trip.alertas?.retrasoCritico
                   });
                 }}
               >
                 <AlertCircle className="h-3 w-3 mr-2" />
-                {trip.alertas?.retraso ? 'Detener Alerta Retraso' : 'Simular Retraso'}
+                {trip.alertas?.retrasoCritico ? 'Detener Alerta Retraso' : 'Simular Retraso'}
               </Button>
             </div>
           </CardContent>
@@ -2726,8 +2752,15 @@ export const TripDetails = () => {
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative"
           >
+            <button 
+              onClick={() => setShowPaymentPreferenceModal(false)}
+              className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors z-10"
+            >
+              <X className="h-5 w-5 text-gray-400" />
+            </button>
+
             <div className="p-8 text-center space-y-6">
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-gray-900">¡Entrega confirmada! 🎉</h3>
