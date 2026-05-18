@@ -57,7 +57,7 @@ export const generateAuditReport = async (trip: Trip, cargo: Cargo, merchant: Us
   };
 
   // 1. Datos del Cliente
-  y = sectionTitle('DATOS DE LA EMPRESA EXPORTADORA', y);
+  y = sectionTitle('DATOS DEL CLIENTE / EMPRESA', y); 
   doc.setTextColor(50, 50, 50);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');

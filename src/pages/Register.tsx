@@ -361,8 +361,8 @@ export const Register = () => {
                   active={role === 'comerciante'} 
                   onClick={() => { setValue('tipoUsuario', 'comerciante'); setRole('comerciante'); nextStep(); }}
                   icon={<Briefcase className="h-10 w-10" />}
-                  title="Empresa Exportadora"
-                  desc="Gestión de transporte y trazabilidad para carga de exportación."
+                  title="Empresa / Comerciante"
+                  desc="Publica cargas, encuentra transporte y monitorea tus envíos en tiempo real."
                 />
                 <RoleCard 
                   active={role === 'transportista'} 
