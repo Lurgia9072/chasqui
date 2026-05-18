@@ -25,6 +25,7 @@ export const CarrierDashboard = () => {
   const [cargas, setCargas] = useState<Cargo[]>([]);
   const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
   const [completedTrips, setCompletedTrips] = useState<Trip[]>([]);
+  const [pendingPayoutTrips, setPendingPayoutTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTrips, setLoadingTrips] = useState(true);
 
@@ -122,20 +123,19 @@ export const CarrierDashboard = () => {
       where('transportistaId', '==', user.uid),
       where('estado', '==', 'completado'),
       orderBy('entregaRealAt', 'desc'),
-      limit(5)
+      limit(30)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
       setCompletedTrips(docs);
       
+      const pending = docs.filter(trip => trip.payoutInfo?.estado !== 'pagado');
+      setPendingPayoutTrips(pending);
+      
       // Check if we should show payment modal
       const hasPaymentInfo = user?.metodoPago && (user?.datosPago?.numeroCuenta || user?.datosPago?.celular);
-      const hasUnpaidCompletedTrips = docs.some(trip => {
-        const isCompletado = trip.estado === 'completado';
-        const isNotPaid = trip.payoutInfo?.estado !== 'pagado';
-        return isCompletado && isNotPaid;
-      });
+      const hasUnpaidCompletedTrips = pending.length > 0;
       
       if (hasUnpaidCompletedTrips && !hasPaymentInfo) {
         setShowPaymentPreferenceModal(true);
@@ -705,6 +705,77 @@ export const CarrierDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+      {/* Pagos Pendientes - Reembolsos */}
+      {pendingPayoutTrips.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-5 w-5 text-amber-600 animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Pagos Pendientes de Cobro</h2>
+            </div>
+            <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              {pendingPayoutTrips.length} Pendiente{pendingPayoutTrips.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pendingPayoutTrips.map((trip) => (
+              <Link key={trip.id} to={`/trip/${trip.id}`}>
+                <Card className="border-2 border-amber-200 hover:border-amber-500 transition-all bg-amber-50/30 overflow-hidden group">
+                  <div className="bg-amber-500 h-1 w-full" />
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                           <p className="text-[10px] uppercase font-bold text-amber-600 tracking-widest">Viaje Finalizado</p>
+                           <StatusBadge status="completado" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{trip.destino}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Por Cobrar</p>
+                        <p className="text-xl font-black text-amber-600">S/ {(trip.precioFinal - (trip.comision || 0)).toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center text-xs text-gray-500">
+                        <MapPin className="h-3 w-3 mr-1 text-gray-400" />
+                        <span className="truncate">{trip.origen}</span>
+                        <ChevronRight className="h-3 w-3 mx-1 text-gray-300" />
+                        <span className="truncate">{trip.destino}</span>
+                      </div>
+                      <div className="flex items-center text-[10px] text-gray-400">
+                        <Clock className="h-3 w-3 mr-1" />
+                        Completado el {trip.entregaRealAt ? new Date(trip.entregaRealAt).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className={cn(
+                          "h-2 w-2 rounded-full mr-2",
+                          trip.payoutInfo?.estado === 'procesando' ? "bg-blue-500 animate-pulse" : "bg-amber-500"
+                        )} />
+                        <span className="text-[10px] font-bold uppercase text-gray-500 italic">
+                          {trip.payoutInfo?.estado === 'procesando' ? 'En procesamiento' : 'Reembolso pendiente'}
+                        </span>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-8 text-[10px] font-bold text-amber-600 hover:bg-amber-100">
+                        VER DETALLES
+                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Viajes en Curso */}
       {activeTrips.length > 0 && (
         <section className="space-y-6">

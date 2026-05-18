@@ -493,7 +493,7 @@ export const PostCargo = () => {
                   <Button 
                     type="submit" 
                     className={cn(
-                      "w-full h-20 text-2xl font-black italic rounded-3xl shadow-2xl transition-all uppercase tracking-tight",
+                      "w-full h-20 text-1xl font-black italic rounded-3xl shadow-2xl transition-all tracking-tight",
                       isValid ? "bg-slate-900 hover:bg-black text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                     )}
                     isLoading={isLoading}
