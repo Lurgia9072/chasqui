@@ -49,6 +49,7 @@ export interface User {
   agenteAduana?: string;
   
   // Camilla de Campos de Onboarding Avanzados (SaaS Multiempresa / Multi-flota)
+  organizationId?: string;
   organizationType?: 'casual' | 'independent_driver' | 'shipper_company' | 'transport_company';
   role?: 'admin' | 'logistics_manager' | 'dispatcher' | 'monitor' | 'auditor' | 'driver';
   nombreComercial?: string;

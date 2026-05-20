@@ -1,14 +1,14 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, increment } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer, increment } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { OperationType, FirestoreErrorInfo } from './types';
 
-// Initialize Firebase SDK
+// Initialize Firebase SDK with Firestore Long Polling for 100% stable connections in iframe environments
 const app = initializeApp(firebaseConfig);
 export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, firebaseConfig.firestoreDatabaseId)
+  : initializeFirestore(app, { experimentalForceLongPolling: true });
 export const auth = getAuth(app);
 export { increment };
 
@@ -32,6 +32,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path: collectionPath
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  // To prevent crashing Firestore onSnapshot watch streams (which trigger INTERNAL ASSERTION FAILED: Unexpected state),
+  // we must not throw exceptions in asynchronous stream error callbacks for read operations (LIST and GET).
+  if (operationType === OperationType.LIST || operationType === OperationType.GET) {
+    return errInfo;
+  }
+  
   throw new Error(JSON.stringify(errInfo));
 }
 

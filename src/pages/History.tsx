@@ -22,12 +22,22 @@ export const History = () => {
     
     let q = query(
       collection(db, 'trips'),
-      where(roleField, '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where(roleField, '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      // Sort client-side by createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
       setTrips(docs);
       setLoading(false);
     }, (error) => {

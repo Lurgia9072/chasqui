@@ -26,10 +26,10 @@ export const NotificationBell = () => {
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('click', handleClickOutside);
     }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, [isOpen]);
 
@@ -38,14 +38,25 @@ export const NotificationBell = () => {
 
     const q = query(
       collection(db, 'notifications'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(10)
+      where('userId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
-      setNotifications(docs);
+      // Sort client-side by createdAt descending and limit to 10
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
+      setNotifications(docs.slice(0, 10));
+    }, (error) => {
+      console.warn("NotificationBell onSnapshot skipped or denied:", error);
     });
 
     return () => unsubscribe();
@@ -152,8 +163,8 @@ export const NotificationBell = () => {
                               {formatDistanceToNow(notification.createdAt, { addSuffix: true, locale: es })}
                             </span>
                             {notification.link && (
-                              <span className="text-[10px] font-bold text-blue-600 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                Ver más <ChevronRight className="h-3 w-3 ml-0.5" />
+                              <span className="text-[10px] font-bold text-blue-600 flex items-center group-hover:translate-x-1 transition-transform">
+                                Ver detalles <ChevronRight className="h-3 w-3 ml-0.5" />
                               </span>
                             )}
                           </div>

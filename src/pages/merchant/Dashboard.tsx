@@ -41,12 +41,22 @@ export const MerchantDashboard = () => {
 
     const qCargas = query(
       collection(db, 'cargas'),
-      where('comercianteId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('comercianteId', '==', user.uid)
     );
 
     const unsubscribeCargas = onSnapshot(qCargas, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cargo));
+      // Sort client-side by createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
       setCargas(docs);
       setLoading(false);
     }, (error) => {
@@ -56,12 +66,22 @@ export const MerchantDashboard = () => {
 
     const qTrips = query(
       collection(db, 'trips'),
-      where('comercianteId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('comercianteId', '==', user.uid)
     );
 
     const unsubscribeTrips = onSnapshot(qTrips, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      // Sort client-side by createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
       setActiveTrips(docs.filter(t => !['completado', 'cancelado'].includes(t.estado)));
       setCompletedTrips(docs.filter(t => t.estado === 'completado'));
       setLoadingTrips(false);
@@ -103,7 +123,7 @@ export const MerchantDashboard = () => {
            <div className="space-y-4 text-center md:text-left">
               <div className="inline-flex items-center space-x-2 bg-blue-500/20 text-blue-300 px-4 py-1.5 rounded-full border border-blue-500/30 text-xs font-bold tracking-widest uppercase">
                  <ShieldCheck className="h-4 w-4" />
-                 <span>Panel de control de usuario</span>
+                 <span>Panel de Control - Empresa Exportadora</span>
               </div>
               <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-none italic">
                 {user?.nombre}
@@ -225,13 +245,13 @@ export const MerchantDashboard = () => {
                            )}
                         </div>
                         <h3 className="text-xl font-black text-slate-900 leading-tight">
-                           {trip.nombreProducto || trip.tipoCarga || trip.tipoCarga || 'Carga General'}
+                           {trip.nombreProducto || trip.tipoCarga || trip.tipoDeCarga || 'Carga General'}
                         </h3>
                         <p className="text-[10px] text-slate-500 font-bold uppercase">Lote: {trip.lote || 'PEN-77'}</p>
                       </div>
                       <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center min-w-[80px]">
                         <p className="text-[10px] uppercase font-bold text-slate-400">Puerto</p>
-                        <p className="text-xs font-black text-slate-900">{trip.puertoDestino || 'CALLAO'}</p>{/* no existe en trip  puertoDestino*/}
+                        <p className="text-xs font-black text-slate-900">{trip.puertoDestino || 'CALLAO'}</p>
                       </div>
                     </div>
 
@@ -382,7 +402,7 @@ export const MerchantDashboard = () => {
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-lg font-bold group-hover:text-green-600 transition-colors">
-                        {trip.nombreProducto || trip.tipoCarga || trip.tipoCarga || 'Carga Finalizada'}
+                        {trip.nombreProducto || trip.tipoCarga || trip.tipoDeCarga || 'Carga Finalizada'}
                       </CardTitle>
                       <span className="text-[10px] uppercase font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">
                         Entregado

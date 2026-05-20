@@ -106,7 +106,9 @@ service cloud.firestore {
     }
 
     function getUserOrg() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && ('organizationId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+        : '';
     }
 
     // ===============================================================
@@ -142,6 +144,8 @@ service cloud.firestore {
              (!('isDeleted' in data) || data.isDeleted is bool) &&
              (!('deletedAt' in data) || data.deletedAt is number || data.deletedAt is timestamp) &&
              (!('deletedBy' in data) || data.deletedBy is string) &&
+             (!('organizationId' in data) || data.organizationId is string) &&
+             (!('organizationType' in data) || data.organizationType is string) &&
              (!('indiceConfiabilidad' in data) || data.indiceConfiabilidad is number);
     }
 
@@ -332,50 +336,200 @@ service cloud.firestore {
     }
 
     match /organizations/{orgId} {
-      allow read: if isAuthenticated() && (orgId == getUserOrg() || isAdmin());
-      allow write: if isAuthenticated() && (orgId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (orgId == getUserOrg() || orgId == request.auth.uid + '_org' || (resource != null && 'adminUser' in resource.data && resource.data.adminUser == request.auth.uid) || isAdmin());
+      allow write: if isAuthenticated() && (orgId == getUserOrg() || orgId == request.auth.uid + '_org' || (request.resource != null && 'adminUser' in request.resource.data && request.resource.data.adminUser == request.auth.uid) || (resource != null && 'adminUser' in resource.data && resource.data.adminUser == request.auth.uid) || isAdmin());
+    }
+
+    match /operators/{operatorId} {
+      allow read: if isAuthenticated() && (
+        (resource != null && 'organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        operatorId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        ('organizationId' in request.resource.data && (request.resource.data.organizationId == getUserOrg() || request.resource.data.organizationId == request.auth.uid + '_org')) || 
+        operatorId == request.auth.uid || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        ('organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        operatorId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        ('organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        operatorId == request.auth.uid || 
+        isAdmin()
+      );
+    }
+
+    match /fleet/{fleetId} {
+      allow read: if isAuthenticated() && (
+        (resource != null && 'organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        fleetId == request.auth.uid + '_fleet' || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        ('organizationId' in request.resource.data && (request.resource.data.organizationId == getUserOrg() || request.resource.data.organizationId == request.auth.uid + '_org')) || 
+        fleetId == request.auth.uid + '_fleet' || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        ('organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        fleetId == request.auth.uid + '_fleet' || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        ('organizationId' in resource.data && (resource.data.organizationId == getUserOrg() || resource.data.organizationId == request.auth.uid + '_org')) || 
+        fleetId == request.auth.uid + '_fleet' || 
+        isAdmin()
+      );
     }
 
     match /sedes/{sedeId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.organizationId == request.auth.uid + '_org' && request.resource.data.organizationId == request.auth.uid + '_org') || 
+        (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg()) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
     }
 
     match /vehicles/{vehicleId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        (resource != null && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        ('ownerId' in request.resource.data && request.resource.data.ownerId == request.auth.uid) || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        (resource != null && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        (resource != null && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) || 
+        isAdmin()
+      );
     }
 
     match /drivers/{driverId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        driverId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        driverId == request.auth.uid || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        driverId == request.auth.uid || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        driverId == request.auth.uid || 
+        isAdmin()
+      );
     }
 
     match /enterpriseCargos/{cargoId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.organizationId == request.auth.uid + '_org' && request.resource.data.organizationId == request.auth.uid + '_org') || 
+        (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg()) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
     }
 
     match /enterpriseTrips/{tripId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.organizationId == request.auth.uid + '_org' && request.resource.data.organizationId == request.auth.uid + '_org') || 
+        (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg()) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
     }
 
     match /enterpriseChats/{chatId} {
-      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow read: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.organizationId == request.auth.uid + '_org' || 
+        request.resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.organizationId == request.auth.uid + '_org' && request.resource.data.organizationId == request.auth.uid + '_org') || 
+        (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg()) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.organizationId == request.auth.uid + '_org' || 
+        resource.data.organizationId == getUserOrg() || 
+        isAdmin()
+      );
     }
 
     match /{path=**} {

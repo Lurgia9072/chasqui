@@ -69,12 +69,22 @@ export const CarrierDashboard = () => {
 
     const q = query(
       collection(db, 'cargas'),
-      where('estado', '==', 'disponible'),
-      orderBy('createdAt', 'desc')
+      where('estado', '==', 'disponible')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cargo));
+      // Sort client-side by createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
       setCargas(docs);
       setLoading(false);
       setRefreshing(false);
@@ -99,12 +109,22 @@ export const CarrierDashboard = () => {
     const q = query(
       collection(db, 'trips'),
       where('transportistaId', '==', user.uid),
-      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion']),
-      orderBy('createdAt', 'desc')
+      where('estado', 'in', ['en_camino_a_recojo', 'recojo_completado', 'en_camino_a_destino', 'entregado_pendiente_confirmacion'])
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
+      // Sort client-side by createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        return getVal(b.createdAt) - getVal(a.createdAt);
+      });
       setActiveTrips(docs);
       setLoadingTrips(false);
     }, (error) => {
@@ -121,16 +141,30 @@ export const CarrierDashboard = () => {
     const q = query(
       collection(db, 'trips'),
       where('transportistaId', '==', user.uid),
-      where('estado', '==', 'completado'),
-      orderBy('entregaRealAt', 'desc'),
-      limit(30)
+      where('estado', '==', 'completado')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trip));
-      setCompletedTrips(docs);
+      // Sort client-side by entregaRealAt or createdAt descending
+      docs.sort((a, b) => {
+        const getVal = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          if (typeof val.getTime === 'function') return val.getTime();
+          return Number(val) || 0;
+        };
+        // fallback to createdAt if entregaRealAt is missing
+        const valA = a.entregaRealAt || getVal(a.createdAt);
+        const valB = b.entregaRealAt || getVal(b.createdAt);
+        return valB - valA;
+      });
       
-      const pending = docs.filter(trip => trip.payoutInfo?.estado !== 'pagado');
+      const sliced = docs.slice(0, 30);
+      setCompletedTrips(sliced);
+      
+      const pending = sliced.filter(trip => trip.payoutInfo?.estado !== 'pagado');
       setPendingPayoutTrips(pending);
       
       // Check if we should show payment modal

@@ -42,25 +42,25 @@ function handleFirestoreError(error: unknown, operationType: 'create' | 'write' 
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Complete Zod schema supporting all 4 profiles
+// Complete Zod schema supporting all 4 profiles with conditional validation
 const registerSchema = z.object({
   // Step 1 selected type
   organizationType: z.enum(['casual', 'independent_driver', 'shipper_company', 'transport_company']),
 
   // 1. Common / Casual fields
-  nombre: z.string().min(3, 'Nombre o Razón Social demasiado corta'),
-  email: z.string().email('Email de acceso inválido'),
-  telefono: z.string().min(9, 'Teléfono debe tener al menos 9 dígitos'),
+  nombre: z.string().optional(),
+  email: z.string().optional(),
+  telefono: z.string().optional(),
   password: z.string()
     .min(8, 'Mínimo 8 caracteres')
     .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
     .regex(/[a-z]/, 'Debe contener al menos una minúscula')
     .regex(/[0-9]/, 'Debe contener al menos un número'),
-  documento: z.string().min(8, 'Documento (DNI/RUC) inválido').optional(),
+  documento: z.string().optional(),
 
   // 2. Transportista Independiente Specific Form Fields
-  licenciaNumero: z.string().min(5, 'Número de licencia inválido').optional(),
-  licenciaCategoria: z.string().min(2, 'Categoría inválida').optional(),
+  licenciaNumero: z.string().optional(),
+  licenciaCategoria: z.string().optional(),
   licenciaVencimiento: z.string().optional(),
   tipoVehiculo: z.string().optional(),
   placa: z.string().optional(),
@@ -103,6 +103,151 @@ const registerSchema = z.object({
   supervisorGps: z.string().optional(),
   responsableDespacho: z.string().optional(),
   monitoristasCantidad: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.organizationType === 'casual') {
+    if (!data.nombre || data.nombre.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Nombre demasiado corto (Mínimo 3 caracteres)',
+        path: ['nombre'],
+      });
+    }
+    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email de acceso inválido',
+        path: ['email'],
+      });
+    }
+    if (!data.telefono || data.telefono.length < 9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Teléfono debe tener al menos 9 dígitos',
+        path: ['telefono'],
+      });
+    }
+  }
+
+  if (data.organizationType === 'independent_driver') {
+    if (!data.nombre || data.nombre.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Nombre o Razón Social demasiado corta (Mínimo 3 caracteres)',
+        path: ['nombre'],
+      });
+    }
+    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email de acceso inválido',
+        path: ['email'],
+      });
+    }
+    if (!data.telefono || data.telefono.length < 9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Teléfono debe tener al menos 9 dígitos',
+        path: ['telefono'],
+      });
+    }
+    if (!data.documento || data.documento.length < 8) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Documento (DNI/RUC) inválido',
+        path: ['documento'],
+      });
+    }
+    if (!data.licenciaNumero || data.licenciaNumero.length < 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Número de licencia inválido (Mínimo 5 caracteres)',
+        path: ['licenciaNumero'],
+      });
+    }
+    if (!data.licenciaCategoria || data.licenciaCategoria.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Categoría inválida',
+        path: ['licenciaCategoria'],
+      });
+    }
+  }
+
+  if (data.organizationType === 'shipper_company') {
+    if (!data.ruc || data.ruc.length !== 11) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'RUC corporativo debe tener exactamente 11 dígitos',
+        path: ['ruc'],
+      });
+    }
+    if (!data.razonSocial || data.razonSocial.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Razón Social es requerida (Mínimo 3 caracteres)',
+        path: ['razonSocial'],
+      });
+    }
+    if (!data.nombreResponsable || data.nombreResponsable.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Nombre de responsable es requerido (Mínimo 3 caracteres)',
+        path: ['nombreResponsable'],
+      });
+    }
+    if (!data.correoCorporativo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.correoCorporativo)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email corporativo inválido',
+        path: ['correoCorporativo'],
+      });
+    }
+    if (!data.telefonoCorporativo || data.telefonoCorporativo.length < 9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Teléfono corporativo debe tener al menos 9 dígitos',
+        path: ['telefonoCorporativo'],
+      });
+    }
+  }
+
+  if (data.organizationType === 'transport_company') {
+    if (!data.ruc || data.ruc.length !== 11) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'RUC corporativo debe tener exactamente 11 dígitos',
+        path: ['ruc'],
+      });
+    }
+    if (!data.razonSocial || data.razonSocial.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Razón Social es requerida (Mínimo 3 caracteres)',
+        path: ['razonSocial'],
+      });
+    }
+    if (!data.anosOperacion || data.anosOperacion.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Años de operación es requerido',
+        path: ['anosOperacion'],
+      });
+    }
+    if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email de acceso corporativio inválido',
+        path: ['email'],
+      });
+    }
+    if (!data.telefono || data.telefono.length < 9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Teléfono de acceso debe tener al menos 9 dígitos',
+        path: ['telefono'],
+      });
+    }
+  }
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -243,9 +388,19 @@ export const Register = () => {
     }
   };
 
+  const onInvalid = (formErrors: any) => {
+    console.error('Validation errors:', formErrors);
+    const firstErrorKey = Object.keys(formErrors)[0];
+    if (firstErrorKey) {
+      const errorMsg = formErrors[firstErrorKey]?.message || 'Por favor, completa correctamente todos los campos obligatorios.';
+      setError(`Error de validación: ${errorMsg}`);
+    }
+  };
+
   // Submit Handler for custom profile schemas
   const onSubmit: SubmitHandler<RegisterFormValues> = async (data) => {
-    const isAdminEmail = ADMIN_EMAILS.includes(data.email.toLowerCase());
+    const resolvedEmail = data.email || data.correoCorporativo || '';
+    const isAdminEmail = resolvedEmail ? ADMIN_EMAILS.includes(resolvedEmail.toLowerCase()) : false;
 
     // Identity upload checking constraints
     if (orgType === 'independent_driver') {
@@ -261,13 +416,13 @@ export const Register = () => {
     try {
       let user;
       try {
-        const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        const userCredential = await createUserWithEmailAndPassword(auth, resolvedEmail, data.password);
         user = userCredential.user;
       } catch (authErr: any) {
         if (authErr.code === 'auth/email-already-in-use') {
           // Attempt sign in to gracefully capture fallback
           try {
-            const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+            const userCredential = await signInWithEmailAndPassword(auth, resolvedEmail, data.password);
             user = userCredential.user;
           } catch (signInErr: any) {
             setError('Este correo electrónico ya está registrado. Por favor, recupera tu contraseña o usa uno diferente.');
@@ -302,6 +457,7 @@ export const Register = () => {
         completedTrips: 0,
         indiceConfiabilidad: 100,
         createdAt: Date.now(),
+        organizationId: (orgType === 'shipper_company' || orgType === 'transport_company') ? `${user.uid}_org` : undefined,
         organizationType: orgType,
         ruc: data.ruc || undefined,
         razonSocial: data.razonSocial || undefined,
@@ -465,6 +621,7 @@ export const Register = () => {
           cantidadVehiculos: data.cantidadVehiculos ? parseInt(data.cantidadVehiculos) : undefined,
           cantidadChoferes: data.cantidadChoferes ? parseInt(data.cantidadChoferes) : undefined,
           coberturaNacional: data.coberturaNacional,
+          adminUser: user.uid,
           plan: 'enterprise_os',
           status: 'activo',
           createdAt: Date.now()
@@ -590,7 +747,7 @@ export const Register = () => {
           // Checkboxes are optional / layout validated
           fieldsToValidate = ['cantidadSedes'];
         } else if (step === 5) {
-          fieldsToValidate = ['gerenteOperaciones', 'supervisorGps', 'responsableDespacho', 'correoCorporativo', 'telefonoCorporativo', 'password'];
+          fieldsToValidate = ['gerenteOperaciones', 'supervisorGps', 'responsableDespacho', 'email', 'telefono', 'password'];
         }
       }
     }
@@ -806,7 +963,7 @@ export const Register = () => {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
             <AnimatePresence mode="wait">
               {error && (
                 <motion.div 
