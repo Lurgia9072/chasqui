@@ -20,6 +20,7 @@ import { History } from './pages/History';
 import { Profile } from './pages/Profile';
 import { PublicTracking } from './pages/PublicTracking';
 import { EnterpriseDashboard } from './pages/enterprise/EnterpriseDashboard';
+import { FleetERP } from './pages/enterprise/FleetERP';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
 import { SupportWidget } from './pages/Support';
@@ -66,18 +67,31 @@ export default function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/publicar-carga" element={<PostCargo requireAuth={false} />} />
                 <Route path="/track/:id" element={<PublicTracking />} />
-                <Route path="/enterprise" element={<EnterpriseDashboard />} />
                 <Route path="/demos" element={<Demos />} />
 
-                {/* Merchant Routes */}
-                <Route element={<ProtectedRoute allowedRoles={['comerciante']} />}>
+                {/* Shipper Company / Enterprise Routes */}
+                <Route element={<ProtectedRoute allowedOrgTypes={['shipper_company']} />}>
+                  <Route path="/enterprise" element={<EnterpriseDashboard />} />
+                  <Route path="/shipper-os" element={<EnterpriseDashboard />} />
+                  <Route path="/control-tower" element={<EnterpriseDashboard />} />
+                </Route>
+
+                {/* Transport Company / Fleet Routes */}
+                <Route element={<ProtectedRoute allowedOrgTypes={['transport_company']} />}>
+                  <Route path="/fleet-os" element={<FleetERP />} />
+                  <Route path="/transport-company" element={<FleetERP />} />
+                  <Route path="/fleet-control" element={<FleetERP />} />
+                </Route>
+
+                {/* Merchant / Casual Routes */}
+                <Route element={<ProtectedRoute allowedOrgTypes={['casual']} />}>
                   <Route path="/merchant/dashboard" element={<MerchantDashboard />} />
                   <Route path="/merchant/post-cargo" element={<PostCargo />} />
                   <Route path="/merchant/cargo/:id" element={<MerchantCargoDetails />} />
                 </Route>
 
-                {/* Carrier Routes */}
-                <Route element={<ProtectedRoute allowedRoles={['transportista']} />}>
+                {/* Independent Driver / Carrier Routes */}
+                <Route element={<ProtectedRoute allowedOrgTypes={['independent_driver']} />}>
                   <Route path="/carrier/dashboard" element={<CarrierDashboard />} />
                   <Route path="/carrier/cargo/:id" element={<CarrierCargoDetails />} />
                 </Route>

@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { Button } from './ui/Button';
 import { 
   History, AlertCircle, Menu, X, User, LogOut, Package, 
-  Globe, ChevronDown, Building2, ShieldCheck, Play, ArrowRight, Truck 
+  Globe, ChevronDown, Building2, ShieldCheck, Play, ArrowRight, Truck, Plus 
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -27,13 +27,14 @@ export const Navbar = () => {
     try {
       await signOut(auth);
       setUser(null);
-      navigate('/login');
+      window.location.href = '/login';
     } catch (error) {
       console.error('Error logging out:', error);
     }
   };
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const orgType = user ? (user.organizationType || (user.tipoUsuario === 'comerciante' ? 'casual' : 'independent_driver')) : null;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -86,20 +87,61 @@ export const Navbar = () => {
                 </Link>
               )}
               
-              <Link
-                to={user.tipoUsuario === 'admin' ? '/admin' : (user.tipoUsuario === 'comerciante' ? '/merchant/dashboard' : '/carrier/dashboard')}
-                className="text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white transition-colors"
-              >
-                Panel Operativo
-              </Link>
+              {orgType === 'casual' && (
+                <>
+                  <Link
+                    to="/merchant/dashboard"
+                    className="text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white transition-colors"
+                  >
+                    Panel Operativo Carga Casual
+                  </Link>
+                  <Link
+                    to="/merchant/post-cargo"
+                    className="text-xs font-black uppercase text-orange-400 hover:text-orange-300 transition-colors"
+                  >
+                    Publicar Carga
+                  </Link>
+                </>
+              )}
 
-              <Link
-                to="/enterprise"
-                className="text-xs font-black uppercase text-indigo-400 hover:text-indigo-300 transition-colors flex items-center space-x-1"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                <span>SaaS Enterprise</span>
-              </Link>
+              {orgType === 'independent_driver' && (
+                <Link
+                  to="/carrier/dashboard"
+                  className="text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white transition-colors"
+                >
+                  Bolsa de Cargas (Fletes)
+                </Link>
+              )}
+
+              {orgType === 'shipper_company' && (
+                <>
+                  <Link
+                    to="/shipper-os"
+                    className="text-xs font-black uppercase text-indigo-400 hover:text-indigo-300 transition-colors flex items-center space-x-1"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                    <span>Torre de Control (Shipper)</span>
+                  </Link>
+                  <Link
+                    to="/merchant/post-cargo"
+                    className="text-xs font-black uppercase text-slate-300 hover:text-white transition-colors text-xs"
+                  >
+                    Nueva Carga Industrial
+                  </Link>
+                </>
+              )}
+
+              {orgType === 'transport_company' && (
+                <>
+                  <Link
+                    to="/fleet-os"
+                    className="text-xs font-black uppercase text-purple-400 hover:text-purple-300 transition-colors flex items-center space-x-1"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
+                    <span>ERP Flota OS</span>
+                  </Link>
+                </>
+              )}
 
               <Link
                 to="/history"
@@ -117,7 +159,7 @@ export const Navbar = () => {
                     {user.nombre}
                   </Link>
                   <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">
-                    {isAdmin ? 'SYS ADMIN' : user.tipoCuenta === 'ruc20' ? 'SaaS Empresa' : user.tipoUsuario}
+                    {isAdmin ? 'SYS ADMIN' : (orgType === 'shipper_company' ? 'Empresa Exportadora' : orgType === 'transport_company' ? 'Empresa de Transporte' : orgType === 'independent_driver' ? 'Conductor Independiente' : 'Carga Casual')}
                   </span>
                 </div>
                 <Link to="/profile" className="h-8 w-8 rounded-full bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center hover:border-indigo-400 transition-all">
@@ -363,27 +405,75 @@ export const Navbar = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white truncate">{user.nombre}</p>
-                    <p className="text-[9px] text-slate-500 uppercase font-black">{isAdmin ? 'SYS ADMIN' : user.tipoUsuario}</p>
+                    <p className="text-[9px] text-slate-500 uppercase font-black">
+                      {isAdmin ? 'SYS ADMIN' : (orgType === 'shipper_company' ? 'Empresa Exportadora' : orgType === 'transport_company' ? 'Empresa de Transporte' : orgType === 'independent_driver' ? 'Conductor Independiente' : 'Carga Casual')}
+                    </p>
                   </div>
                 </div>
 
-                <Link 
-                  to={user.tipoUsuario === 'admin' ? '/admin' : (user.tipoUsuario === 'comerciante' ? '/merchant/dashboard' : '/carrier/dashboard')}
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 p-3 text-slate-300 hover:bg-slate-900 rounded-xl font-bold"
-                >
-                  <Package className="h-5 w-5 text-indigo-400" />
-                  <span>Panel Operativo</span>
-                </Link>
+                {orgType === 'casual' && (
+                  <>
+                    <Link 
+                      to="/merchant/dashboard"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center space-x-3 p-3 text-slate-300 hover:bg-slate-900 rounded-xl font-bold"
+                    >
+                      <Package className="h-5 w-5 text-orange-400" />
+                      <span>Panel Cargas Casuales</span>
+                    </Link>
+                    <Link 
+                      to="/merchant/post-cargo"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center space-x-3 p-3 text-orange-400 hover:bg-slate-900 rounded-xl font-bold"
+                    >
+                      <Plus className="h-5 w-5 text-orange-450" />
+                      <span>Publicar Carga</span>
+                    </Link>
+                  </>
+                )}
 
-                <Link 
-                  to="/enterprise"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center space-x-3 p-3 text-indigo-400 hover:bg-slate-900 rounded-xl font-bold"
-                >
-                  <Globe className="h-5 w-5 text-indigo-450" />
-                  <span>SaaS Enterprise Workspace</span>
-                </Link>
+                {orgType === 'independent_driver' && (
+                  <Link 
+                    to="/carrier/dashboard"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center space-x-3 p-3 text-slate-300 hover:bg-slate-900 rounded-xl font-bold"
+                  >
+                    <Truck className="h-5 w-5 text-emerald-400" />
+                    <span>Bolsa de Fletes</span>
+                  </Link>
+                )}
+
+                {orgType === 'shipper_company' && (
+                  <>
+                    <Link 
+                      to="/shipper-os"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center space-x-3 p-3 text-indigo-400 hover:bg-slate-900 rounded-xl font-bold"
+                    >
+                      <Building2 className="h-5 w-5 text-indigo-400" />
+                      <span>Torre de Control Shipper</span>
+                    </Link>
+                    <Link 
+                      to="/merchant/post-cargo"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center space-x-3 p-3 text-slate-300 hover:bg-slate-900 rounded-xl font-bold"
+                    >
+                      <Plus className="h-5 w-5 text-slate-400" />
+                      <span>Nueva Carga Industrial</span>
+                    </Link>
+                  </>
+                )}
+
+                {orgType === 'transport_company' && (
+                  <Link 
+                    to="/fleet-os"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center space-x-3 p-3 text-purple-400 hover:bg-slate-900 rounded-xl font-bold"
+                  >
+                    <Truck className="h-5 w-5 text-purple-400" />
+                    <span>ERP Flota OS</span>
+                  </Link>
+                )}
 
                 <Link 
                   to="/history"
