@@ -19,9 +19,11 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { History } from './pages/History';
 import { Profile } from './pages/Profile';
 import { PublicTracking } from './pages/PublicTracking';
+import { EnterpriseDashboard } from './pages/enterprise/EnterpriseDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/ui/NotificationProvider';
 import { SupportWidget } from './pages/Support';
+import { Demos } from './pages/demos';
 
 export default function App() {
   useAuth();
@@ -62,7 +64,10 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/publicar-carga" element={<PostCargo requireAuth={false} />} />
                 <Route path="/track/:id" element={<PublicTracking />} />
+                <Route path="/enterprise" element={<EnterpriseDashboard />} />
+                <Route path="/demos" element={<Demos />} />
 
                 {/* Merchant Routes */}
                 <Route element={<ProtectedRoute allowedRoles={['comerciante']} />}>

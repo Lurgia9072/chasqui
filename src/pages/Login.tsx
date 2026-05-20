@@ -9,11 +9,11 @@ import { auth, db } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { AlertCircle, Mail, Eye, EyeOff, CheckCircle2, X, Zap, ShieldCheck, Lock, ArrowLeft } from 'lucide-react';
+import { AlertCircle, Mail, Eye, EyeOff, CheckCircle2, X, Zap, ShieldCheck, Lock, ArrowLeft, ArrowRight, Package, Truck, Building2, ChevronRight } from 'lucide-react';
+import { ChasquiLogo } from '../components/ChasquiLogo';
 import { User } from '../types';
 import { ADMIN_EMAILS } from '../lib/constants';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChasquiLogo } from '../components/ChasquiLogo';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -31,6 +31,7 @@ export const Login = () => {
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
 
@@ -121,11 +122,8 @@ export const Login = () => {
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]"></div>
         
         <div className="relative z-10 space-y-12 max-w-lg mx-auto">
-          <Link to="/" className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-900 rotate-3">
-              <Zap className="h-6 w-6" />
-            </div>
-            <span className="text-2xl font-black tracking-tighter text-white">chasqui</span>
+          <Link to="/" className="inline-flex hover:opacity-80 transition-opacity">
+            <ChasquiLogo variant="white" />
           </Link>
 
           <div className="space-y-6">
@@ -176,94 +174,198 @@ export const Login = () => {
              <Link to="/"><ChasquiLogo size="sm" /></Link>
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-3xl font-black text-slate-900">Bienvenido de nuevo</h2>
-            <p className="text-slate-500 font-medium">Ingresa tus credenciales para acceder a tu panel.</p>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <AnimatePresence mode="wait">
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="rounded-xl bg-red-50 border border-red-100 p-4 space-y-2"
-                >
-                  <div className="flex items-center gap-2 text-red-600">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span className="text-sm font-bold">{error}</span>
-                  </div>
-                  {unverifiedUser && (
-                    <button
-                      type="button"
-                      onClick={handleResendVerification}
-                      className="text-xs font-black text-red-700 hover:underline pl-6"
-                    >
-                      Reenviar enlace de verificación
-                    </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {info && (
-              <div className="flex items-center gap-2 rounded-xl bg-blue-50 p-4 text-sm text-blue-600 border border-blue-100 font-bold">
-                <Mail className="h-4 w-4" />
-                <span>{info}</span>
+          {!selectedSegment ? (
+            <div className="space-y-8 animate-fade-in">
+              <div className="space-y-2">
+                <p className="text-indigo-600 text-xs font-black uppercase tracking-widest">— PORTAL DE INGRESO UNIFICADO —</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">¿Cómo deseas ingresar?</h2>
+                <p className="text-slate-500 text-xs font-medium">Selecciona tu perfil de operaciones en la plataforma Chasqui.</p>
               </div>
-            )}
 
-            <div className="space-y-4">
-              <Input
-                label="Correo Electrónico"
-                type="email"
-                placeholder="nombre@ejemplo.com"
-                {...register('email')}
-                error={errors.email?.message}
-                className="h-12 border-slate-200 focus:ring-blue-500"
-              />
-              <div className="space-y-1">
-                <Input
-                  label="Contraseña"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  {...register('password')}
-                  error={errors.password?.message}
-                  className="h-12 border-slate-200 focus:ring-blue-500"
-                  suffix={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  }
-                />
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotModal(true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 underline underline-offset-2"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                </div>
+              <div className="grid grid-cols-1 gap-3.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSegment('comerciante_natural')}
+                  className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-blue-600 hover:bg-slate-50/50 text-left transition-all group w-full"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Package className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center justify-between">
+                      <span>📦 Cliente / Comerciante MYPE</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </h3>
+                    <p className="text-[11px] text-slate-550 font-medium">Sube cargas, solicita envíos o mudanzas.</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedSegment('transportista_natural')}
+                  className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-emerald-600 hover:bg-slate-50/50 text-left transition-all group w-full"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Truck className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center justify-between">
+                      <span>🚛 Transportista Independiente</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </h3>
+                    <p className="text-[11px] text-slate-550 font-medium">Postula a fletes terrestres y genera ingresos.</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedSegment('comerciante_ruc20')}
+                  className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-indigo-600 hover:bg-slate-50/50 text-left transition-all group w-full"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center justify-between">
+                      <span>🏢 Empresa Corporativa</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </h3>
+                    <p className="text-[11px] text-slate-550 font-medium">Gestión SaaS de import/export y cadena fría.</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedSegment('transportista_ruc20')}
+                  className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-purple-600 hover:bg-slate-50/50 text-left transition-all group w-full"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center justify-between">
+                      <span>🚚 Empresa de Transporte (Flotas)</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </h3>
+                    <p className="text-[11px] text-slate-550 font-medium">Control de unidades, conductores y telemetría.</p>
+                  </div>
+                </button>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-500">
+                <span>¿No estás registrado?</span>
+                <Link to="/register" className="font-black text-indigo-600 hover:underline">
+                  Crear cuenta gratis
+                </Link>
               </div>
             </div>
+          ) : (
+            <div className="space-y-8 animate-fade-in">
+              <button
+                type="button"
+                onClick={() => setSelectedSegment(null)}
+                className="inline-flex items-center gap-2 text-xs font-black uppercase text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Volver a opciones de ingreso</span>
+              </button>
 
-            <Button type="submit" className="w-full h-14 text-lg font-black shadow-lg shadow-blue-500/20" isLoading={isLoading}>
-              Iniciar Sesión
-            </Button>
-          </form>
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                  {selectedSegment === 'comerciante_natural' && '📦 Cliente / MYPE'}
+                  {selectedSegment === 'transportista_natural' && '🚛 Transportista'}
+                  {selectedSegment === 'comerciante_ruc20' && '🏢 Empresa Corporativa'}
+                  {selectedSegment === 'transportista_ruc20' && '🚚 Empresa Logística / SaaS'}
+                </span>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">Ingresa al Portal</h2>
+                <p className="text-slate-550 text-xs font-medium">Ingresa tus credenciales autorizadas.</p>
+              </div>
 
-          <p className="text-center text-sm font-medium text-slate-500">
-            ¿No tienes una cuenta?{' '}
-            <Link to="/register" className="font-black text-blue-600 hover:text-blue-700 underline underline-offset-2">
-              Regístrate aquí
-            </Link>
-          </p>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                <AnimatePresence mode="wait">
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="rounded-xl bg-red-50 border border-red-100 p-4 space-y-2"
+                    >
+                      <div className="flex items-center gap-2 text-red-600">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span className="text-xs font-black">{error}</span>
+                      </div>
+                      {unverifiedUser && (
+                        <button
+                          type="button"
+                          onClick={handleResendVerification}
+                          className="text-xs font-black text-red-700 hover:underline pl-6"
+                        >
+                          Reenviar enlace de verificación
+                        </button>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {info && (
+                  <div className="flex items-center gap-2 rounded-xl bg-blue-50 p-4 text-xs text-blue-600 border border-blue-100 font-bold">
+                    <Mail className="h-4 w-4" />
+                    <span>{info}</span>
+                  </div>
+                )}
+
+                <div className="space-y-4 font-sans">
+                  <Input
+                    label="Correo Electrónico"
+                    type="email"
+                    placeholder="nombre@ejemplo.com"
+                    {...register('email')}
+                    error={errors.email?.message}
+                    className="h-12 border-slate-200 focus:ring-blue-500"
+                  />
+                  <div className="space-y-1">
+                    <Input
+                      label="Contraseña"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      {...register('password')}
+                      error={errors.password?.message}
+                      className="h-12 border-slate-200 focus:ring-blue-500"
+                      suffix={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      }
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotModal(true)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-755 underline underline-offset-2"
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full h-14 text-xs uppercase tracking-widest font-black shadow-lg shadow-indigo-600/10 bg-indigo-650 hover:bg-slate-900 text-white" isLoading={isLoading}>
+                  Ingresar al Ecosistema
+                </Button>
+              </form>
+
+              <p className="text-center text-sm font-medium text-slate-500">
+                ¿No tienes una cuenta?{' '}
+                <button type="button" onClick={() => navigate('/register')} className="font-black text-indigo-600 hover:text-indigo-800 underline underline-offset-2">
+                  Regístrate aquí
+                </button>
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

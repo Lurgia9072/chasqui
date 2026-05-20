@@ -286,6 +286,34 @@
       "schema": "SupportChat",
       "description": "Support chat messages"
     },
+    "/organizations/{orgId}": {
+      "schema": "object",
+      "description": "Enterprise organizations"
+    },
+    "/sedes/{sedeId}": {
+      "schema": "object",
+      "description": "Multi-sede branches mapping"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "object",
+      "description": "Fleet telematic vehicles"
+    },
+    "/drivers/{driverId}": {
+      "schema": "object",
+      "description": "Fleet registered drivers with credentials"
+    },
+    "/enterpriseCargos/{cargoId}": {
+      "schema": "object",
+      "description": "Enterprise transport cargoes"
+    },
+    "/enterpriseTrips/{tripId}": {
+      "schema": "object",
+      "description": "Real-time enterprise telematic trips"
+    },
+    "/enterpriseChats/{chatId}": {
+      "schema": "object",
+      "description": "Intra-enterprise chat messages and logs"
+    },
     "/config/{configId}": {
       "schema": "object",
       "description": "System configuration"

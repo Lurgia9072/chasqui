@@ -1,10 +1,10 @@
 {
-  "apiKey": "AIzaSyAGPrU8vMsHtfgP1BRabFk8nbLG5m7M5-w",
-  "authDomain": "chasqui-8aaa9.firebaseapp.com",
-  "projectId": "chasqui-8aaa9",
-  "storageBucket": "chasqui-8aaa9.firebasestorage.app",
-  "messagingSenderId": "639057191967",
-  "appId": "1:639057191967:web:facdf8ea19d3305d11a12a",
-  "measurementId": "G-QS51XHM425",
+  "apiKey": "AIzaSyB4DGmMfb-cbUB6Fcn6r3hITTTvQynOtGQ",
+  "authDomain": "test-chasqui.firebaseapp.com",
+  "projectId": "test-chasqui",
+  "storageBucket": "test-chasqui.firebasestorage.app",
+  "messagingSenderId": "222366400048",
+  "appId": "1:222366400048:web:9ab1550e895dabdc9a77f5",
+  "measurementId": "G-GRQW10ED0B",
   "firestoreDatabaseId": "(default)"
 }

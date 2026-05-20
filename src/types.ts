@@ -48,6 +48,38 @@ export interface User {
   puertoPrincipal?: 'callao' | 'paita' | 'matarani' | 'ilo' | 'otro';
   agenteAduana?: string;
   
+  // Camilla de Campos de Onboarding Avanzados (SaaS Multiempresa / Multi-flota)
+  organizationType?: 'casual' | 'independent_driver' | 'shipper_company' | 'transport_company';
+  role?: 'admin' | 'logistics_manager' | 'dispatcher' | 'monitor' | 'auditor' | 'driver';
+  nombreComercial?: string;
+  tamanioEmpresa?: string;
+  coberturaNacional?: string;
+  anosOperacion?: number;
+  cantidadVehiculos?: number;
+  cantidadChoferes?: number;
+  usaFrio?: boolean;
+  usaAduanas?: boolean;
+  frecuenciaDespachos?: string;
+  cantidadUsuarios?: number;
+  cantidadSedes?: number;
+  gerenteOperaciones?: string;
+  supervisorGps?: string;
+  responsableDespacho?: string;
+  monitoristas?: number;
+  cargoResponsable?: string;
+  nombreResponsable?: string;
+  
+  // Datos específicos de Conductor Independiente
+  licenciaNumero?: string;
+  licenciaCategoria?: string;
+  licenciaVencimiento?: string;
+  vehiculoMarca?: string;
+  vehiculoModelo?: string;
+  vehiculoAno?: string;
+  rutasFrecuentes?: string;
+  disponibilidad?: string;
+  tipoCargaAceptada?: string;
+  
   zonasOperacion?: string[];
   currentLocation?: Location;
   vehiculo?: {
@@ -144,15 +176,17 @@ export interface Trip {
   cuidadoEspecial?: string;
   comercianteId: string;
   comercianteNombre?: string;
+  comercianteEmail?: string;
   transportistaId: string;
   transportistaNombre?: string;
+  transportistaEmail?: string;
   origen: string;
   destino: string;
   precioFinal: number;
   comision: number;
   estado: TripStatus;
   seguimiento?: Location;
-  checkpoints: Checkpoint[];
+  checkpoints?: Checkpoint[];
   
   // Trazabilidad Específica
   fechaHoraLimitePuerto?: number;

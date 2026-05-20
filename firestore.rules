@@ -105,6 +105,10 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(fields);
     }
 
+    function getUserOrg() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -149,34 +153,9 @@ service cloud.firestore {
              data.destino is string &&
              data.nombreProducto is string &&
              data.descripcion is string &&
-             data.precioPropuesto is number &&
+             (data.precioPropuesto is number || data.precioPropuesto is int) &&
              data.estado in ['disponible', 'en_negociacion', 'asignado', 'completado'] &&
-             data.createdAt is number &&
-             (!('tipoCarga' in data) || (data.tipoCarga is string)) &&
-             (!('peso' in data) || (data.peso is number)) &&
-             (!('horario' in data) || (data.horario is string)) &&
-             (!('sectorProducto' in data) || (data.sectorProducto is string)) &&
-             (!('lote' in data) || (data.lote is string)) &&
-             (!('guiaRemision' in data) || (data.guiaRemision is string)) &&
-             (!('rucExportador' in data) || (data.rucExportador is string)) &&
-             (!('puertoDestino' in data) || (data.puertoDestino is string)) &&
-             (!('fechaHoraLimitePuerto' in data) || (data.fechaHoraLimitePuerto is number || data.fechaHoraLimitePuerto == null)) &&
-             (!('capacidadRequerida' in data) || (data.capacidadRequerida is string)) &&
-             (!('categoria' in data) || (data.categoria is string)) &&
-             (!('certificacion' in data) || (data.certificacion is string)) &&
-             (!('partidaArancelaria' in data) || (data.partidaArancelaria is string)) &&
-             (!('temperaturaRequerida' in data) || (data.temperaturaRequerida is string)) &&
-             (!('tipoVehiculoRequerido' in data) || (data.tipoVehiculoRequerido is string)) &&
-             (!('condicionSanitaria' in data) || (data.condicionSanitaria is bool)) &&
-             (!('numeroContenedor' in data) || (data.numeroContenedor is string)) &&
-             (!('seguroCarga' in data) || (data.seguroCarga is string)) &&
-             (!('cuidadoEspecial' in data) || (data.cuidadoEspecial is string)) &&
-             (!('eudr' in data) || (data.eudr is string)) &&
-             (!('origenCoords' in data) || (data.origenCoords is map || data.origenCoords == null)) &&
-             (!('destinoCoords' in data) || (data.destinoCoords is map || data.destinoCoords == null)) &&
-             (!('comercianteNombre' in data) || (data.comercianteNombre is string)) &&
-             (!('vehiculo' in data) || (data.vehiculo is map || data.vehiculo == null)) &&
-             (!('ofertasCount' in data) || (data.ofertasCount is number));
+             (data.createdAt is number || data.createdAt is int);
     }
 
     function isValidOffer(data) {
@@ -259,7 +238,7 @@ service cloud.firestore {
     match /cargas/{cargoId} {
       allow get: if true;
       allow list: if isAuthenticated();
-      allow create: if (isMerchant() || isAdmin()) && isValidCargo(request.resource.data);
+      allow create: if isAuthenticated() && (request.resource.data.comercianteId == request.auth.uid || isAdmin()) && isValidCargo(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.comercianteId || isAdmin());
       allow delete: if isAdmin();
 
@@ -276,10 +255,12 @@ service cloud.firestore {
       return isAuthenticated() && (
         request.auth.uid == trip.comercianteId || 
         request.auth.uid == trip.transportistaId ||
-        (request.auth.token.email_verified == true && (
-          request.auth.token.email.lower() == trip.comercianteEmail ||
-          request.auth.token.email.lower() == trip.transportistaEmail
-        ))
+        (request.auth.token.email_verified == true && 
+         trip.get('comercianteEmail', '') != '' && 
+         request.auth.token.email.lower() == trip.get('comercianteEmail', '').lower()) ||
+        (request.auth.token.email_verified == true && 
+         trip.get('transportistaEmail', '') != '' && 
+         request.auth.token.email.lower() == trip.get('transportistaEmail', '').lower())
       );
     }
 
@@ -289,21 +270,25 @@ service cloud.firestore {
         request.auth.uid == resource.data.comercianteId || 
         request.auth.uid == resource.data.transportistaId || 
         isAdmin() ||
-        (request.auth.token.email_verified == true && (
-          request.auth.token.email.lower() == resource.data.comercianteEmail ||
-          request.auth.token.email.lower() == resource.data.transportistaEmail
-        ))
+        (request.auth.token.email_verified == true && 
+         resource.data.get('comercianteEmail', '') != '' && 
+         request.auth.token.email.lower() == resource.data.get('comercianteEmail', '').lower()) ||
+        (request.auth.token.email_verified == true && 
+         resource.data.get('transportistaEmail', '') != '' && 
+         request.auth.token.email.lower() == resource.data.get('transportistaEmail', '').lower())
       );
-      allow create: if isAuthenticated() || isAdmin();
+      allow create: if (isAuthenticated() || isAdmin()) && isValidTrip(request.resource.data);
       allow update: if isAuthenticated() && (
         request.auth.uid == resource.data.comercianteId || 
         request.auth.uid == resource.data.transportistaId || 
         isAdmin() ||
-        (request.auth.token.email_verified == true && (
-          request.auth.token.email.lower() == resource.data.comercianteEmail ||
-          request.auth.token.email.lower() == resource.data.transportistaEmail
-        ))
-      );
+        (request.auth.token.email_verified == true && 
+         resource.data.get('comercianteEmail', '') != '' && 
+         request.auth.token.email.lower() == resource.data.get('comercianteEmail', '').lower()) ||
+        (request.auth.token.email_verified == true && 
+         resource.data.get('transportistaEmail', '') != '' && 
+         request.auth.token.email.lower() == resource.data.get('transportistaEmail', '').lower())
+      ) && isValidTrip(request.resource.data);
       allow delete: if isAdmin();
 
       match /checkpoints/{checkpointId} {
@@ -344,6 +329,53 @@ service cloud.firestore {
     match /config/{configId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated() && (orgId == getUserOrg() || isAdmin());
+      allow write: if isAuthenticated() && (orgId == getUserOrg() || isAdmin());
+    }
+
+    match /sedes/{sedeId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+    }
+
+    match /drivers/{driverId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+    }
+
+    match /enterpriseCargos/{cargoId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+    }
+
+    match /enterpriseTrips/{tripId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+    }
+
+    match /enterpriseChats/{chatId} {
+      allow read: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.organizationId == getUserOrg() && request.resource.data.organizationId == getUserOrg() || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.organizationId == getUserOrg() || isAdmin());
     }
 
     match /{path=**} {
