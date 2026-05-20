@@ -8,6 +8,7 @@ import { Navbar } from './components/Navbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
+import { AdminLogin } from './pages/AdminLogin';
 import { Register } from './pages/Register';
 import { MerchantDashboard } from './pages/merchant/Dashboard';
 import { CarrierDashboard } from './pages/carrier/Dashboard';
@@ -64,6 +65,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/publicar-carga" element={<PostCargo requireAuth={false} />} />
                 <Route path="/track/:id" element={<PublicTracking />} />

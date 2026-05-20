@@ -258,6 +258,13 @@ export const Login = () => {
                   Crear cuenta gratis
                 </Link>
               </div>
+
+              <div className="pt-4 border-t border-slate-100/50 flex justify-center text-xs">
+                <Link to="/admin/login" className="inline-flex items-center gap-1.5 font-bold text-slate-500 hover:text-indigo-600 transition-colors">
+                  <ShieldCheck className="h-4 w-4 text-slate-400" />
+                  <span>Consola de Administradores</span>
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="space-y-8 animate-fade-in">
