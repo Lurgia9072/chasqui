@@ -950,6 +950,12 @@ export function EnterpriseDashboard() {
     );
   }
 
+  // Dynamic KPIs calculations
+  const totalVehiclesCount = vehicles.length;
+  const activeVehiclesCount = vehicles.filter(v => v.estado === 'viaje' || v.estado === 'en_ruta' || v.estado === 'incidencia' || v.estado === 'ruta').length;
+  const capacityPercent = totalVehiclesCount > 0 ? Math.round((activeVehiclesCount / totalVehiclesCount) * 100) : 0;
+  const activeIncidencesCount = vehicles.filter(v => v.estado === 'incidencia').length + (currentAlertSim !== 'ninguna' ? 1 : 0);
+
   return (
     <div id="enterprise-os" className="min-h-screen bg-slate-900 text-slate-100 flex flex-col pt-4">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 pb-12 flex-1 flex flex-col">
@@ -1024,8 +1030,8 @@ export function EnterpriseDashboard() {
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center justify-between">
             <div>
               <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Camiones Activos</span>
-              <span className="text-2xl font-black font-mono mt-1 text-white">4 / 5</span>
-              <span className="text-[10px] text-emerald-400 block mt-0.5">● 80% Capacidad Flota</span>
+              <span className="text-2xl font-black font-mono mt-1 text-white">{activeVehiclesCount} / {totalVehiclesCount}</span>
+              <span className="text-[10px] text-emerald-400 block mt-0.5">● {capacityPercent}% Capacidad Flota</span>
             </div>
             <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400">
               <Truck className="h-6 w-6" />
@@ -1036,7 +1042,9 @@ export function EnterpriseDashboard() {
             <div>
               <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Cargas Totales</span>
               <span className="text-2xl font-black font-mono mt-1 text-white">{cargos.length}</span>
-              <span className="text-[10px] text-blue-400 block mt-0.5">Operación Multi-Sede</span>
+              <span className="text-[10px] text-blue-400 block mt-0.5">
+                {cargos.length > 0 ? 'Operación Multi-Sede' : 'Sin despachos creados'}
+              </span>
             </div>
             <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400">
               <Building2 className="h-6 w-6" />
@@ -1046,8 +1054,12 @@ export function EnterpriseDashboard() {
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center justify-between">
             <div>
               <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Integración SRE / GPS</span>
-              <span className="text-2xl font-black font-mono mt-1 text-white">99.8%</span>
-              <span className="text-[10px] text-emerald-400 block mt-0.5">✓ 0 Latencia Satelital</span>
+              <span className="text-2xl font-black font-mono mt-1 text-white">
+                {totalVehiclesCount > 0 ? '99.8%' : '—'}
+              </span>
+              <span className="text-[10px] text-emerald-400 block mt-0.5">
+                {totalVehiclesCount > 0 ? '✓ Cobertura Activa' : 'Sin unidades vinculadas'}
+              </span>
             </div>
             <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400">
               <ShieldCheck className="h-6 w-6" />
@@ -1057,14 +1069,14 @@ export function EnterpriseDashboard() {
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex items-center justify-between">
             <div>
               <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Alertas Críticas</span>
-              <span className={`text-2xl font-black font-mono mt-1 ${currentAlertSim !== 'ninguna' ? 'text-rose-500 animate-pulse' : 'text-slate-300'}`}>
-                {currentAlertSim !== 'ninguna' ? '1 ACTIVA' : '0'}
+              <span className={`text-2xl font-black font-mono mt-1 ${activeIncidencesCount > 0 ? 'text-rose-500 animate-pulse' : 'text-slate-300'}`}>
+                {activeIncidencesCount > 0 ? `${activeIncidencesCount} ACTIVA` : '0'}
               </span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                {currentAlertSim !== 'ninguna' ? 'Filtro SRE advertido' : 'Seguridad Operacional OK'}
+                {activeIncidencesCount > 0 ? 'Filtro SRE advertido' : (totalVehiclesCount > 0 ? 'Seguridad Operacional OK' : 'Sin unidades registradas')}
               </span>
             </div>
-            <div className={`p-2.5 rounded-lg ${currentAlertSim !== 'ninguna' ? 'bg-rose-500/10 text-rose-500 animate-pulse' : 'bg-slate-800 text-slate-500'}`}>
+            <div className={`p-2.5 rounded-lg ${activeIncidencesCount > 0 ? 'bg-rose-500/10 text-rose-500 animate-pulse' : 'bg-slate-800 text-slate-500'}`}>
               <AlertTriangle className="h-6 w-6" />
             </div>
           </div>
@@ -1192,16 +1204,19 @@ export function EnterpriseDashboard() {
                   <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col justify-between shadow-xl">
                     <div>
                       <h3 className="text-lg font-bold text-white flex items-center space-x-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                        <span>Multi-Empresa: Soporte Agrícola SAC</span>
+                        <span className={`w-2.5 h-2.5 rounded-full ${sedes.length > 0 ? 'bg-emerald-500' : 'bg-slate-650'}`}></span>
+                        <span>Multi-Empresa: {activeOrg?.razonSocial || activeOrg?.name || 'Cargando...'}</span>
                       </h3>
                       <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
-                        Controlando 4 plantas empacadoras en el norte del Perú. Permite delegar tareas a operadores específicos, despachar cargas refrigeradas masivas en puerto y auditar temperatura y SOATS de sub-flotas integradas de terceros.
+                        {sedes.length > 0 
+                          ? `Controlando ${sedes.length} ${sedes.length === 1 ? 'sede o planta activa' : 'sedes o plantas activas'} a nivel nacional. Permite delegar tareas a operadores específicos, despachar cargas refrigeradas masivas en puerto y auditar temperatura y SOATS de sub-flotas integradas de terceros.`
+                          : 'Registre sus sedes operativas en la pestaña Organización para comenzar el monitoreo y despacho regional de mercancía masiva.'
+                        }
                       </p>
                     </div>
                     <div className="mt-4 pt-4 border-t border-slate-900 flex justify-between text-xs font-mono text-slate-500">
-                      <span>RUC: 20601234567</span>
-                      <span>Sede Principal: San Isidro</span>
+                      <span>RUC: {activeOrg?.ruc || '—'}</span>
+                      <span>Sede Principal: {sedes[0]?.nombre || 'Sin registrar'}</span>
                     </div>
                   </div>
 
@@ -1209,15 +1224,17 @@ export function EnterpriseDashboard() {
                     <div>
                       <div className="flex justify-between items-start">
                         <h3 className="text-lg font-bold text-white">Suscripción SaaS</h3>
-                        <span className="rounded bg-indigo-500/10 text-indigo-400 px-2 py-0.5 text-[10px] font-black uppercase">Business Pro</span>
+                        <span className="rounded bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                          {activeOrg?.plan === 'enterprise' ? 'Enterprise core' : (activeOrg?.plan === 'business' ? 'PRO Business' : 'Plan FREE')}
+                        </span>
                       </div>
                       <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
-                        Acceso completo a flotas ilimitadas, rastreo de telemetría a puertos de exportación (Callao/Paita/Ilo), geocercas activas e inteligencia artificial de optimización de carga.
+                        Acceso corporativo premium habilitado. Conexión a múltiples flotas autorizadas, geocercas IoT avanzadas, Chasqui Copilot AI y emisión de actas de custodia integradas en tiempo real.
                       </p>
                     </div>
                     <div className="mt-4 pt-4 border-t border-slate-900 flex justify-between text-xs font-mono text-slate-500">
-                      <span>Próximo Pago: 15 Junio, 2026</span>
-                      <span>Sillas de Equipo: 6 / 15 Activas</span>
+                      <span>Próximo Pago: Automático</span>
+                      <span>Colaboradores: {users.length > 0 ? `${users.length} miembros registrados` : '1 (Admin principal)'}</span>
                     </div>
                   </div>
                 </div>
@@ -1225,21 +1242,33 @@ export function EnterpriseDashboard() {
                 {/* Operations Terminal Control panel */}
                 <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 shadow-xl">
                   <h3 className="text-base font-bold text-white mb-4">Sedes / Terminales Activos</h3>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {sedes.map(s => (
-                      <div key={s.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 relative overflow-hidden flex flex-col justify-between">
-                        <div>
-                          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">{s.tipo}</span>
-                          <h4 className="font-bold text-white text-sm mt-1">{s.nombre}</h4>
-                          <p className="text-slate-500 text-[11px] mt-1">{s.ubicacion}</p>
+                  {sedes.length === 0 ? (
+                    <div className="text-center p-8 bg-slate-900/30 rounded-xl border border-slate-800 border-dashed">
+                      <p className="text-xs text-slate-400">No hay sedes o puertos asignados todavía en este perfil.</p>
+                      <button
+                        onClick={() => setActiveTab('rbac')}
+                        className="mt-2 text-xs text-indigo-400 hover:underline font-bold"
+                      >
+                        + Configurar en Organización (RBAC)
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {sedes.map(s => (
+                        <div key={s.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 relative overflow-hidden flex flex-col justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">{s.tipo}</span>
+                            <h4 className="font-bold text-white text-sm mt-1">{s.nombre}</h4>
+                            <p className="text-slate-500 text-[11px] mt-1">{s.ubicacion}</p>
+                          </div>
+                          <div className="mt-4 pt-2 border-t border-slate-950 text-[10px] text-slate-400 flex justify-between">
+                            <span>Ubicado</span>
+                            <span className="font-semibold text-slate-300">Responsable: {s.encargado?.split(' ')[0] || 'Asignado'}</span>
+                          </div>
                         </div>
-                        <div className="mt-4 pt-2 border-t border-slate-950 text-[10px] text-slate-400 flex justify-between">
-                          <span>Ubicado</span>
-                          <span className="font-semibold text-slate-300">Responsable: {s.encargado.split(' ')[0]}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Log Telemetry Live Console */}
