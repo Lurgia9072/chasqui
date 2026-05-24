@@ -49,14 +49,55 @@ export interface EnterpriseDriver {
 
 export interface EnterpriseCargo {
   id: string;
-  tipoDeCarga: string;
+  tipoDeCarga: string; // 'refrigerado' | 'seco' | etc.
   nombreProducto: string;
   origen: string;
   destino: string;
   precioPropuesto: number;
-  estado: 'disponible' | 'en_transito' | 'por_asignar' | 'completado' | 'incidencia';
+  estado: 'pendiente' | 'buscando_transporte' | 'en_negociacion' | 'asignada' | 'en_recojo' | 'en_ruta' | 'en_entrega' | 'entregada' | 'completada' | 'rechazada' | 'cancelada';
   conductorAsignado?: string;
   vehiculoAsignado?: string;
   fechaEntregaLimite: string;
+  temperaturaSet?: number;
   temperaturaActual?: number;
+  prioridad?: 'baja' | 'media' | 'alta' | 'critica';
+  carrierId?: string;
+  carrierName?: string;
+  pesoKg?: number;
+  volumenM3?: number;
+  observaciones?: string;
+  createdAt?: number;
+  incidents?: string[]; // IDs or messages
+  checkpoints?: { id: string; mensaje: string; timestamp: number; lat: number; lng: number }[];
+  evidencias?: { id: string; url: string; tipo: string; fecha: number; autor: string }[];
 }
+
+export interface EnterpriseCarrier {
+  id: string;
+  name: string;
+  ruc: string;
+  telefono: string;
+  email: string;
+  flotaSize: number;
+  operacionZonas: string;
+  slaPercent: number; // e.g. 98.4
+  viajesConcretados: number;
+  documentosVigentes: boolean;
+  contactoNombre: string;
+  estadoStr: 'activo' | 'suspendido' | 'auditoria';
+}
+
+export interface EnterpriseIncident {
+  id: string;
+  cargoId: string;
+  cargoName: string;
+  tipo: 'retraso' | 'desvio' | 'temperatura' | 'parada_sospechosa' | 'falla_mecanica' | 'accidente' | 'otra';
+  gravedad: 'baja' | 'media' | 'alta' | 'critica';
+  descripcion: string;
+  estado: 'abierto' | 'bajo_analisis' | 'escalado' | 'resuelto';
+  creadoPor: string;
+  createdAt: number;
+  updatedAt: number;
+  solucion?: string;
+}
+
