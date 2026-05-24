@@ -54,6 +54,8 @@ import { TechnicalDocs } from './TechnicalDocs';
 import { EnterpriseSettings } from './EnterpriseSettings';
 import { EnterpriseIncidents } from './EnterpriseIncidents';
 
+const COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
 export function EnterpriseDashboard() {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [searchParams] = useSearchParams();
@@ -141,7 +143,6 @@ export function EnterpriseDashboard() {
     const unsubCargos = listenEnterpriseCargos(orgId, (data) => {
       setCargos(data);
     });
-
 
     // 3. Subscribe to real-time Carriers
     const qCarriers = query(collection(db, 'enterpriseCarriers'), where('organizationId', '==', orgId));
@@ -262,6 +263,17 @@ export function EnterpriseDashboard() {
     if (!user) return;
     await deleteDoc(doc(db, 'organizations', user.organizationId, 'users', uId));
     setSimulatedLogs(prev => [`[COLLABORATOR REMOVED] Se revocaron los accesos de seguridad del colaborador.`, ...prev]);
+  };
+
+  const handleUpdatePlan = async (newPlan: 'free' | 'business' | 'enterprise') => {
+    if (!user || !user.organizationId) return;
+    try {
+      await updateDoc(doc(db, 'organizations', user.organizationId), { plan: newPlan });
+      setActiveOrg((prev: any) => prev ? { ...prev, plan: newPlan } : prev);
+      setSimulatedLogs(prev => [`[SAAS PLAN] Plan corporativo actualizado a [${newPlan.toUpperCase()}].`, ...prev]);
+    } catch (e) {
+      console.error('Error updating plan:', e);
+    }
   };
 
   // SEND CHAT MESSAGE
@@ -481,7 +493,7 @@ export function EnterpriseDashboard() {
   const totalWeight = cargos.reduce((acc, curr) => acc + (curr.pesoKg || 12000), 0);
   const totalVolume = cargos.reduce((acc, curr) => acc + (curr.volumenM3 || 40), 0);
   const totalBudget = cargos.reduce((acc, curr) => acc + curr.precioPropuesto, 0);
-  const COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
   const cargosByState = [
     { name: 'Pendiente', value: cargos.filter(c => c.estado === 'pendiente').length },
     { name: 'Negociando', value: cargos.filter(c => ['buscando_transporte', 'en_negociacion'].includes(c.estado)).length },
@@ -1169,7 +1181,14 @@ export function EnterpriseDashboard() {
 
               {/* VIEW: SAAS SUBSCRIPTIONS */}
               {activeTab === 'saas' && (
-                <SaaSBilling />
+                <SaaSBilling 
+                  activePlan={activeOrg?.plan || 'enterprise'}
+                  sedesCount={sedes.length}
+                  vehiclesCount={Array.from(new Set(cargos.map(c => c.vehiculoAsignado).filter(Boolean))).length || 2}
+                  driversCount={Array.from(new Set(cargos.map(c => c.conductorAsignado).filter(Boolean))).length || 2}
+                  onUpdatePlan={handleUpdatePlan}
+                  onAddAlertLog={(log) => setSimulatedLogs(prev => [log, ...prev])}
+                />
               )}
 
             </motion.div>
