@@ -187,7 +187,7 @@ export async function onboardOrganization(
   const user = auth.currentUser;
   if (!user) throw new Error('Usuario no autenticado para crear organización');
 
-  const orgId = `org_${Date.now()}`;
+  const orgId = `${user.uid}_org`;
   const pathOrg = `organizations/${orgId}`;
 
   try {
@@ -200,6 +200,7 @@ export async function onboardOrganization(
       razonSocial,
       createdAt: Date.now(),
       createdBy: user.uid,
+      adminUser: user.uid,
       limitSedes: plan === 'free' ? 1 : plan === 'business' ? 5 : 50,
       limitVehicles: plan === 'free' ? 2 : plan === 'business' ? 10 : 200,
       limitDrivers: plan === 'free' ? 2 : plan === 'business' ? 10 : 200,

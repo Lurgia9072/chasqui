@@ -1,15 +1,74 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { 
   Building2, Users, Truck, AlertTriangle, Send, ShieldCheck, Download, 
   MapPin, Gauge, Thermometer, Battery, Plus, Compass, Search, User, Check, Trash2, HelpCircle, RefreshCw, Wifi, WifiOff, FileText
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 
 // Imports from our modular components
 import { EnterpriseUser, EnterpriseSede, EnterpriseVehicle, EnterpriseDriver, EnterpriseCargo } from './EnterpriseTypes';
-import { INITIAL_USERS, INITIAL_SEDES, INITIAL_VEHICLES, INITIAL_DRIVERS, INITIAL_CARGOS, IA_LOGISTIC_ANSWERS } from './MockData';
 import { TechnicalDocs } from './TechnicalDocs';
+
+// IA Logistic Answers declared directly
+const IA_LOGISTIC_ANSWERS: Record<string, string> = {
+  opt_ruta: `### 🧠 OPTIMIZACIÓN MULTI-SEDE: PLANTA PAITA A PUERTO DEL CALLAO
+
+He analizado las variables operativas en tiempo real:
+
+1. **Variables de Entrada:**
+   - **Carga:** Arándanos Premium (Sensible al calor, requiere frío continuo a -18.0 °C).
+   - **Ruta:** Panamericana Norte (Piura -> Lambayeque -> La Libertad -> Ancash -> Lima). 1,020 KM.
+   - **Flota Disponible:** Camión F2W-894 (Refrigerado, SOAT y MTC Vigentes).
+   - **Hora propuesta de salida:** 14:00 (Mayor radiación térmica en desierto de Sechura).
+
+2. **Recomendaciones de Chasqui Copilot:**
+   - **Horario Crítico de Desvío:** Retrasar la salida a las **17:30 PM**. Esto reduce el consumo de combustible del compresor térmico en un **14.5%** al cruzar el desierto de Sechura de noche.
+   - **Parada de Seguridad No Autorizada (Geocerca Alerta):** El sistema ha configurado geocercas automáticas alrededor de Chimbote (Chimbote Norte Km 435) y Huarmey debido a reportes históricos de incidencias mecánicas. **Solo se permiten paradas autorizadas en Sullana, Trujillo (Planta Teruel) y Chancay**.
+   - **Alerta por Pérdida de Cobertura:** Existe una zona de sombra de señal móvil satelital de 45 minutos entre el Km 310 y Km 290 de la Panamericana Norte. El sistema entrará en modo *Offline-Buffer Audit* y resincronizará al salir.
+
+**Ruta Planificada Generada:**
+- *Hito 1:* Salida Paita Planta Frío (17:30)
+- *Hito 2:* Control Térmico Automático Termógrafo (21:45) -> Temp esperada: -18.5 °C.
+- *Hito 3:* Parada Autorizada Trujillo Técnica (01:15 AM).
+- *Hito 4:* Entrada APM Terminals Puerto Callao (09:45 AM). **Tiempo de entrega: 16h 15m (3h antes de límite de puerto).**`,
+
+  opt_container: `### 📐 OPTIMIZADOR DE DISTRIBUCIÓN DE CARGA MASIVA (NAV-REFRIGERADO 40FT)
+
+Cerrando cubicaje y estabilidad aerodinámica para Contenedor **MSCU-89231-0**:
+
+1. **Análisis de Peso y Centro de Gravedad (Pallets):**
+   - **Pallets Totales: 20 estándar.**
+   - **Carga Útil:** 22,400 KG.
+   - **Distribución Estructural:** No stackear más de 4 pallets en la fila final para evitar desequilibrio en el eje trasero del remolque (cumpliendo con la normativa MTC de pesos por eje).
+   
+2. **Optimización del Flujo de Aire (Cold Chain Uniformity):**
+   - **T-Flow Clearance:** Mantener un espacio libre de **7.5 cm (3 pulgadas)** entre la parte superior de la carga y el techo del contenedor para el retorno de aire.
+   - **Piso T-Floor:** Dejar el canal del piso extrusionado de aluminio limpio de cartones o envoltorios plásticos sueltos. Obstruir estos canales reduce la eficiencia de congelación en un **30% en los pallets delanteros**.
+   - **Patrón de Estibado:** Usar estibado tipo *Alternated Block* para bloquear el movimiento lateral sin bloquear los canales de ventilación de aire vertical.
+
+**Factor de Confiabilidad de Carga:** 98.4% (Apto para Inspección de Exportación SENASA)`,
+
+  opt_rates: `### 🧮 PREDICTOR DE TARIFAS DINÁMICAS (CORRELACIÓN DE MERCADO COLD-CHAIN)
+
+Tarifa Base Calculada para Ruta: **Paita -> Callao** (Carga Refrigerada de Alto Valor - Arándano)
+
+1. **Cálculo de Variables de Costo:**
+   - **Costo de Combustible Indexado (Diésel B5):** S/. 16.80/Galón. Consumo estimado de Piura a Lima: S/. 1,250.
+   - **Amortiguación Refrigeración de Motor Autónomo (Compresor):** Consumo adicional de 1.8 Gal/Hr x 16 Horas = S/. 480.
+   - **Peajes Nacionales (Ruta de Idas):** 11 peajes = S/. 192.50.
+   - **Retorno Vacío Asegurado:** S/. 600 (Riesgo estimado en 23%).
+
+2. **Elasticidad de Oferta Temporal:**
+   - Demanda actual en Puerto Callao: **ALTA** (Congestión de descarga en muelles de frutas).
+   - Disponibilidad local de camiones fríos certificados: **REDUCIDA (Clave de temporada agropecuaria)**.
+
+**Precio Recomendado Sugerido:** **S/. 3,250.00**
+- *Rango Mínimo (Negociable):* S/. 2,900.00 (Fidelización de transportista).
+- *Tarifa de Cierre Rápido:* S/. 3,500.00.
+*Este precio garantiza una tasa de aceptación de oferta del 87% en los primeros 15 minutos.*`
+};
 
 // Newly developed modular Enterprise core sub-systems
 import { ControlTowerMap } from './ControlTowerMap';
@@ -24,7 +83,8 @@ import { SaaSBilling } from './SaaSBilling';
 // Real Multi-Tenant Integration services and Auth state
 import { auth, db } from '../../firebase';
 import { useAuthStore } from '../../store/useAuthStore';
-import {   onboardOrganization, 
+import { 
+  onboardOrganization, 
   listenSedes, 
   saveSede, 
   removeSede, 
@@ -47,7 +107,6 @@ import {   onboardOrganization,
   queueOfflineEvent,
   getOfflineQueue,
   EnterpriseTrip } from '@/src/services/EnterpriseService';
-import { Link, useSearchParams } from 'react-router-dom';
 
 export function EnterpriseDashboard() {
   // Navigation tabs within Enterprise Suite
@@ -88,11 +147,20 @@ export function EnterpriseDashboard() {
   }, [isDemo, rawUser]);
   
   // Real or Fallback memory states
-  const [users, setUsers] = useState<EnterpriseUser[]>(INITIAL_USERS);
-  const [sedes, setSedes] = useState<EnterpriseSede[]>(INITIAL_SEDES);
-  const [vehicles, setVehicles] = useState<EnterpriseVehicle[]>(INITIAL_VEHICLES);
-  const [drivers, setDrivers] = useState<EnterpriseDriver[]>(INITIAL_DRIVERS);
-  const [cargos, setCargos] = useState<EnterpriseCargo[]>(INITIAL_CARGOS);
+  const [users, setUsers] = useState<EnterpriseUser[]>([]);
+  const [sedes, setSedes] = useState<EnterpriseSede[]>([]);
+  const [vehicles, setVehicles] = useState<EnterpriseVehicle[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_corp_vehicles');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [drivers, setDrivers] = useState<EnterpriseDriver[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_corp_drivers');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [cargos, setCargos] = useState<EnterpriseCargo[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_corp_cargos');
+    return raw ? JSON.parse(raw) : [];
+  });
   const [selectedCargoFilter, setSelectedCargoFilter] = useState<string>('todos');
 
   // Multi-tenant Onboarding Form
@@ -170,14 +238,23 @@ export function EnterpriseDashboard() {
 
   // Subscribe to real multi-tenant Firestore backend when organization is active!
   useEffect(() => {
-    if (!user?.organizationId) return;
+    if (!rawUser) return;
+    const orgId = rawUser.organizationId || `${rawUser.uid}_org`;
 
     // Load actual organization metadata
     const loadOrg = async () => {
       try {
-        const orgDoc = await getDoc(doc(db, 'organizations', user.organizationId!));
+        const orgDoc = await getDoc(doc(db, 'organizations', orgId));
         if (orgDoc.exists()) {
           setActiveOrg(orgDoc.data());
+        } else {
+          setActiveOrg({
+            id: orgId,
+            name: `${user?.nombre || 'Mi'} Logistics S.A.`,
+            plan: 'business',
+            ruc: '20601234567',
+            razonSocial: `${user?.nombre || 'Mi'} Logistics S.A.`
+          });
         }
       } catch (err) {
         console.error('Error fetching org:', err);
@@ -186,40 +263,32 @@ export function EnterpriseDashboard() {
     loadOrg();
 
     // 1. Subscribe to real multi-tenant Sedes
-    const unsubSedes = listenSedes(user.organizationId, (data) => {
-      if (data.length === 0) {
-        // Hydrate with initial templates
-        INITIAL_SEDES.forEach((s) => saveSede(user.organizationId!, s));
-      } else {
-        setSedes(data);
-      }
+    const unsubSedes = listenSedes(orgId, (data) => {
+      setSedes(data);
     });
 
     // 2. Subscribe to real multi-tenant Vehicles
-    const unsubVehicles = listenVehicles(user.organizationId, (data) => {
-      if (data.length === 0) {
-        INITIAL_VEHICLES.forEach((v) => saveVehicle(user.organizationId!, v));
-      } else {
-        setVehicles(data);
-      }
+    const unsubVehicles = listenVehicles(orgId, (data) => {
+      setVehicles(data);
     });
 
     // 3. Subscribe to real multi-tenant Drivers
-    const unsubDrivers = listenDrivers(user.organizationId, (data) => {
-      if (data.length === 0) {
-        INITIAL_DRIVERS.forEach((d) => saveDriver(user.organizationId!, d));
-      } else {
-        setDrivers(data);
-      }
+    const unsubDrivers = listenDrivers(orgId, (data) => {
+      setDrivers(data);
     });
 
     // 4. Subscribe to real multi-tenant Cargos
-    const unsubCargos = listenEnterpriseCargos(user.organizationId, (data) => {
-      if (data.length === 0) {
-        INITIAL_CARGOS.forEach((c) => saveEnterpriseCargo(user.organizationId!, c));
-      } else {
-        setCargos(data);
-      }
+    const unsubCargos = listenEnterpriseCargos(orgId, (data) => {
+      setCargos(data);
+    });
+
+    // 5. Subscribe to real multi-tenant Users (RBAC)
+    const unsubUsers = onSnapshot(collection(db, 'organizations', orgId, 'users'), (snap) => {
+      const uList: EnterpriseUser[] = [];
+      snap.forEach(d => {
+        uList.push({ id: d.id, ...d.data() as any });
+      });
+      setUsers(uList);
     });
 
     return () => {
@@ -227,8 +296,9 @@ export function EnterpriseDashboard() {
       unsubVehicles();
       unsubDrivers();
       unsubCargos();
+      unsubUsers();
     };
-  }, [user?.organizationId]);
+  }, [rawUser]);
 
   // Auto-simulate logs in the background to bring the dashboard to life!
   useEffect(() => {
@@ -290,7 +360,7 @@ export function EnterpriseDashboard() {
   };
 
   // Add user handler
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.nombre || !newUser.email) return;
 
@@ -305,11 +375,31 @@ export function EnterpriseDashboard() {
       ultimoAcceso: 'Pendiente invitación'
     };
 
-    setUsers(prev => [...prev, u]);
+    const orgId = rawUser?.organizationId || `${rawUser?.uid || 'demo'}_org`;
+    try {
+      await setDoc(doc(db, 'organizations', orgId, 'users', u.id), u);
+      setSimulatedLogs(prev => [`[FIRESTORE ÉXITO] Colaborador ${u.nombre} registrado en base de datos.`, ...prev]);
+    } catch (err) {
+      console.error("Error creating user", err);
+      // Fallback in memory
+      setUsers(prev => [...prev, u]);
+    }
+
     setNewUser({ nombre: '', email: '', rol: 'operador', sede: 'San Isidro HQ', telefono: '' });
     setShowAddUserModal(false);
     
     setSimulatedLogs(prev => [`[INFO] Nuevo colaborador corporativo ${u.nombre} agregado con rol [${u.rol}] en ${u.sede}.`, ...prev]);
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    const orgId = rawUser?.organizationId || `${rawUser?.uid || 'demo'}_org`;
+    try {
+      await deleteDoc(doc(db, 'organizations', orgId, 'users', id));
+      setSimulatedLogs(prev => [`[FIRESTORE ÉXITO] Colaborador eliminado de la base de datos.`, ...prev]);
+    } catch (err) {
+      console.error("Error deleting user", err);
+      setUsers(prev => prev.filter(user => user.id !== id));
+    }
   };
 
   // Add vehicle handler
@@ -328,23 +418,29 @@ export function EnterpriseDashboard() {
       documentos: { soat: true, revisionTecnica: true, permisoMTC: true }
     };
 
-    if (user?.organizationId) {
+    const targetOrgId = rawUser?.organizationId || (rawUser ? `${rawUser.uid}_org` : 'demo_org_id');
+
+    if (rawUser) {
       if (!isOnline) {
         queueOfflineEvent({
           action: 'ADD_CHIT',
-          orgId: user.organizationId,
+          orgId: targetOrgId,
           tripId: 'fleet',
           payload: { text: `[OFFLINE] Vehículo creado Placa: ${v.placa}`, senderId: 'local', senderName: 'Offline Compiler', senderRole: 'admin' }
         });
         setOfflineQueueLen(getOfflineQueue().length);
-        setVehicles(prev => [...prev, v]);
+        const updatedList = [...vehicles, v];
+        setVehicles(updatedList);
+        localStorage.setItem('chasqui_demo_corp_vehicles', JSON.stringify(updatedList));
         setSimulatedLogs(prev => [`[OFFLINE COLA] Registrado localmente. El camión se sincronizará cuando retorne internet.`, ...prev]);
       } else {
-        await saveVehicle(user.organizationId, v);
+        await saveVehicle(targetOrgId, v);
         setSimulatedLogs(prev => [`[FIRESTORE EXITO] Camión registrado en base de datos multi-tenant: Placa ${v.placa}`, ...prev]);
       }
     } else {
-      setVehicles(prev => [...prev, v]);
+      const updatedList = [...vehicles, v];
+      setVehicles(updatedList);
+      localStorage.setItem('chasqui_demo_corp_vehicles', JSON.stringify(updatedList));
     }
     
     setShowAddVehicleModal(false);
@@ -353,7 +449,8 @@ export function EnterpriseDashboard() {
 
   // Remove vehicle handler
   const handleDeleteVehicle = async (id: string) => {
-    if (user?.organizationId && isOnline) {
+    const targetOrgId = rawUser?.organizationId || (rawUser ? `${rawUser.uid}_org` : 'demo_org_id');
+    if (rawUser && isOnline) {
       try {
         await removeVehicle(id);
         setSimulatedLogs(prev => [`[FIRESTORE BORRADO] Camión removido físicamente de la base de datos.`, ...prev]);
@@ -361,7 +458,9 @@ export function EnterpriseDashboard() {
         console.error('Error removing vehicle:', err);
       }
     } else {
-      setVehicles(prev => prev.filter(v => v.id !== id));
+      const updatedList = vehicles.filter(v => v.id !== id);
+      setVehicles(updatedList);
+      localStorage.setItem('chasqui_demo_corp_vehicles', JSON.stringify(updatedList));
     }
   };
 
@@ -1204,7 +1303,7 @@ export function EnterpriseDashboard() {
                           </td>
                           <td className="p-4 text-right">
                             <button
-                              onClick={() => setUsers(prev => prev.filter(user => user.id !== u.id))}
+                              onClick={() => handleDeleteUser(u.id)}
                               className="text-slate-500 hover:text-rose-400 transition-colors"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1562,4 +1661,3 @@ export function EnterpriseDashboard() {
     </div>
   );
 }
-

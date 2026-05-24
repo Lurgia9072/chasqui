@@ -11,67 +11,72 @@ import {
 import { jsPDF } from 'jspdf';
 import { useAuthStore } from '../../store/useAuthStore';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
 
-// Initial internal fleet data templates
-const INITIAL_TRUCKS = [
-  { id: 't1', placa: 'F2W-894', marca: 'Volvo', modelo: 'FH16', tipo: 'refrigerado', capacidad: '24 Ton', conductor: 'Mario Lanza', estado: 'en_ruta', combustible: 74, soatVencimiento: '2027-01-12', revisionTecnica: 'Vigente', km: 245000, temperaturaActual: -18.2 },
-  { id: 't2', placa: 'B7T-452', marca: 'Scania', modelo: 'R450', tipo: 'seco', capacidad: '12 Ton', conductor: 'Raúl Quispe', estado: 'disponible', combustible: 48, soatVencimiento: '2026-11-05', revisionTecnica: 'Vigente', km: 128000 },
-  { id: 't3', placa: 'C5X-611', marca: 'Mercedes-Benz', modelo: 'Actros', tipo: 'refrigerado', capacidad: '28 Ton', conductor: 'Enrique Palacios', estado: 'en_ruta', combustible: 82, soatVencimiento: '2026-09-22', revisionTecnica: 'Vigente', km: 310000, temperaturaActual: -19.5 },
-  { id: 't4', placa: 'A9E-231', marca: 'Fuso', modelo: 'Canter', tipo: 'plataforma', capacidad: '8 Ton', conductor: 'Sin Asignar', estado: 'mantenimiento', combustible: 15, soatVencimiento: '2026-05-30', revisionTecnica: 'Próxima a vencer', km: 92000 },
-  { id: 't5', placa: 'D3V-742', marca: 'Hino', modelo: '500', tipo: 'cortina', capacidad: '15 Ton', conductor: 'Juan Huamán', estado: 'disponible', combustible: 50, soatVencimiento: '2026-12-18', revisionTecnica: 'Vigente', km: 145000 },
-];
-
-const INITIAL_DRIVERS = [
-  { id: 'd1', nombre: 'Mario Lanza', licencia: '71542389-A', categoria: 'A-IIIc', telefono: '+51 999 444 111', estado: 'activo', calificacion: 4.8, horasManejoSemana: 38, soatVigente: true },
-  { id: 'd2', nombre: 'Raúl Quispe', licencia: '42516390-B', categoria: 'A-IIIb', telefono: '+51 988 333 222', estado: 'disponible', calificacion: 4.9, horasManejoSemana: 25, soatVigente: true },
-  { id: 'd3', nombre: 'Enrique Palacios', licencia: '10293847-C', categoria: 'A-IIIc', telefono: '+51 911 222 333', estado: 'activo', calificacion: 4.7, horasManejoSemana: 42, soatVigente: true },
-  { id: 'd4', nombre: 'Juan Huamán', licencia: '48596012-A', categoria: 'A-IIb', telefono: '+51 955 444 777', estado: 'disponible', calificacion: 4.5, horasManejoSemana: 12, soatVigente: true },
-  { id: 'd5', nombre: 'Esteban Paredes', licencia: '33445566-B', categoria: 'A-IIIa (Vencida)', telefono: '+51 977 111 555', estado: 'suspendido', calificacion: 4.2, horasManejoSemana: 0, soatVigente: false },
-];
-
-const INITIAL_ASSIGNED_DISPATCHES = [
-  { id: 'DESP-401', cliente: 'Camposol Agro', origen: 'Planta Industrial Virú', destino: 'Puerto Salaverry', carga: 'Arándanos frescos (Cold Chain)', precio: 1800, fechaDespacho: '24-May-2026', estado: 'asignado', conductor: 'Raúl Quispe', placa: 'B7T-452' },
-  { id: 'DESP-402', cliente: 'Danper SAC', origen: 'Planta Fría Paita', destino: 'Puerto del Callao', carga: 'Mangos congelados en cajas', precio: 3300, fechaDespacho: '26-May-2026', estado: 'pendiente_asignacion', conductor: '', placa: '' },
-  { id: 'DESP-403', cliente: 'Minsur S.A.', origen: 'Fundición Pisco', destino: 'Puerto Callao (APM)', carga: 'Concentrados de cobre refinados', precio: 2200, fechaDespacho: '28-May-2026', estado: 'pendiente_asignacion', conductor: '', placa: '' },
-];
-
-const MOCK_MANTENIMIENTOS = [
-  { id: 'm1', placa: 'F2W-894', fecha: '2026-05-15', tipo: 'preventivo', detalle: 'Cambio de aceite de motor y filtros de aire', costo: 1250, km: 242000, taller: 'Taller Central Trux' },
-  { id: 'm2', placa: 'A9E-231', fecha: '2026-05-18', tipo: 'correctivo', detalle: 'Inspección de compresor térmico y recarga de refrigerante', costo: 850, km: 91500, taller: 'Servicio Autorizado ThermoKing' },
-  { id: 'm3', placa: 'B7T-452', fecha: '2026-04-10', tipo: 'preventivo', detalle: 'Alineamiento y rotación completa de neumáticos', costo: 600, km: 122000, taller: 'Michelin Pro Lima' },
-];
-
-const MOCK_COMBUSTIBLE = [
-  { id: 'c1', placa: 'F2W-894', fecha: '2026-05-19', galones: 120, costo: 2016, grifo: 'Primax Panamericana Norte Km 320', conductor: 'Mario Lanza' },
-  { id: 'c2', placa: 'C5X-611', fecha: '2026-05-18', galones: 140, costo: 2352, grifo: 'Repsol Panamericana Sur Km 140', conductor: 'Enrique Palacios' },
-  { id: 'c3', placa: 'D3V-742', fecha: '2026-05-15', galones: 80, costo: 1344, grifo: 'Petroperú Evitamiento Km 10', conductor: 'Juan Huamán' },
-];
-
-const MOCK_INCIDENTES = [
-  { id: 'i1', placa: 'F2W-894', fecha: '24-May-2026', gravedad: 'alta', tipo: 'Alerta Temperatura', detalle: 'Termógrafo reportó -4.8°C cuando se requería -18°C', solucionado: true, conductor: 'Mario Lanza' },
-  { id: 'i2', placa: 'D3V-742', fecha: '21-May-2026', gravedad: 'media', tipo: 'Desvío de Ruta', detalle: 'Vehículo salió de la georuta asignada por 6.2 km en Chimbote', solucionado: true, conductor: 'Juan Huamán' },
-  { id: 'i3', placa: 'A9E-231', fecha: '19-May-2026', gravedad: 'alta', tipo: 'Mecánico', detalle: 'Falla de alternador y pérdida de carga eléctrica auxiliar', solucionado: false, conductor: 'Sin Asignar' },
-];
-
-const MOCK_RBAC_MEMBERS = [
-  { id: 'rb1', nombre: 'Eduardo Valdivia', email: 'e.valdivia@chasquimulti.com', rol: 'fleet_admin', sede: 'San Isidro HQ', activo: true, acceso: 'En línea' },
-  { id: 'rb2', nombre: 'Carlos Mendoza', email: 'c.mendoza@chasquimulti.com', rol: 'operations_manager', sede: 'San Isidro HQ', activo: true, acceso: 'Hace 10 min' },
-  { id: 'rb3', nombre: 'Gisela Pinedo', email: 'g.pinedo@chasquimulti.com', rol: 'gps_monitor', sede: 'Almacén Lurín', activo: true, acceso: 'Hoy, 09:12' },
-  { id: 'rb4', nombre: 'Ricardo Rojas', email: 'r.rojas@chasquimulti.com', rol: 'maintenance_manager', sede: 'Taller Principal Callao', activo: true, acceso: 'Ayer, 17:45' },
-  { id: 'rb5', nombre: 'Mario Lanza', email: 'm.lanza@chasquimulti.com', rol: 'driver_supervisor', sede: 'Ruta Nacional', activo: false, acceso: 'Hace 2 días' },
-];
-
+// Component Core
 export function FleetERP() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'overview' | 'camiones' | 'choferes' | 'gps' | 'despachos' | 'mantenimiento' | 'combustible' | 'incidentes' | 'ai' | 'rbac' | 'billing'>('overview');
-  const [truckList, setTruckList] = useState(INITIAL_TRUCKS);
-  const [driverList, setDriverList] = useState(INITIAL_DRIVERS);
-  const [dispatchList, setDispatchList] = useState(INITIAL_ASSIGNED_DISPATCHES);
-  const [maintenanceList, setMaintenanceList] = useState(MOCK_MANTENIMIENTOS);
-  const [fuelList, setFuelList] = useState(MOCK_COMBUSTIBLE);
-  const [incidentList, setIncidentList] = useState(MOCK_INCIDENTES);
-  const [rbacMembers, setRbacMembers] = useState(MOCK_RBAC_MEMBERS);
+  // Load real database data which default to empty arrays
+  const [truckList, setTruckList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_trucks');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [driverList, setDriverList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_drivers');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [dispatchList, setDispatchList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_dispatches');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [maintenanceList, setMaintenanceList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_maintenances');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [fuelList, setFuelList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_fuels');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [incidentList, setIncidentList] = useState<any[]>(() => {
+    const raw = localStorage.getItem('chasqui_demo_incidents');
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [rbacMembers, setRbacMembers] = useState<any[]>([]);
+
+  // Dynamic Calculators for KPIs and Charts based on actual database data
+  const totalTrucksCount = truckList.length;
+  const inServiceTrucksCount = truckList.filter(t => t.estado === 'en_ruta' || t.estado === 'viaje').length;
+  const fleetOcupacionPercentage = totalTrucksCount > 0 ? Math.round((inServiceTrucksCount / totalTrucksCount) * 100) : 0;
+
+  const totalOdometerKm = truckList.reduce((acc, t) => acc + (Number(t.km) || 0), 0);
+  const formattedOdometerKm = totalOdometerKm > 0 
+    ? (totalOdometerKm >= 1000 ? `${(totalOdometerKm / 1000).toFixed(0)}K` : `${Math.round(totalOdometerKm)}`) 
+    : '0';
+
+  const totalDieselGallons = fuelList.reduce((acc, f) => acc + (Number(f.galones) || 0), 0);
+  const avgDieselCostPerGallon = fuelList.length > 0 
+    ? fuelList.reduce((acc, f) => acc + (Number(f.costo) / (Number(f.galones) || 1)), 0) / fuelList.length 
+    : 0;
+
+  const activeMtcIncidentsCount = incidentList.filter(i => !i.solucionado).length;
+
+  const enRutaCount = truckList.filter(t => t.estado === 'en_ruta' || t.estado === 'viaje').length;
+  const disponiblesCount = truckList.filter(t => t.estado === 'disponible' || t.estado === 'libre').length;
+  const tallerCount = truckList.filter(t => t.estado === 'mantenimiento' || t.estado === 'taller' || t.estado === 'incidencia' || t.estado === 'suspendido').length;
+  const totalForPie = enRutaCount + disponiblesCount + tallerCount;
+
+  const pieData = totalForPie > 0 ? [
+    { name: 'En Ruta', value: enRutaCount },
+    { name: 'Disponibles', value: disponiblesCount },
+    { name: 'Taller', value: tallerCount }
+  ] : [
+    { name: 'Sin Unidades', value: 1 }
+  ];
+
+  const enRutaPercent = totalForPie > 0 ? Math.round((enRutaCount / totalForPie) * 100) : 0;
+  const disponiblesPercent = totalForPie > 0 ? Math.round((disponiblesCount / totalForPie) * 100) : 0;
+  const tallerPercent = totalForPie > 0 ? 100 - enRutaPercent - disponiblesPercent : 0;
   
   // Modals state
   const [showAddTruckModal, setShowAddTruckModal] = useState(false);
@@ -94,6 +99,118 @@ export function FleetERP() {
     '[18:47:00 PM] SOAT y habilitación MTC de toda la flota activa digitalizados exitosamente.'
   ]);
 
+  // Real Multi-Tenant Organization state
+  const rawUser = useAuthStore().user;
+  const isDemo = searchParams.get('demo') === 'true' || localStorage.getItem('chasqui_demo_active') === 'true';
+  const orgId = rawUser?.organizationId || (rawUser ? `${rawUser.uid}_org` : 'demo_org_id');
+
+  // Multi-tenant Onboarding Form (Fallback for un-onboarded shippers/carriers)
+  const [onboardForm, setOnboardForm] = useState({
+    name: '',
+    ruc: '',
+    razonSocial: '',
+    plan: 'business' as 'free' | 'business' | 'enterprise'
+  });
+  const [loadingOrg, setLoadingOrg] = useState(false);
+
+  // Firestore Real-Time Subscriptions for multi-tenant data isolation
+  useEffect(() => {
+    if (!orgId || !rawUser) return;
+
+    // 1. Subscribe to Vehicles where organizationId == orgId
+    const qv = query(collection(db, 'vehicles'), where('organizationId', '==', orgId));
+    const unsubVehicles = onSnapshot(qv, (snap) => {
+      const list: any[] = [];
+      snap.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setTruckList(list);
+    }, (err) => {
+      console.error("Error listening to vehicles", err);
+    });
+
+    // 2. Subscribe to Drivers where organizationId == orgId
+    const qd = query(collection(db, 'drivers'), where('organizationId', '==', orgId));
+    const unsubDrivers = onSnapshot(qd, (snap) => {
+      const list: any[] = [];
+      snap.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setDriverList(list);
+    }, (err) => {
+      console.error("Error listening to drivers", err);
+    });
+
+    // 3. Subscribe to Dispatches under fleet/${orgId}_dispatches
+    const unsubDispatches = onSnapshot(doc(db, 'fleet', `${orgId}_dispatches`), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.list) setDispatchList(data.list);
+      } else {
+        setDispatchList([]);
+      }
+    }, (err) => {
+      console.error("Error listening to dispatches", err);
+    });
+
+    // 4. Subscribe to Maintenances under fleet/${orgId}_maintenances
+    const unsubMaintenances = onSnapshot(doc(db, 'fleet', `${orgId}_maintenances`), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.list) setMaintenanceList(data.list);
+      } else {
+        setMaintenanceList([]);
+      }
+    }, (err) => {
+      console.error("Error listening to maintenances", err);
+    });
+
+    // 5. Subscribe to Fuels under fleet/${orgId}_fuels
+    const unsubFuels = onSnapshot(doc(db, 'fleet', `${orgId}_fuels`), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.list) setFuelList(data.list);
+      } else {
+        setFuelList([]);
+      }
+    }, (err) => {
+      console.error("Error listening to fuels", err);
+    });
+
+    // 6. Subscribe to Incidents under fleet/${orgId}_incidents
+    const unsubIncidents = onSnapshot(doc(db, 'fleet', `${orgId}_incidents`), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.list) setIncidentList(data.list);
+      } else {
+        setIncidentList([]);
+      }
+    }, (err) => {
+      console.error("Error listening to incidents", err);
+    });
+
+    // 7. Subscribe to User directory (RBAC members) under organizations/orgId/users
+    const unsubRbac = onSnapshot(collection(db, 'organizations', orgId, 'users'), (snap) => {
+      const list: any[] = [];
+      snap.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setRbacMembers(list);
+    }, (err) => {
+      console.error("Error listening to rbac members", err);
+    });
+
+    return () => {
+      unsubVehicles();
+      unsubDrivers();
+      unsubDispatches();
+      unsubMaintenances();
+      unsubFuels();
+      unsubIncidents();
+      unsubRbac();
+    };
+  }, [orgId, rawUser]);
+
   // AI Copilot state
   const [aiPrompt, setAiPrompt] = useState('');
   const [chatLog, setChatLog] = useState<{ sender: 'user' | 'ai'; text: string }[]>([
@@ -105,11 +222,10 @@ export function FleetERP() {
   const RADIANTS_COLORS = ['#3b82f6', '#10b981', '#ef4444', '#a855f7'];
 
   // Add truck handler
-  const handleAddTruck = (e: React.FormEvent) => {
+  const handleAddTruck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTruck.placa || !newTruck.capacidad) return;
     const item = {
-      id: `t_${Date.now()}`,
       placa: newTruck.placa.toUpperCase(),
       marca: newTruck.marca,
       modelo: newTruck.modelo || 'Series F',
@@ -122,18 +238,35 @@ export function FleetERP() {
       revisionTecnica: 'Vigente',
       km: 0
     };
-    setTruckList(prev => [...prev, item] as any);
+
+    if (orgId && rawUser) {
+      try {
+        await addDoc(collection(db, 'vehicles'), {
+          ...item,
+          organizationId: orgId,
+          createdAt: Date.now()
+        });
+        setSimulatedLogs(prev => [`[FLOTA OS] Vehículo con placa ${item.placa} registrado en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving vehicle", err);
+        alert(`Error al guardar camión real: ${err.message || err}`);
+      }
+    } else {
+      const updatedList = [...truckList, { id: `t_${Date.now()}`, ...item }];
+      setTruckList(updatedList);
+      localStorage.setItem('chasqui_demo_trucks', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[FLOTA OS] Vehículo con placa ${item.placa} registrado en almacenamiento local.`, ...prev]);
+    }
+    
     setNewTruck({ placa: '', marca: 'Volvo', modelo: '', tipo: 'refrigerado', capacidad: '', conductor: 'Sin Asignar' });
     setShowAddTruckModal(false);
-    setSimulatedLogs(prev => [`[FLOTA OS] Vehículo con placa ${item.placa} agregado a base de datos de flota activa.`, ...prev]);
   };
 
   // Add driver handler
-  const handleAddDriver = (e: React.FormEvent) => {
+  const handleAddDriver = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDriver.nombre || !newDriver.licencia) return;
     const item = {
-      id: `d_${Date.now()}`,
       nombre: newDriver.nombre,
       licencia: newDriver.licencia,
       categoria: newDriver.categoria,
@@ -143,10 +276,28 @@ export function FleetERP() {
       horasManejoSemana: 0,
       soatVigente: true
     };
-    setDriverList(prev => [...prev, item] as any);
+
+    if (orgId && rawUser) {
+      try {
+        await addDoc(collection(db, 'drivers'), {
+          ...item,
+          organizationId: orgId,
+          createdAt: Date.now()
+        });
+        setSimulatedLogs(prev => [`[CHÓFERES] Conductor profesional ${item.nombre} registrado en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving driver", err);
+        alert(`Error al guardar chofer real: ${err.message || err}`);
+      }
+    } else {
+      const updatedList = [...driverList, { id: `d_${Date.now()}`, ...item }];
+      setDriverList(updatedList);
+      localStorage.setItem('chasqui_demo_drivers', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[CHÓFERES] Conductor profesional ${item.nombre} registrado en almacenamiento local.`, ...prev]);
+    }
+
     setNewDriver({ nombre: '', licencia: '', categoria: 'A-IIIc', telefono: '' });
     setShowAddDriverModal(false);
-    setSimulatedLogs(prev => [`[CHÓFERES] Conductor profesional ${item.nombre} registrado con licencia con categoría ${item.categoria}.`, ...prev]);
   };
 
   // Assign driver and vehicle to a pending dispatch
@@ -159,37 +310,88 @@ export function FleetERP() {
     setShowAssignModal(true);
   };
 
-  const handleConfirmAssign = (e: React.FormEvent) => {
+  const handleConfirmAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDispatchId) return;
 
-    setDispatchList(prev => prev.map(d => {
-      if (d.id === selectedDispatchId) {
-        return {
-          ...d,
-          estado: 'asignado',
-          conductor: assignForm.conductorId,
-          placa: assignForm.truckId
-        };
+    let updatedDispatches: any[] = [];
+    setDispatchList(prev => {
+      const next = prev.map(d => {
+        if (d.id === selectedDispatchId) {
+          return {
+            ...d,
+            estado: 'asignado',
+            conductor: assignForm.conductorId,
+            placa: assignForm.truckId
+          };
+        }
+        return d;
+      });
+      updatedDispatches = next;
+      if (!rawUser) {
+        localStorage.setItem('chasqui_demo_dispatches', JSON.stringify(next));
       }
-      return d;
-    }));
+      return next;
+    });
 
     // Update truck status to en_ruta
-    setTruckList(prev => prev.map(t => {
-      if (t.placa === assignForm.truckId) {
-        return { ...t, estado: 'en_ruta', conductor: assignForm.conductorId };
+    const targetTruckObj = truckList.find(t => t.placa === assignForm.truckId);
+    if (orgId && rawUser && targetTruckObj) {
+      try {
+        await updateDoc(doc(db, 'vehicles', targetTruckObj.id), {
+          estado: 'en_ruta',
+          conductor: assignForm.conductorId
+        });
+      } catch (err) {
+        console.error("Error updating vehicle state in Firestore", err);
       }
-      return t;
-    }));
+    } else {
+      setTruckList(prev => {
+        const next = prev.map(t => {
+          if (t.placa === assignForm.truckId) {
+            return { ...t, estado: 'en_ruta', conductor: assignForm.conductorId };
+          }
+          return t;
+        });
+        localStorage.setItem('chasqui_demo_trucks', JSON.stringify(next));
+        return next;
+      });
+    }
 
     // Update driver status to activo
-    setDriverList(prev => prev.map(d => {
-      if (d.nombre === assignForm.conductorId) {
-        return { ...d, estado: 'activo' };
+    const targetDriverObj = driverList.find(d => d.nombre === assignForm.conductorId);
+    if (orgId && rawUser && targetDriverObj) {
+      try {
+        await updateDoc(doc(db, 'drivers', targetDriverObj.id), {
+          estado: 'activo'
+        });
+      } catch (err) {
+        console.error("Error updating driver state in Firestore", err);
       }
-      return d;
-    }));
+    } else {
+      setDriverList(prev => {
+        const next = prev.map(d => {
+          if (d.nombre === assignForm.conductorId) {
+            return { ...d, estado: 'activo' };
+          }
+          return d;
+        });
+        localStorage.setItem('chasqui_demo_drivers', JSON.stringify(next));
+        return next;
+      });
+    }
+
+    if (orgId && rawUser) {
+      try {
+        await setDoc(doc(db, 'fleet', `${orgId}_dispatches`), {
+          organizationId: orgId,
+          list: updatedDispatches,
+          updatedAt: Date.now()
+        });
+      } catch (err) {
+        console.error("Error updating dispatches list in Firestore", err);
+      }
+    }
 
     setShowAssignModal(false);
     setSelectedDispatchId(null);
@@ -260,6 +462,119 @@ export function FleetERP() {
     doc.save('Chasqui-Fleet-Audit.pdf');
   };
 
+  if (rawUser && !orgId && !isDemo) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6 shadow-2xl">
+          <div className="flex items-center space-x-3 pb-4 border-b border-slate-805">
+            <span className="p-2.5 rounded-xl bg-purple-600/10 text-purple-400">
+              <Building2 className="h-6 w-6" />
+            </span>
+            <div>
+              <span className="text-[10px] text-purple-400 font-bold tracking-widest uppercase">Ecosistema Logístico</span>
+              <h2 className="text-lg font-black text-white">Inicializar Flota Corporativa</h2>
+            </div>
+          </div>
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!onboardForm.name || !onboardForm.ruc || !onboardForm.razonSocial) {
+              alert('Complete todos los campos requeridos');
+              return;
+            }
+            setLoadingOrg(true);
+            try {
+              await onboardOrganization(
+                onboardForm.name,
+                onboardForm.plan,
+                onboardForm.ruc,
+                onboardForm.razonSocial
+              );
+              window.location.reload();
+            } catch (err: any) {
+              alert(`Error al crear organización: ${err.message || err}`);
+            } finally {
+              setLoadingOrg(false);
+            }
+          }} className="space-y-4">
+            
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-slate-500 block">Nombre de la Organización</label>
+              <input
+                type="text"
+                placeholder="Ej. Consorcio Agrícola del Norte"
+                value={onboardForm.name}
+                onChange={e => setOnboardForm({ ...onboardForm, name: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500 font-medium"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">RUC de la Empresa (11 dígitos)</label>
+                <input
+                  type="text"
+                  placeholder="Ej. 20601234567"
+                  maxLength={11}
+                  value={onboardForm.ruc}
+                  onChange={e => setOnboardForm({ ...onboardForm, ruc: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Razón Social</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Agrícola Exportadora del Norte S.A.C."
+                  value={onboardForm.razonSocial}
+                  onChange={e => setOnboardForm({ ...onboardForm, razonSocial: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500 font-medium"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-bold text-slate-500 block">Suscripción SaaS Logística</label>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: 'free', label: 'Plan FREE', desc: '1 Sede / 5 de Flota' },
+                  { id: 'business', label: 'PRO Business', desc: 'Sedes Activas / GPS' },
+                  { id: 'enterprise', label: 'Enterprise Core', desc: 'Ilimitada + SRE' }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setOnboardForm({ ...onboardForm, plan: p.id as any })}
+                    className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                      onboardForm.plan === p.id 
+                        ? 'bg-purple-650/10 border-purple-600 text-purple-400' 
+                        : 'bg-slate-950 border-slate-850 hover:bg-slate-900 text-slate-400'
+                    }`}
+                  >
+                    <span className="font-bold text-xs block text-white">{p.label}</span>
+                    <span className="text-[9px] block leading-tight mt-1 text-slate-500">{p.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loadingOrg}
+              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-purple-600/25 transition-all text-center"
+            >
+              {loadingOrg ? 'Provisionando Ecosistema Logístico...' : '📦 Inicializar Enterprise Fleet OS'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col pt-4 font-sans max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
       
@@ -296,10 +611,19 @@ export function FleetERP() {
           
           <button
             onClick={() => {
-              setTruckList(INITIAL_TRUCKS);
-              setDriverList(INITIAL_DRIVERS);
-              setDispatchList(INITIAL_ASSIGNED_DISPATCHES);
-              setSimulatedLogs(prev => ['[CONFIG RESET] Módulo reestablecido conforme con datos de simulación.', ...prev]);
+              localStorage.removeItem('chasqui_demo_trucks');
+              localStorage.removeItem('chasqui_demo_drivers');
+              localStorage.removeItem('chasqui_demo_dispatches');
+              localStorage.removeItem('chasqui_demo_maintenances');
+              localStorage.removeItem('chasqui_demo_fuels');
+              localStorage.removeItem('chasqui_demo_incidents');
+              setTruckList([]);
+              setDriverList([]);
+              setDispatchList([]);
+              setMaintenanceList([]);
+              setFuelList([]);
+              setIncidentList([]);
+              setSimulatedLogs(prev => ['[CONFIG RESET] Módulo limpiado. Conectado únicamente a la base de datos real en la nube.', ...prev]);
             }}
             className="p-2 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white rounded-xl border border-slate-800"
             title="Sincronizar base de datos"
@@ -314,8 +638,8 @@ export function FleetERP() {
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 flex items-center justify-between">
           <div>
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider block">Ocupación Flota</span>
-            <span className="text-2xl font-black font-mono mt-0.5 text-white">80%</span>
-            <span className="text-[10px] text-purple-400 block mt-0.5">4 de 5 en servicio</span>
+            <span className="text-2xl font-black font-mono mt-0.5 text-white">{fleetOcupacionPercentage}%</span>
+            <span className="text-[10px] text-purple-400 block mt-0.5">{inServiceTrucksCount} de {totalTrucksCount} en servicio</span>
           </div>
           <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
             <Truck className="h-5 w-5" />
@@ -325,8 +649,8 @@ export function FleetERP() {
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 flex items-center justify-between">
           <div>
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider block">Km Totales</span>
-            <span className="text-2xl font-black font-mono mt-0.5 text-white">723K</span>
-            <span className="text-[10px] text-sky-400 block mt-0.5">Recorridos Lima - Prov.</span>
+            <span className="text-2xl font-black font-mono mt-0.5 text-white">{formattedOdometerKm}</span>
+            <span className="text-[10px] text-sky-400 block mt-0.5">Recorridos acumulados</span>
           </div>
           <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
             <Gauge className="h-5 w-5" />
@@ -336,8 +660,8 @@ export function FleetERP() {
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 flex items-center justify-between">
           <div>
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider block">Consumo Diésel</span>
-            <span className="text-2xl font-black font-mono mt-0.5 text-white">340 Gal</span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">Tasa promedio: S/. 16.80</span>
+            <span className="text-2xl font-black font-mono mt-0.5 text-white">{totalDieselGallons} Gal</span>
+            <span className="text-[10px] text-emerald-400 block mt-0.5">Tasa prom: S/. {avgDieselCostPerGallon > 0 ? avgDieselCostPerGallon.toFixed(2) : '0.00'}</span>
           </div>
           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
             <Fuel className="h-5 w-5" />
@@ -347,8 +671,8 @@ export function FleetERP() {
         <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 flex items-center justify-between">
           <div>
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider block">Incidentes MTC</span>
-            <span className="text-2xl font-black font-mono mt-0.5 text-rose-500">1</span>
-            <span className="text-[10px] text-rose-400 block mt-0.5">1 alerta de sensor pendiente</span>
+            <span className="text-2xl font-black font-mono mt-0.5 text-rose-500">{activeMtcIncidentsCount}</span>
+            <span className="text-[10px] text-rose-400 block mt-0.5">{activeMtcIncidentsCount} {activeMtcIncidentsCount === 1 ? 'alerta pendiente' : 'alertas pendientes'}</span>
           </div>
           <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400">
             <AlertTriangle className="h-5 w-5" />
@@ -359,9 +683,9 @@ export function FleetERP() {
           <div>
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider block">Sugerencia Copilot</span>
             <span className="text-xs font-bold text-indigo-400 block mt-1 hover:underline cursor-pointer" onClick={() => setActiveTab('ai')}>
-              3 optimizaciones
+              {totalTrucksCount > 0 ? '3 optimizaciones' : 'Sin pendientes'}
             </span>
-            <span className="text-[9px] text-emerald-400 block mt-0.5">✓ 55 galones a ahorrar</span>
+            <span className="text-[9px] text-emerald-400 block mt-0.5">{totalTrucksCount > 0 ? '✓ 55 galones a ahorrar' : 'Esperando datos de flota'}</span>
           </div>
           <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
             <Award className="h-5 w-5" />
@@ -455,35 +779,33 @@ export function FleetERP() {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={[
-                            { name: 'En Ruta', value: 3 },
-                            { name: 'Disponibles', value: 2 },
-                            { name: 'Taller', value: 1 }
-                          ]}
+                          data={pieData}
                           outerRadius={55}
                           fill="#8884d8"
                           dataKey="value"
                         >
-                          <Cell fill="#a855f7" />
-                          <Cell fill="#10b981" />
-                          <Cell fill="#eab308" />
+                          {pieData.map((entry, index) => {
+                            if (totalForPie === 0) return <Cell key={index} fill="#334155" />;
+                            const colors = ['#a855f7', '#10b981', '#eab308'];
+                            return <Cell key={index} fill={colors[index]} />;
+                          })}
                         </Pie>
                         <Tooltip />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-center pb-2">
-                    <div className="p-2 bg-purple-950/20 border border-purple-900/30 rounded-lg text-purple-400">
+                    <div className="p-2 bg-purple-950/20 border border-purple-900/30 rounded-lg text-purple-400 font-medium">
                       <p className="font-bold">RUTA</p>
-                      <p className="text-sm font-black mt-0.5">3 (60%)</p>
+                      <p className="text-sm font-black mt-0.5">{enRutaCount} ({enRutaPercent}%)</p>
                     </div>
-                    <div className="p-2 bg-emerald-950/20 border border-emerald-900/30 rounded-lg text-emerald-400">
+                    <div className="p-2 bg-emerald-950/20 border border-emerald-900/30 rounded-lg text-emerald-400 font-medium">
                       <p className="font-bold">LIBRES</p>
-                      <p className="text-sm font-black mt-0.5">2 (30%)</p>
+                      <p className="text-sm font-black mt-0.5">{disponiblesCount} ({disponiblesPercent}%)</p>
                     </div>
-                    <div className="p-2 bg-amber-950/20 border border-amber-900/30 rounded-lg text-amber-400">
+                    <div className="p-2 bg-amber-950/20 border border-amber-900/30 rounded-lg text-amber-400 font-medium">
                       <p className="font-bold">TALLER</p>
-                      <p className="text-sm font-black mt-0.5">1 (10%)</p>
+                      <p className="text-sm font-black mt-0.5">{tallerCount} ({tallerPercent}%)</p>
                     </div>
                   </div>
                 </div>
@@ -535,7 +857,15 @@ export function FleetERP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {truckList.map((truck) => (
+                    {truckList.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center p-12 text-slate-500">
+                          <Truck className="h-8 w-8 text-indigo-400 mx-auto mb-2 opacity-40 animate-pulse" />
+                          <p className="font-bold text-xs text-slate-300">No hay camiones registrados en la flota</p>
+                          <p className="text-[11px] text-slate-500 mt-1">Registra tu primer camión con el botón "Añadir Camión" arriba.</p>
+                        </td>
+                      </tr>
+                    ) : truckList.map((truck) => (
                       <tr key={truck.id} className="border-b border-slate-900 hover:bg-slate-900/40 font-medium">
                         <td className="p-3 flex items-center space-x-2">
                           <span className="px-2 py-1 bg-slate-800 text-slate-100 rounded font-black font-mono border border-slate-700 shadow uppercase">
@@ -573,9 +903,21 @@ export function FleetERP() {
                         </td>
                         <td className="p-3 text-right">
                           <button
-                            onClick={() => {
-                              setTruckList(prev => prev.filter(t => t.id !== truck.id));
-                              setSimulatedLogs(prev => [`[FLOTA] Camión Placa ${truck.placa} dado de baja de la base activa.`, ...prev]);
+                            onClick={async () => {
+                              if (orgId && rawUser) {
+                                try {
+                                  await deleteDoc(doc(db, 'vehicles', truck.id));
+                                  setSimulatedLogs(prev => [`[FLOTA] Camión Placa ${truck.placa} eliminado de la base real.`, ...prev]);
+                                } catch (err: any) {
+                                  console.error("Error deleting vehicle", err);
+                                  alert(`Error al eliminar camión real: ${err.message || err}`);
+                                }
+                              } else {
+                                const updatedList = truckList.filter(t => t.id !== truck.id);
+                                setTruckList(updatedList);
+                                localStorage.setItem('chasqui_demo_trucks', JSON.stringify(updatedList));
+                                setSimulatedLogs(prev => [`[FLOTA] Camión Placa ${truck.placa} dado de baja de la base activa local.`, ...prev]);
+                              }
                             }}
                             className="p-1.5 bg-slate-900 hover:bg-rose-950/20 text-slate-500 hover:text-rose-400 rounded-lg"
                           >
@@ -608,7 +950,13 @@ export function FleetERP() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {driverList.map((driver) => (
+                {driverList.length === 0 ? (
+                  <div className="md:col-span-2 text-center p-12 bg-slate-900/40 border border-slate-850 rounded-2xl">
+                    <Users className="h-10 w-10 text-indigo-400 mx-auto mb-3 opacity-40 animate-pulse" />
+                    <p className="font-bold text-xs text-slate-300">No hay conductores registrados</p>
+                    <p className="text-[11px] text-slate-500 mt-1">Haga clic en "Añadir Conductor" arriba para ingresar un chofer homologado.</p>
+                  </div>
+                ) : driverList.map((driver) => (
                   <div key={driver.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex justify-between items-start">
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2">
@@ -646,6 +994,29 @@ export function FleetERP() {
                         {driver.estado}
                       </span>
                       <p className="text-xs font-mono font-black text-amber-400">🏆 ★ {driver.calificacion}</p>
+                      
+                      <button
+                        onClick={async () => {
+                          if (orgId && rawUser) {
+                            try {
+                              await deleteDoc(doc(db, 'drivers', driver.id));
+                              setSimulatedLogs(prev => [`[CHÓFERES] Conductor profesional ${driver.nombre} eliminado de base real.`, ...prev]);
+                            } catch (err: any) {
+                              console.error("Error deleting driver", err);
+                              alert(`Error al eliminar conductor real: ${err.message || err}`);
+                            }
+                          } else {
+                            const updatedList = driverList.filter(d => d.id !== driver.id);
+                            setDriverList(updatedList);
+                            localStorage.setItem('chasqui_demo_drivers', JSON.stringify(updatedList));
+                            setSimulatedLogs(prev => [`[CHÓFERES] Conductor profesional ${driver.nombre} dado de baja de sesión local.`, ...prev]);
+                          }
+                        }}
+                        className="p-1.5 bg-slate-900 hover:bg-rose-950/20 text-slate-500 hover:text-rose-400 rounded-lg transition-colors block ml-auto mt-2"
+                        title="Eliminar Conductor"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -657,12 +1028,18 @@ export function FleetERP() {
           {activeTab === 'despachos' && (
             <div className="space-y-6 animate-fade-in text-left">
               <div className="border-b border-slate-900 pb-4">
-                <h2 className="text-lg font-black text-white">Despachos Asignados por Exportadores</h2>
+                <h2 className="text-lg font-black text-white">Despachos Asignados por clientes</h2>
                 <p className="text-xs text-slate-400 mt-1">Asigne conductores, remolques y despache viajes corporativos de manera digital.</p>
               </div>
 
               <div className="space-y-4">
-                {dispatchList.map((desp) => (
+                {dispatchList.length === 0 ? (
+                  <div className="text-center p-12 bg-slate-900/40 border border-slate-850 rounded-2xl">
+                    <FileText className="h-10 w-10 text-indigo-400 mx-auto mb-3 opacity-40 animate-pulse" />
+                    <p className="font-bold text-xs text-slate-300">No hay órdenes de despacho asignadas</p>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">Las asignaciones o fletes corporativos generados por sus exportadores aparecerán aquí listados en tiempo real.</p>
+                  </div>
+                ) : dispatchList.map((desp) => (
                   <div key={desp.id} className="p-6 bg-slate-900/60 border border-slate-850 rounded-3xl grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
                     <div className="md:col-span-2 space-y-2">
                       <div className="flex items-center space-x-2">
@@ -758,7 +1135,13 @@ export function FleetERP() {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {maintenanceList.map((mant) => (
+                {maintenanceList.length === 0 ? (
+                  <div className="text-center p-12 bg-slate-900/40 border border-slate-850 rounded-2xl">
+                    <Wrench className="h-10 w-10 text-indigo-400 mx-auto mb-3 opacity-40 animate-pulse" />
+                    <p className="font-bold text-xs text-slate-300">No hay registros de mantenimiento</p>
+                    <p className="text-[11px] text-slate-500 mt-1">La bitácora de mantenimiento preventivo e inspección de sus vehículos está limpia.</p>
+                  </div>
+                ) : maintenanceList.map((mant) => (
                   <div key={mant.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex items-start gap-4">
                     <div className={`p-2.5 rounded-xl shrink-0 ${
                       mant.tipo === 'preventivo' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
@@ -797,7 +1180,13 @@ export function FleetERP() {
               </div>
 
               <div className="space-y-4">
-                {fuelList.map((f) => (
+                {fuelList.length === 0 ? (
+                  <div className="text-center p-12 bg-slate-900/40 border border-slate-850 rounded-2xl">
+                    <Fuel className="h-10 w-10 text-indigo-400 mx-auto mb-3 opacity-40 animate-pulse" />
+                    <p className="font-bold text-xs text-slate-300">No hay vales de combustible registrados</p>
+                    <p className="text-[11px] text-slate-500 mt-1">Los vales digitales de grifo y reportes de consumo para cada camión se mostrarán aquí.</p>
+                  </div>
+                ) : fuelList.map((f) => (
                   <div key={f.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex justify-between items-center">
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
@@ -828,7 +1217,13 @@ export function FleetERP() {
               </div>
 
               <div className="space-y-4">
-                {incidentList.map((inc) => (
+                {incidentList.length === 0 ? (
+                  <div className="text-center p-12 bg-slate-900/40 border border-slate-850 rounded-2xl">
+                    <ShieldCheck className="h-10 w-10 text-emerald-400 mx-auto mb-3 opacity-60" />
+                    <p className="font-bold text-xs text-slate-300 font-bold text-emerald-300">¡Excelente! Cero incidentes operativos</p>
+                    <p className="text-[11px] text-slate-500 mt-1">No se detectaron problemas de sensores, desvíos ni fallas mecánicas activas en su flota.</p>
+                  </div>
+                ) : incidentList.map((inc) => (
                   <div key={inc.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex justify-between items-center">
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">

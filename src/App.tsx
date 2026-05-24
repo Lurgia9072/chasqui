@@ -88,6 +88,10 @@ export default function App() {
                 {/* Merchant / Casual Routes */}
                 <Route element={<ProtectedRoute allowedOrgTypes={['casual']} />}>
                   <Route path="/merchant/dashboard" element={<MerchantDashboard />} />
+                </Route>
+
+                {/* Cargo Creation & Tracking (Accessible by both Corporate and Casual Shippers) */}
+                <Route element={<ProtectedRoute allowedOrgTypes={['casual', 'shipper_company']} />}>
                   <Route path="/merchant/post-cargo" element={<PostCargo />} />
                   <Route path="/merchant/cargo/:id" element={<MerchantCargoDetails />} />
                 </Route>

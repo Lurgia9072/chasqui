@@ -1,43 +1,18 @@
 import { EnterpriseCargo, EnterpriseDriver, EnterpriseSede, EnterpriseUser, EnterpriseVehicle } from "./EnterpriseTypes";
 
 export const INITIAL_USERS: EnterpriseUser[] = [
-  { id: 'u1', nombre: 'Eduardo Valdivia', email: 'e.valdivia@chasquimulti.com', rol: 'admin_empresa', sede: 'San Isidro HQ', telefono: '+51 987 654 321', activo: true, ultimoAcceso: 'Hace 5 min' },
-  { id: 'u2', nombre: 'Lurgia Alida Yupa', email: 'lurgia18yuar@gmail.com', rol: 'supervisor', sede: 'Planta Fría Paita', telefono: '+51 998 877 665', activo: true, ultimoAcceso: 'Hoy, 08:30 AM' },
-  { id: 'u3', nombre: 'Carlos Mendoza', email: 'c.mendoza@chasquimulti.com', rol: 'monitorista', sede: 'San Isidro HQ', telefono: '+51 912 345 678', activo: true, ultimoAcceso: 'En línea' },
-  { id: 'u4', nombre: 'Gisela Pinedo', email: 'g.pinedo@chasquimulti.com', rol: 'operador', sede: 'Almacén Lurín', telefono: '+51 945 612 378', activo: true, ultimoAcceso: 'Ayer, 18:20' },
-  { id: 'u5', nombre: 'Ricardo Rojas', email: 'r.rojas@chasquimulti.com', rol: 'auditor', sede: 'San Isidro HQ', telefono: '+51 963 852 741', activo: false, ultimoAcceso: 'Hace 3 días' },
-  { id: 'u6', nombre: 'Mario Lanza', email: 'mario.lanza@driver.com', rol: 'chofer', sede: 'Ruta Nacional', telefono: '+51 999 444 111', activo: true, ultimoAcceso: 'En viaje' },
 ];
 
 export const INITIAL_SEDES: EnterpriseSede[] = [
-  { id: 's1', nombre: 'San Isidro HQ', ubicacion: 'Av. Juan de Arona 450, Lima', tipo: 'oficina', encargado: 'Eduardo Valdivia' },
-  { id: 's2', nombre: 'Planta Fría Paita', ubicacion: 'Zona Industrial Lote B-4, Piura', tipo: 'planta', encargado: 'Lurgia Alida Yupa' },
-  { id: 's3', nombre: 'Almacén Lurín', ubicacion: 'Km 36 Panamericana Sur, Lima', tipo: 'almacen', encargado: 'Gisela Pinedo' },
-  { id: 's4', nombre: 'Puerto del Callao (APM Terminals)', ubicacion: 'Av. Contralmirante Raygada 111, Callao', tipo: 'puerto', encargado: 'Enlace Aduanero' },
 ];
 
 export const INITIAL_VEHICLES: EnterpriseVehicle[] = [
-  { id: 'v1', placa: 'F2W-894', tipo: 'refrigerado', capacidad: '24 Ton', conductorId: 'Mario Lanza', estado: 'viaje', temperaturaSet: -18, temperaturaActual: -18.2, combustibleNivel: 74, documentos: { soat: true, revisionTecnica: true, permisoMTC: true } },
-  { id: 'v2', placa: 'B7T-452', tipo: 'seco', capacidad: '12 Ton', conductorId: 'Raúl Quispe', estado: 'libre', combustibleNivel: 45, documentos: { soat: true, revisionTecnica: true, permisoMTC: true } },
-  { id: 'v3', placa: 'C5X-611', tipo: 'refrigerado', capacidad: '28 Ton', conductorId: 'Enrique Palacios', estado: 'viaje', temperaturaSet: -20, temperaturaActual: -19.5, combustibleNivel: 82, documentos: { soat: true, revisionTecnica: true, permisoMTC: true } },
-  { id: 'v4', placa: 'A9E-231', tipo: 'plataforma', capacidad: '30 Ton', conductorId: 'No Asignado', estado: 'mantenimiento', combustibleNivel: 15, documentos: { soat: true, revisionTecnica: false, permisoMTC: true } },
-  { id: 'v5', placa: 'D3V-742', tipo: 'cortina', capacidad: '15 Ton', conductorId: 'Juan Huamán', estado: 'incidencia', combustibleNivel: 50, documentos: { soat: true, revisionTecnica: true, permisoMTC: true } },
 ];
 
 export const INITIAL_DRIVERS: EnterpriseDriver[] = [
-  { id: 'd1', nombre: 'Mario Lanza', licencia: '71542389-A', categoria: 'A-IIIc', telefono: '+51 999 444 111', estado: 'viajando', calificacion: 4.8, ultimoViaje: 'Paita - Callao (Activo)' },
-  { id: 'd2', nombre: 'Raúl Quispe', licencia: '42516390-B', categoria: 'A-IIIb', telefono: '+51 988 333 222', estado: 'libre', calificacion: 4.9, ultimoViaje: 'Lima - Trujillo hace 2 horas' },
-  { id: 'd3', nombre: 'Enrique Palacios', licencia: '10293847-C', categoria: 'A-IIIc', telefono: '+51 911 222 333', estado: 'viajando', calificacion: 4.7, ultimoViaje: 'Lurín - Matarani (Activo)' },
-  { id: 'd4', nombre: 'Juan Huamán', licencia: '48596012-A', categoria: 'A-IIb', telefono: '+51 955 444 777', estado: 'libre', calificacion: 4.5, ultimoViaje: 'Lima interna hace 1 día' },
-  { id: 'd5', nombre: 'Esteban Paredes', licencia: '33445566-B', categoria: 'A-IIIa (VENCIDA)', telefono: '+51 977 111 555', estado: 'licencia_vencida', calificacion: 4.2, ultimoViaje: 'Trujillo - Chiclayo hace 1 semana' },
 ];
 
 export const INITIAL_CARGOS: EnterpriseCargo[] = [
-  { id: 'c1', tipoDeCarga: 'Agroindustrial (Arándanos Cold)', nombreProducto: 'Arándanos Premium (Finca Sol)', origen: 'Planta Fría Paita', destino: 'Puerto del Callao (APM)', precioPropuesto: 3400, estado: 'en_transito', conductorAsignado: 'Mario Lanza', vehiculoAsignado: 'F2W-894', fechaEntregaLimite: '2026-05-21 14:00', temperaturaActual: -18.2 },
-  { id: 'c2', tipoDeCarga: 'Textil de Exportación', nombreProducto: 'Hilos de Algodón Pima', origen: 'Almacén Lurín', destino: 'Puerto del Callao (DP World)', precioPropuesto: 1200, estado: 'por_asignar', fechaEntregaLimite: '2026-05-23 09:00' },
-  { id: 'c3', tipoDeCarga: 'Conservas de Pescado', nombreProducto: 'Conserva de Anchoveta (40 Pallets)', origen: 'Planta Chimbote', destino: 'Puerto del Callao (Termales)', precioPropuesto: 2800, estado: 'disponible', fechaEntregaLimite: '2026-05-24 18:00' },
-  { id: 'c4', tipoDeCarga: 'Metales / Bobinas', nombreProducto: 'Bobinas de Acero Zincado', origen: 'Almacén Sider', destino: 'Taller San Juan de Lurigancho', precioPropuesto: 950, estado: 'completado', conductorAsignado: 'Juan Huamán', vehiculoAsignado: 'B7T-452', fechaEntregaLimite: '2026-05-19 12:00' },
-  { id: 'c5', tipoDeCarga: 'Agroindustrial (Mangos Orgánicos)', nombreProducto: 'Mangos Kent de Exportación', origen: 'Planta Fría Paita', destino: 'Complejo Lurín', precioPropuesto: 3900, estado: 'incidencia', conductorAsignado: 'Enrique Palacios', vehiculoAsignado: 'C5X-611', fechaEntregaLimite: '2026-05-20 22:00', temperaturaActual: -12.4 },
 ];
 
 export const FIRESTORE_SCHEMA = `
