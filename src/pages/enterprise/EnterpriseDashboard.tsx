@@ -120,7 +120,10 @@ export function EnterpriseDashboard() {
   const isDemo = searchParams.get('demo') === 'true' || localStorage.getItem('chasqui_demo_active') === 'true';
 
   // Instantiate dummy corporate credentials if guest launches Interactive Demo
-  const user = rawUser ? (rawUser as any) : (isDemo ? {
+  const user = rawUser ? {
+    ...(rawUser as any),
+    organizationId: (rawUser as any).organizationId || `${rawUser.uid}_org`
+  } : (isDemo ? {
     uid: 'demo_user',
     nombre: 'Soporte Agrícola & Exportaciones SAC',
     tipoUsuario: 'comerciante',
@@ -248,12 +251,26 @@ export function EnterpriseDashboard() {
         if (orgDoc.exists()) {
           setActiveOrg(orgDoc.data());
         } else {
-          setActiveOrg({
+          const defaultName = rawUser.razonSocial || `${rawUser.nombre || 'Mi'} Logistics S.A.`;
+          const defaultRuc = rawUser.ruc || '20601234567';
+          const defaultOrg = {
             id: orgId,
-            name: `${user?.nombre || 'Mi'} Logistics S.A.`,
-            plan: 'business',
-            ruc: '20601234567',
-            razonSocial: `${user?.nombre || 'Mi'} Logistics S.A.`
+            name: defaultName,
+            plan: 'enterprise',
+            ruc: defaultRuc,
+            razonSocial: defaultName,
+            createdAt: Date.now(),
+            createdBy: rawUser.uid,
+            adminUser: rawUser.uid,
+            limitSedes: 50,
+            limitVehicles: 200,
+            limitDrivers: 200,
+          };
+          setActiveOrg(defaultOrg);
+          
+          // Silently write to Firestore so database queries for sedes/vehicles/etc work perfectly
+          await setDoc(doc(db, 'organizations', orgId), defaultOrg).catch(err => {
+            console.warn('Silent org registration warning (safe to ignore):', err);
           });
         }
       } catch (err) {
@@ -303,8 +320,13 @@ export function EnterpriseDashboard() {
   // Auto-simulate logs in the background to bring the dashboard to life!
   useEffect(() => {
     const interval = setInterval(() => {
+      if (vehicles.length === 0) {
+        return; // Safe guard for clean/new enterprise profile
+      }
+      
       // Pick random truck
       const t = vehicles[Math.floor(Math.random() * vehicles.length)];
+      if (!t) return;
       let newLog = '';
       
       if (currentAlertSim === 'temperatura' && t.id === 'v1') {
@@ -319,7 +341,7 @@ export function EnterpriseDashboard() {
           `Lectura telemétrica Camión ${t.placa} corregida. GPS: OK. ${tempReport}`,
           `Camión ${t.placa} reporta velocidad de ${(50 + Math.random() * 30).toFixed(0)} km/h.`,
           `Soporte Chasqui verificó firma digital para conductor ${t.conductorId}.`,
-          `Nivel de Combustible Camión ${t.placa}: ${t.combustibleNivel}%`
+          `Nivel de Combustible Camión ${t.placa}: ${t.combustibleNivel ?? 85}%`
         ];
         newLog = `[${new Date().toLocaleTimeString()}] ${actions[Math.floor(Math.random() * actions.length)]}`;
       }
