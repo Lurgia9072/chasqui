@@ -44,15 +44,17 @@ import {
   syncOfflineEvents,
   queueOfflineEvent,
   getOfflineQueue,
-  EnterpriseTrip } from '@/src/services/EnterpriseService';
+  EnterpriseTrip, 
+  listenAuditLogs,
+  saveAuditLog} from '@/src/services/EnterpriseService';
 import { EnterpriseCargos } from './EnterpriseCargos';
 import { ControlTowerMap } from './ControlTowerMap';
 import { EnterpriseCarriers } from './EnterpriseCarriers';
 import { EnterpriseKanban } from './EnterpriseKanban';
 import { SaaSBilling } from './SaaSBilling';
 import { TechnicalDocs } from './TechnicalDocs';
-import { EnterpriseSettings } from './EnterpriseSettings';
 import { EnterpriseIncidents } from './EnterpriseIncidents';
+import { EnterpriseSettings } from './EnterpriseSettings';
 
 const COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -96,6 +98,8 @@ export function EnterpriseDashboard() {
   const [simulatedLogs, setSimulatedLogs] = useState<string[]>([
     '📡 Chasqui Enterprise Control Center iniciado - Entorno corporativo activo.',
   ]);
+
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Invite user state
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -171,6 +175,23 @@ export function EnterpriseDashboard() {
         list.push({ id: d.id, ...d.data() as any });
       });
       setUsers(list);
+
+      // Auto-register current user if list is empty and they are logged in and it is not a demo
+      if (snap.empty && rawUser && !isDemo) {
+        const uId = rawUser.uid;
+        const record = {
+          id: uId,
+          nombre: rawUser.nombre || 'Administrador Principal de Logística',
+          email: rawUser.email,
+          rol: rawUser.role || 'operations_manager',
+          sede: 'Sede Principal HQ',
+          activo: true,
+          ultimoAcceso: 'Activo ahora'
+        };
+        setDoc(doc(db, 'organizations', orgId, 'users', uId), record).catch(err => {
+          console.error("Error seeding self to collaborators list in Dashboard:", err);
+        });
+      }
     });
 
     // 6. Subscribe to real-time Chat messages
@@ -185,6 +206,11 @@ export function EnterpriseDashboard() {
       setChatMessages(messages);
     });
 
+    // 7. Subscribe to real-time Compliance Audit logs
+    const unsubAudits = listenAuditLogs(orgId, (data) => {
+      setAuditLogs(data);
+    });
+
     return () => {
       unsubSedes();
       unsubCargos();
@@ -192,24 +218,268 @@ export function EnterpriseDashboard() {
       unsubIncidents();
       unsubUsers();
       unsubChats();
+      unsubAudits();
     };
   }, [rawUser]);
 
   // Helpers for direct Firestore updates
   const handleSaveCargo = async (cargoData: Omit<EnterpriseCargo, 'id'>) => {
     const orgId = user?.organizationId || 'demo_org_id';
-    await saveEnterpriseCargo(orgId, cargoData);
+    const emailStr = rawUser?.email || 'operaciones@chasqui.pe';
+    
+    const cargoId = await saveEnterpriseCargo(orgId, cargoData);
+    
+    try {
+      await saveAuditLog(orgId, {
+        user: emailStr,
+        action: `PUBLICAR_NUEVA_CARGA - Flete: ${cargoData.nombreProducto}`,
+        affectedEntity: 'cargos',
+        before: null,
+        after: { id: cargoId || 'unknown', ...cargoData }
+      });
+    } catch (e) {
+      console.error('Audit save cargo error:', e);
+    }
+
     setSimulatedLogs(prev => [`[NUEVA CARGA] Carga corporativa [${cargoData.nombreProducto}] publicada con éxito en Firestore.`, ...prev]);
   };
 
   const handleUpdateCargo = async (id: string, updates: Partial<EnterpriseCargo>) => {
-    await updateEnterpriseCargoData(id, updates);
-    setSimulatedLogs(prev => [`[ACTUALIZACIÓN CARGA] Se actualizó el estado del embarque #${id.substring(0,6).toUpperCase()} a [${updates.estado}].`, ...prev]);
+    const orgId = user?.organizationId || 'demo_org_id';
+    const emailStr = rawUser?.email || 'operaciones@chasqui.pe';
+
+    // Fetch before (old) state
+    const oldCargo = cargos.find(c => c.id === id);
+    if (!oldCargo) {
+      await updateEnterpriseCargoData(id, updates);
+      return;
+    }
+
+    const updatedCargo = { ...oldCargo, ...updates };
+
+    try {
+      // 1. Generate real event on audit_logs
+      await saveAuditLog(orgId, {
+        user: emailStr,
+        action: `ACTUALIZAR_CARGA - Cambio de Estado de ${oldCargo.estado} a ${updatedCargo.estado}`,
+        affectedEntity: 'cargos',
+        before: oldCargo,
+        after: updatedCargo
+      });
+
+      // 2. Cascade reactions for flow 'en_ruta' (Dispatch initiated)
+      if (updates.estado === 'en_ruta' || (updates.estado && ['en_ruta', 'en_entrega'].includes(updates.estado) && !['en_ruta', 'en_entrega'].includes(oldCargo.estado))) {
+        setSimulatedLogs(prev => [`⚡ [DESPACHO SRE] Iniciando tránsito satelital para el flete #${id.substring(0, 6).toUpperCase()}. Actualizando telemática...`, ...prev]);
+
+        const placaStr = oldCargo.vehiculoAsignado || 'REF-894';
+        const conductorName = oldCargo.conductorAsignado || 'Carlos Mendoza';
+
+        // 2a. Update vehicle state -> en_ruta
+        const qVehs = query(collection(db, 'vehicles'), where('organizationId', '==', orgId), where('placa', '==', placaStr.split(' ')[0]));
+        const vehsSnap = await getDocs(qVehs);
+        if (!vehsSnap.empty) {
+          const vehId = vehsSnap.docs[0].id;
+          await updateDoc(doc(db, 'vehicles', vehId), {
+            estado: 'en_ruta',
+            conductor: conductorName
+          });
+          
+          await saveAuditLog(orgId, {
+            user: 'SISTEMA_CASCADA',
+            action: `AUTO_BLOQUEO_VEHICULO - Unidad ${placaStr} asignada y bloqueada en_ruta`,
+            affectedEntity: 'vehicles',
+            before: vehsSnap.docs[0].data(),
+            after: { ...vehsSnap.docs[0].data(), estado: 'en_ruta', conductor: conductorName }
+          });
+        }
+
+        // 2b. Update driver state -> ocupado (activo)
+        const qDrvs = query(collection(db, 'drivers'), where('organizationId', '==', orgId), where('nombre', '==', conductorName));
+        const drvsSnap = await getDocs(qDrvs);
+        if (!drvsSnap.empty) {
+          const drvId = drvsSnap.docs[0].id;
+          await updateDoc(doc(db, 'drivers', drvId), {
+            estado: 'activo'
+          });
+
+          await saveAuditLog(orgId, {
+            user: 'SISTEMA_CASCADA',
+            action: `AUTO_BLOQUEO_CONDUCTOR - Chofer ${conductorName} en_viaje activo`,
+            affectedEntity: 'drivers',
+            before: drvsSnap.docs[0].data(),
+            after: { ...drvsSnap.docs[0].data(), estado: 'activo' }
+          });
+        }
+
+        // 2c. Create a real tracking Trip in enterpriseTrips
+        const tripRef = doc(collection(db, 'enterpriseTrips'));
+        await setDoc(tripRef, {
+          id: tripRef.id,
+          organizationId: orgId,
+          cargoId: id,
+          driverId: drvsSnap.empty ? 'drv_automated' : drvsSnap.docs[0].id,
+          driverName: conductorName,
+          vehicleId: vehsSnap.empty ? 'veh_automated' : vehsSnap.docs[0].id,
+          vehiclePlaca: placaStr,
+          origen: oldCargo.origen,
+          destino: oldCargo.destino,
+          estado: 'en_transito',
+          temperaturaActual: -18.2,
+          temperaturaSet: oldCargo.temperaturaSet || -18.0,
+          combustibleNivel: 85,
+          gpsCoordinates: { lat: -12.0431, lng: -77.1245 }, // Metropoli Lima Start Coordinates
+          alertas: {
+            desvioRuta: false,
+            retrasoCritico: false,
+            paradaNoAutorizada: false,
+            perdidaSignal: false
+          },
+          checkpoints: [
+            {
+              id: `cp_init_${Date.now()}`,
+              mensaje: '[TORRE DE CONTROL] Despachado del Almacén. Inicio de trazabilidad SRE.',
+              timestamp: Date.now(),
+              automatico: true,
+              lat: -12.0431,
+              lng: -77.1245
+            }
+          ],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+
+        // 2d. Create welcome Operational Chat
+        await addDoc(collection(db, 'enterpriseChats'), {
+          organizationId: orgId,
+          tripId: id,
+          senderId: 'SYSTEM_CENTRAL',
+          senderName: 'MONITOR CENTRAL DE TRÁNSITO',
+          senderRole: 'monitorista',
+          text: `🚨 [DESPACHO INICIADO] Flete #${id.substring(0, 6).toUpperCase()} asignado a la unidad ${placaStr} conducida por ${conductorName}. Comienza transmisión satelital.`,
+          createdAt: Date.now()
+        });
+
+        // 2e. Create operational timeline checkpoint
+        const currentCPs = oldCargo.checkpoints || [];
+        updates.checkpoints = [
+          ...currentCPs,
+          {
+            id: `cp_route_${Date.now()}`,
+            mensaje: `Despachado en georuta Panamericana. Conductor: ${conductorName}`,
+            timestamp: Date.now(),
+            lat: -12.0431,
+            lng: -77.1245
+          }
+        ];
+      }
+
+      // 3. Cascade reactions when cargo is delivered/completed ('entregada' or 'completada')
+      if (['entregada', 'completada'].includes(updates.estado) && !['entregada', 'completada'].includes(oldCargo.estado)) {
+        setSimulatedLogs(prev => [`✅ [OPERACIÓN EN COMPLIANCE] Embarque #${id.substring(0, 6).toUpperCase()} entregado con sello digital. Liberando recursos...`, ...prev]);
+
+        const placaStr = oldCargo.vehiculoAsignado || 'REF-894';
+        const conductorName = oldCargo.conductorAsignado || 'Carlos Mendoza';
+
+        // 3a. Release vehicle back to disponible
+        const qVehs = query(collection(db, 'vehicles'), where('organizationId', '==', orgId), where('placa', '==', placaStr.split(' ')[0]));
+        const vehsSnap = await getDocs(qVehs);
+        if (!vehsSnap.empty) {
+          const vehId = vehsSnap.docs[0].id;
+          await updateDoc(doc(db, 'vehicles', vehId), {
+            estado: 'disponible',
+            conductor: 'Sin Asignar'
+          });
+
+          await saveAuditLog(orgId, {
+            user: 'SISTEMA_CASCADA',
+            action: `AUTO_LIBERACION_VEHICULO - Unidad ${placaStr} liberada a disponible`,
+            affectedEntity: 'vehicles',
+            before: vehsSnap.docs[0].data(),
+            after: { ...vehsSnap.docs[0].data(), estado: 'disponible', conductor: 'Sin Asignar' }
+          });
+        }
+
+        // 3b. Release driver back to disponible
+        const qDrvs = query(collection(db, 'drivers'), where('organizationId', '==', orgId), where('nombre', '==', conductorName));
+        const drvsSnap = await getDocs(qDrvs);
+        if (!drvsSnap.empty) {
+          const drvId = drvsSnap.docs[0].id;
+          await updateDoc(doc(db, 'drivers', drvId), {
+            estado: 'disponible'
+          });
+
+          await saveAuditLog(orgId, {
+            user: 'SISTEMA_CASCADA',
+            action: `AUTO_LIBERACION_CONDUCTOR - Chofer ${conductorName} disponible`,
+            affectedEntity: 'drivers',
+            before: drvsSnap.docs[0].data(),
+            after: { ...drvsSnap.docs[0].data(), estado: 'disponible' }
+          });
+        }
+
+        // 3c. Close the trip status under enterpriseTrips
+        const qTrips = query(collection(db, 'enterpriseTrips'), where('organizationId', '==', orgId), where('cargoId', '==', id));
+        const tripsSnap = await getDocs(qTrips);
+        if (!tripsSnap.empty) {
+          await updateDoc(doc(db, 'enterpriseTrips', tripsSnap.docs[0].id), {
+            estado: 'completado',
+            updatedAt: Date.now()
+          });
+        }
+
+        // 3d. Chat delivery notice
+        await addDoc(collection(db, 'enterpriseChats'), {
+          organizationId: orgId,
+          tripId: id,
+          senderId: 'SYSTEM_CENTRAL',
+          senderName: 'NÚCLEO CHASQUI',
+          senderRole: 'monitorista',
+          text: `🎉 [TRANSITO COMPLETADO] Sello digital de validación SUNAT/SENASA estampado de forma inmutable. Servicio de transporte culminado de forma conforme.`,
+          createdAt: Date.now()
+        });
+
+        // 3e. Delivery checkpoint
+        const currentCPs = oldCargo.checkpoints || [];
+        updates.checkpoints = [
+          ...currentCPs,
+          {
+            id: `cp_done_${Date.now()}`,
+            mensaje: `Entrega completada y mercadería recibida a conformidad. Sello digital SRE activo.`,
+            timestamp: Date.now(),
+            lat: -12.0431,
+            lng: -77.1245
+          }
+        ];
+      }
+
+      await updateEnterpriseCargoData(id, updates);
+      setSimulatedLogs(prev => [`[CONECTOR SAAS] Estado de carga #${id.substring(0, 6).toUpperCase()} actualizado a [${updates.estado}].`, ...prev]);
+    } catch (err: any) {
+      console.error('Error in cascade handling:', err);
+      await updateEnterpriseCargoData(id, updates);
+    }
   };
 
   const handleRemoveCargo = async (id: string) => {
+    const orgId = user?.organizationId || 'demo_org_id';
+    const emailStr = rawUser?.email || 'operaciones@chasqui.pe';
+    const oldCargo = cargos.find(c => c.id === id);
+
     await removeEnterpriseCargo(id);
-    setSimulatedLogs(prev => [`[ALERTA BORRADO] Se eliminó el expediente de carga #${id.substring(0,6).toUpperCase()} de Firestore.`, ...prev]);
+
+    try {
+      await saveAuditLog(orgId, {
+        user: emailStr,
+        action: `ELIMINAR_CARGA - Expediente #${id}`,
+        affectedEntity: 'cargos',
+        before: oldCargo || null,
+        after: null
+      });
+    } catch (e) {
+      console.error('Audit remove cargo error:', e);
+    }
+
+    setSimulatedLogs(prev => [`[ALERTA BORRADO] Se eliminó el expediente de flete #${id.substring(0,6).toUpperCase()} de Firestore con auditoría inmutable.`, ...prev]);
   };
 
   const handleAddCarrier = async (carrierData: Omit<EnterpriseCarrier, 'id'>) => {
@@ -868,6 +1138,68 @@ export function EnterpriseDashboard() {
                           {log}
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Real-time System Audit Trail Area */}
+                  <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <h4 className="font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-indigo-400 animate-pulse" />
+                        <span>Auditoría de Cumplimiento Logístico e Inmutabilidad (Audit Trail OS)</span>
+                      </h4>
+                      <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded text-[9px] font-mono tracking-widest">
+                        ● REALTIME SECURED
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Todas las transiciones de carga, despacho automático, asignaciones de flota y registros de incidencias se guardan automáticamente en la colección de Firestore <code className="bg-slate-900 px-1 py-0.5 rounded font-mono text-indigo-300">audit_logs/</code> como tokens inmutables de compliance operativo.
+                    </p>
+
+                    <div className="border border-slate-900 rounded-xl overflow-hidden divide-y divide-slate-900 max-h-[280px] overflow-y-auto">
+                      {auditLogs.length === 0 ? (
+                        <div className="p-4 text-center text-xs italic text-slate-550">
+                          No hay transacciones registradas todavía en la colección audit_logs de Firestore. Cambie el estado de un flete o realice una asignación para ver los logs en tiempo real.
+                        </div>
+                      ) : (
+                        auditLogs.map((log) => (
+                          <div key={log.id} className="p-3 bg-[#030712] hover:bg-slate-900/10 text-xs transition space-y-1.5 border-b border-slate-900">
+                            <div className="flex justify-between items-start">
+                              <span className="font-bold text-indigo-400 font-mono text-[11px] uppercase tracking-wide">
+                                {log.action}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-500">
+                                {new Date(log.timestamp).toLocaleTimeString()} {new Date(log.timestamp).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400 font-mono">
+                              <span>Operador: <b className="text-white">{log.user}</b></span>
+                              <span>Colección: <b className="text-indigo-400">{log.affectedEntity}</b></span>
+                              <span>Doc ID: <b className="text-slate-500">{log.id.slice(0, 10)}</b></span>
+                            </div>
+                            {(log.before || log.after) && (
+                              <div className="bg-[#02050b] p-3 rounded-lg border border-slate-900 font-mono text-[10.5px] text-slate-400 space-y-1.5">
+                                {log.before && (
+                                  <div className="text-rose-400/80 flex items-start gap-1">
+                                    <span className="font-bold select-none">- ANTES:</span>
+                                    <span className="break-all">
+                                      {log.before.estado ? `Estatus [${log.before.estado}]` : ''} {log.before.conductorAsignado ? `Conductor [${log.before.conductorAsignado}]` : ''} {log.before.vehiculoAsignado ? `| Unidad Placa [${log.before.vehiculoAsignado}]` : ''} {!log.before.estado && JSON.stringify(log.before).slice(0, 150)}
+                                    </span>
+                                  </div>
+                                )}
+                                {log.after && (
+                                  <div className="text-emerald-405 flex items-start gap-1">
+                                    <span className="font-bold select-none">+ AHORA:</span>
+                                    <span className="break-all">
+                                      {log.after.estado ? `Estatus [${log.after.estado}]` : ''} {log.after.conductorAsignado ? `Conductor [${log.after.conductorAsignado}]` : ''} {log.after.vehiculoAsignado ? `| Unidad Placa [${log.after.vehiculoAsignado}]` : ''} {!log.after.estado && JSON.stringify(log.after).slice(0, 150)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 

@@ -488,3 +488,50 @@ export async function saveOperationalChatMessage(
     return handleFirestoreError(err, OperationType.CREATE, path);
   }
 }
+
+// -------------------------------------------------------------
+// Real-time Compliance Audit Logging (Audit Trail OS)
+// -------------------------------------------------------------
+export interface EnterpriseAuditLog {
+  id: string;
+  user: string;
+  action: string;
+  timestamp: number;
+  organizationId: string;
+  affectedEntity: string;
+  before: any;
+  after: any;
+}
+
+export async function saveAuditLog(orgId: string, log: Omit<EnterpriseAuditLog, 'id' | 'timestamp' | 'organizationId'>) {
+  const path = 'audit_logs';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...log,
+      organizationId: orgId,
+      timestamp: Date.now()
+    });
+    return docRef.id;
+  } catch (err) {
+    return handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
+export function listenAuditLogs(orgId: string, onUpdate: (logs: EnterpriseAuditLog[]) => void) {
+  const q = query(
+    collection(db, 'audit_logs'),
+    where('organizationId', '==', orgId),
+    orderBy('timestamp', 'desc'),
+    limit(50)
+  );
+  return onSnapshot(q, (snapshot) => {
+    const list: EnterpriseAuditLog[] = [];
+    snapshot.forEach(doc => {
+      list.push({ id: doc.id, ...doc.data() } as any);
+    });
+    onUpdate(list);
+  }, error => {
+    handleFirestoreError(error, OperationType.LIST, `audit_logs (org: ${orgId})`);
+  });
+}
+

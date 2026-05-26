@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { 
   Plus, Users, Phone, Mail, Award, X, Trash2, 
-  MapPin, ShieldAlert, CheckCircle2, MessageSquare, Star, Settings2, Info
+  MapPin, ShieldAlert, CheckCircle2, MessageSquare, Star, Settings2, Info, Search
 } from 'lucide-react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { EnterpriseCarrier } from '../../pages/enterprise/EnterpriseTypes';
 
 interface EnterpriseCarriersProps {
@@ -19,6 +21,11 @@ export const EnterpriseCarriers: React.FC<EnterpriseCarriersProps> = ({
   onOpenDirectChat
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [searchRuc, setSearchRuc] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchSuccess, setSearchSuccess] = useState<string | null>(null);
+
   const [newCarrier, setNewCarrier] = useState({
     name: '',
     ruc: '',
@@ -33,10 +40,86 @@ export const EnterpriseCarriers: React.FC<EnterpriseCarriersProps> = ({
     estadoStr: 'activo' as any
   });
 
+  const handleSearchByRuc = async () => {
+    if (!searchRuc || searchRuc.length !== 11) {
+      setSearchError('El RUC debe tener exactamente 11 dígitos.');
+      setSearchSuccess(null);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+    setSearchSuccess(null);
+
+    try {
+      // Search in users collection
+      const usersRef = collection(db, 'users');
+      const qUsers = query(usersRef, where('ruc', '==', searchRuc));
+      const querySnapshot = await getDocs(qUsers);
+
+      if (!querySnapshot.empty) {
+        let foundUser: any = null;
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.tipoUsuario === 'transportista') {
+            foundUser = data;
+          } else if (!foundUser) {
+            foundUser = data;
+          }
+        });
+
+        if (foundUser) {
+          setNewCarrier(prev => ({
+            ...prev,
+            ruc: foundUser.ruc || searchRuc,
+            name: foundUser.razonSocial || foundUser.nombreComercial || foundUser.nombre || prev.name,
+            contactoNombre: foundUser.nombre || foundUser.contactoNombre || foundUser.nombreResponsable || prev.contactoNombre || 'Representante Legal',
+            telefono: foundUser.telefono || prev.telefono,
+            email: foundUser.email || prev.email,
+            flotaSize: foundUser.cantidadVehiculos || foundUser.flotaSize || prev.flotaSize,
+            operacionZonas: foundUser.coberturaNacional ? 'Nacional' : (foundUser.rutasFrecuentes || prev.operacionZonas),
+            slaPercent: foundUser.indiceConfiabilidad || foundUser.rating ? Number((foundUser.indiceConfiabilidad || (foundUser.rating * 20)).toFixed(1)) : prev.slaPercent
+          }));
+          setSearchSuccess(`¡Encontrado! Datos rellenados para "${foundUser.razonSocial || foundUser.nombreComercial || foundUser.nombre}".`);
+          return;
+        }
+      }
+
+      // If not in users, search organizations
+      const orgsRef = collection(db, 'organizations');
+      const qOrgs = query(orgsRef, where('ruc', '==', searchRuc));
+      const orgSnapshot = await getDocs(qOrgs);
+
+      if (!orgSnapshot.empty) {
+        const foundOrg = orgSnapshot.docs[0].data();
+        setNewCarrier(prev => ({
+          ...prev,
+          ruc: foundOrg.ruc || searchRuc,
+          name: foundOrg.razonSocial || foundOrg.nombreComercial || prev.name,
+          contactoNombre: foundOrg.nombreResponsable || prev.contactoNombre || 'Representante Legal',
+          flotaSize: foundOrg.cantidadVehiculos || prev.flotaSize,
+          operacionZonas: foundOrg.coberturaNacional ? 'Nacional' : prev.operacionZonas
+        }));
+        setSearchSuccess(`¡Vínculo de Organización Encontrado! Cargados datos de "${foundOrg.razonSocial}".`);
+        return;
+      }
+
+      setSearchError('RUC no encontrado en el sistema. Puede proceder a ingresarlo de forma manual.');
+    } catch (err: any) {
+      console.error('Error al consultar RUC:', err);
+      setSearchError('Error de red o permisos al realizar la consulta. Intente manual.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onAddCarrier(newCarrier);
     setShowAddModal(false);
+    setSearchRuc('');
+    setSearchSuccess(null);
+    setSearchError(null);
     // Reset
     setNewCarrier({
       name: '',
@@ -172,10 +255,56 @@ export const EnterpriseCarriers: React.FC<EnterpriseCarriersProps> = ({
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 text-slate-100 shadow-2xl relative">
-            <h4 className="text-base font-black text-white border-b border-slate-900 pb-3 mb-4 flex items-center gap-2">
-              <Users className="h-5 w-5 text-indigo-455" />
-              <span>Homologar Cuenta de Transportista</span>
+            <h4 className="text-base font-black text-white border-b border-slate-900 pb-3 mb-4 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-indigo-400" />
+                <span>Homologar Cuenta de Transportista</span>
+              </span>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSearchRuc('');
+                  setSearchSuccess(null);
+                  setSearchError(null);
+                }}
+                className="text-slate-500 hover:text-white transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </h4>
+
+            {/* BUSCADOR DE RUC EN BASE DE DATOS */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-4">
+              <label className="text-[10px] uppercase font-bold text-indigo-400 block mb-1.5">
+                Búsqueda Rápida en Base de Datos de Transportistas
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={11}
+                  placeholder="Ingrese RUC (11 dígitos) ej: 20503029182"
+                  value={searchRuc}
+                  onChange={e => setSearchRuc(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  disabled={isSearching}
+                  onClick={handleSearchByRuc}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition duration-150 flex items-center gap-1 shrink-0"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span>{isSearching ? 'Buscando...' : 'Buscar RUC'}</span>
+                </button>
+              </div>
+              {searchError && (
+                <p className="text-[10px] text-amber-500 font-semibold mt-1.5">{searchError}</p>
+              )}
+              {searchSuccess && (
+                <p className="text-[10px] text-emerald-400 font-semibold mt-1.5">{searchSuccess}</p>
+              )}
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
@@ -198,7 +327,7 @@ export const EnterpriseCarriers: React.FC<EnterpriseCarriersProps> = ({
                     required
                     maxLength={11}
                     value={newCarrier.ruc}
-                    onChange={e => setNewCarrier({ ...newCarrier, ruc: e.target.value })}
+                    onChange={e => setNewCarrier({ ...newCarrier, ruc: e.target.value.replace(/\D/g, '') })}
                     placeholder="20503029182"
                     className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3 py-2 text-white font-mono focus:outline-none"
                   />
@@ -278,7 +407,12 @@ export const EnterpriseCarriers: React.FC<EnterpriseCarriersProps> = ({
               <div className="pt-4 border-t border-slate-900 flex justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setSearchRuc('');
+                    setSearchSuccess(null);
+                    setSearchError(null);
+                  }}
                   className="bg-slate-900 text-slate-400 font-bold px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-850"
                 >
                   Cancelar

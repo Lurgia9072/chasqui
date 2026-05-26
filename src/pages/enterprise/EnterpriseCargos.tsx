@@ -59,17 +59,17 @@ export const EnterpriseCargos: React.FC<EnterpriseCargosProps> = ({
       destino: newCargo.destino,
       precioPropuesto: Number(newCargo.precioPropuesto),
       fechaEntregaLimite: newCargo.fechaEntregaLimite || new Date(Date.now() + 86450000).toISOString().split('T')[0],
-      temperaturaSet: newCargo.tipoDeCarga.toLowerCase().includes('refrig') ? Number(newCargo.temperaturaSet) : undefined,
-      temperaturaActual: newCargo.tipoDeCarga.toLowerCase().includes('refrig') ? Number(newCargo.temperaturaSet) + 0.2 : undefined,
+      temperaturaSet: newCargo.tipoDeCarga.toLowerCase().includes('refrig') ? Number(newCargo.temperaturaSet) : null,
+      temperaturaActual: newCargo.tipoDeCarga.toLowerCase().includes('refrig') ? Number(newCargo.temperaturaSet) + 0.2 : null,
       prioridad: newCargo.prioridad,
       pesoKg: Number(newCargo.pesoKg),
       volumenM3: Number(newCargo.volumenM3),
-      carrierId: newCargo.carrierId || undefined,
-      carrierName: carrier ? carrier.name : undefined,
+      carrierId: newCargo.carrierId || null,
+      carrierName: carrier ? carrier.name : null,
       observaciones: newCargo.observaciones,
       estado: 'pendiente',
       createdAt: Date.now()
-    });
+    } as any);
 
     setShowCreateModal(false);
     // Reset

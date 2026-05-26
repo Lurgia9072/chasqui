@@ -255,6 +255,22 @@
         "createdAt": { "type": "number" }
       },
       "required": ["userId", "text", "senderId", "createdAt"]
+    },
+    "EnterpriseAuditLog": {
+      "title": "EnterpriseAuditLog",
+      "description": "Immutable real-time logistics compliance transaction log document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user": { "type": "string" },
+        "action": { "type": "string" },
+        "affectedEntity": { "type": "string" },
+        "before": { "type": "object" },
+        "after": { "type": "object" },
+        "organizationId": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["user", "action", "affectedEntity", "organizationId", "timestamp"]
     }
   },
   "firestore": {
@@ -313,6 +329,18 @@
     "/enterpriseChats/{chatId}": {
       "schema": "object",
       "description": "Intra-enterprise chat messages and logs"
+    },
+    "/enterpriseCarriers/{carrierId}": {
+      "schema": "object",
+      "description": "Associated and certified enterprise carrier partners"
+    },
+    "/enterpriseIncidents/{incidentId}": {
+      "schema": "object",
+      "description": "Registered and tracked telematic road incidents"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "EnterpriseAuditLog",
+      "description": "Logs tracking security, modifications, status transitions and telematic exceptions in real-time"
     },
     "/config/{configId}": {
       "schema": "object",

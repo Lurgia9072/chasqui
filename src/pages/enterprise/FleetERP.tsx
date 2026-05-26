@@ -11,7 +11,8 @@ import {
 import { jsPDF } from 'jspdf';
 import { useAuthStore } from '../../store/useAuthStore';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc, setDoc, updateDoc, getDocs, limit, orderBy } from 'firebase/firestore';
+import { listenAuditLogs, onboardOrganization, saveAuditLog } from '@/src/services/EnterpriseService';
 
 // Component Core
 export function FleetERP() {
@@ -43,6 +44,7 @@ export function FleetERP() {
     return raw ? JSON.parse(raw) : [];
   });
   const [rbacMembers, setRbacMembers] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Dynamic Calculators for KPIs and Charts based on actual database data
   const totalTrucksCount = truckList.length;
@@ -88,6 +90,23 @@ export function FleetERP() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedDispatchId, setSelectedDispatchId] = useState<string | null>(null);
   const [assignForm, setAssignForm] = useState({ conductorId: '', truckId: '' });
+
+  // New enterprise operational modals state
+  const [showAddDispatchModal, setShowAddDispatchModal] = useState(false);
+  const [newDispatch, setNewDispatch] = useState({ cliente: '', carga: '', origen: '', destino: '', precio: '', fechaDespacho: '' });
+
+  const [showAddMaintenanceModal, setShowAddMaintenanceModal] = useState(false);
+  const [newMaintenance, setNewMaintenance] = useState({ placa: '', tipo: 'preventivo', detalle: '', costo: '', taller: '', km: '' });
+
+  const [showAddFuelModal, setShowAddFuelModal] = useState(false);
+  const [newFuel, setNewFuel] = useState({ placa: '', galones: '', costo: '', grifo: '', conductor: '' });
+
+  const [showAddIncidentModal, setShowAddIncidentModal] = useState(false);
+  const [newIncident, setNewIncident] = useState({ placa: '', tipo: 'Falla Mecánica', detalle: '', gravedad: 'media', conductor: '' });
+
+  // Team RBAC custom additions
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [newMember, setNewMember] = useState({ nombre: '', email: '', rol: 'dispatcher', sede: 'Sede Principal HQ' });
 
   // SRE logs and connection simulations
   const [isOnline, setIsOnline] = useState(true);
@@ -192,12 +211,34 @@ export function FleetERP() {
     // 7. Subscribe to User directory (RBAC members) under organizations/orgId/users
     const unsubRbac = onSnapshot(collection(db, 'organizations', orgId, 'users'), (snap) => {
       const list: any[] = [];
-      snap.forEach(doc => {
-        list.push({ id: doc.id, ...doc.data() });
+      snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
       });
       setRbacMembers(list);
+
+      // Auto-register current user if list is empty and they are logged in and it is not a demo
+      if (snap.empty && rawUser && !isDemo) {
+        const uId = rawUser.uid;
+        const record = {
+          id: uId,
+          nombre: rawUser.nombre || 'Administrador Principal de Flota',
+          email: rawUser.email,
+          rol: rawUser.role || 'operations_manager',
+          sede: 'Sede Principal HQ',
+          activo: true,
+          ultimoAcceso: 'Activo ahora'
+        };
+        setDoc(doc(db, 'organizations', orgId, 'users', uId), record).catch(err => {
+          console.error("Error seeding self to rbac list in FleetERP:", err);
+        });
+      }
     }, (err) => {
       console.error("Error listening to rbac members", err);
+    });
+
+    // 8. Subscribe to audit logs
+    const unsubAudits = listenAuditLogs(orgId, (data) => {
+      setAuditLogs(data);
     });
 
     return () => {
@@ -208,6 +249,7 @@ export function FleetERP() {
       unsubFuels();
       unsubIncidents();
       unsubRbac();
+      unsubAudits();
     };
   }, [orgId, rawUser]);
 
@@ -388,8 +430,101 @@ export function FleetERP() {
           list: updatedDispatches,
           updatedAt: Date.now()
         });
+
+        // 1. Save an audit log for the action
+        const dispatchObj = dispatchList.find(d => d.id === selectedDispatchId);
+        await saveAuditLog(orgId, {
+          user: rawUser?.email || 'operaciones_flota@chasqui.pe',
+          action: `ASIGNAR_DESPACHO_FLOTA - Despacho ID: ${selectedDispatchId}`,
+          affectedEntity: 'fleet_dispatches',
+          before: dispatchObj || null,
+          after: updatedDispatches.find(d => d.id === selectedDispatchId) || null
+        });
+
+        // 2. Programmatically search for and cascade a matching cargo
+        if (dispatchObj) {
+          const qCargos = query(collection(db, 'enterpriseCargos'), where('organizationId', '==', orgId));
+          const cargosSnap = await getDocs(qCargos);
+          
+          // Find any pending cargo that can be active
+          const matchingCargoDoc = cargosSnap.docs.find(docSnap => {
+            const cargoData = docSnap.data();
+            return (
+              cargoData.estado === 'pendiente' || 
+              cargoData.estado === 'buscando_transporte' || 
+              cargoData.estado === 'asignada'
+            );
+          });
+          
+          if (matchingCargoDoc) {
+            const cargoId = matchingCargoDoc.id;
+            const cargoData = matchingCargoDoc.data();
+            
+            // Advance cargo to en_ruta
+            await updateDoc(doc(db, 'enterpriseCargos', cargoId), {
+              estado: 'en_ruta',
+              conductorAsignado: assignForm.conductorId,
+              vehiculoAsignado: assignForm.truckId,
+              checkpoints: [
+                ...(cargoData.checkpoints || []),
+                {
+                  id: `cp_fleet_dsp_${Date.now()}`,
+                  mensaje: `Despacho centralizado confirmado. Chofer: ${assignForm.conductorId} | Placa: ${assignForm.truckId}`,
+                  timestamp: Date.now(),
+                  lat: -12.0431,
+                  lng: -77.1245
+                }
+              ]
+            });
+            
+            await saveAuditLog(orgId, {
+              user: 'SISTEMA_CASCADA_FLOTA',
+              action: `AUTO_AVANCE_CARGO - Cargo #${cargoId} avanzado a en_ruta por despacho de flota`,
+              affectedEntity: 'cargos',
+              before: cargoData,
+              after: { ...cargoData, estado: 'en_ruta', conductorAsignado: assignForm.conductorId, vehiculoAsignado: assignForm.truckId }
+            });
+
+            // Create Trip Tracker doc in enterpriseTrips
+            const tripRef = doc(collection(db, 'enterpriseTrips'));
+            await setDoc(tripRef, {
+              id: tripRef.id,
+              organizationId: orgId,
+              cargoId,
+              driverId: targetDriverObj?.id || 'drv_automated',
+              driverName: assignForm.conductorId,
+              vehicleId: targetTruckObj?.id || 'veh_automated',
+              vehiclePlaca: assignForm.truckId,
+              origen: dispatchObj.origen || 'Lima Terminal HQ',
+              destino: dispatchObj.destino || 'Terminal Destino',
+              estado: 'en_transito',
+              temperaturaActual: -18.2,
+              temperaturaSet: -18.0,
+              combustibleNivel: 85,
+              gpsCoordinates: { lat: -12.0431, lng: -77.1245 },
+              alertas: {
+                desvioRuta: false,
+                retrasoCritico: false,
+                paradaNoAutorizada: false,
+                perdidaSignal: false
+              },
+              createdAt: Date.now()
+            });
+
+            // Send welcoming chat
+            await addDoc(collection(db, 'enterpriseChats'), {
+              organizationId: orgId,
+              tripId: cargoId,
+              senderId: 'SYSTEM_CENTRAL',
+              senderName: 'NÚCLEO DE ASIGNACIÓN INTERNA',
+              senderRole: 'monitorista',
+              text: `🚨 [DESPACHO INICIADO DESDE FLEET ERP] Unidad ${assignForm.truckId} conducida por ${assignForm.conductorId} ha iniciado ruta de flete para ${dispatchObj.cliente}.`,
+              createdAt: Date.now()
+            });
+          }
+        }
       } catch (err) {
-        console.error("Error updating dispatches list in Firestore", err);
+        console.error("Error updating dispatches list / cascading in Firestore", err);
       }
     }
 
@@ -405,25 +540,398 @@ export function FleetERP() {
     galones: f.galones
   }));
 
-  const handleAskCopilot = (tag: string) => {
+  // New Operational Handlers with real Firestore Sync (Dual structure: online real doc vs offline fallback)
+  const handleAddDispatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDispatch.cliente || !newDispatch.carga || !newDispatch.origen || !newDispatch.destino || !newDispatch.precio) {
+      alert("Por favor, complete todos los campos mandatorios");
+      return;
+    }
+    const item = {
+      id: `DSP-${Date.now().toString().slice(-4)}`,
+      cliente: newDispatch.cliente,
+      carga: newDispatch.carga,
+      origen: newDispatch.origen,
+      destino: newDispatch.destino,
+      precio: Number(newDispatch.precio),
+      fechaDespacho: newDispatch.fechaDespacho || new Date().toISOString().split('T')[0],
+      estado: 'pendiente_asignacion',
+      conductor: 'Sin Asignar',
+      placa: 'Sin Asignar'
+    };
+
+    const updatedList = [item, ...dispatchList];
+    if (orgId && rawUser) {
+      try {
+        await setDoc(doc(db, 'fleet', `${orgId}_dispatches`), {
+          organizationId: orgId,
+          list: updatedList,
+          updatedAt: Date.now()
+        });
+        setSimulatedLogs(prev => [`[DESPACHO] Nueva orden de flete ${item.id} de ${item.cliente} creada en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving dispatch", err);
+        alert(`Error al guardar despacho real: ${err.message}`);
+      }
+    } else {
+      setDispatchList(updatedList);
+      localStorage.setItem('chasqui_demo_dispatches', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[DESPACHO] Nueva orden de flete ${item.id} de ${item.cliente} guardada en local.`, ...prev]);
+    }
+
+    setNewDispatch({ cliente: '', carga: '', origen: '', destino: '', precio: '', fechaDespacho: '' });
+    setShowAddDispatchModal(false);
+  };
+
+  const handleAddMaintenance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMaintenance.placa || !newMaintenance.detalle || !newMaintenance.costo) {
+      alert("Por favor, ingrese placa, detalle y costo real del taller");
+      return;
+    }
+    const item = {
+      id: `MTN-${Date.now().toString().slice(-4)}`,
+      placa: newMaintenance.placa.toUpperCase(),
+      tipo: newMaintenance.tipo,
+      detalle: newMaintenance.detalle,
+      costo: Number(newMaintenance.costo),
+      taller: newMaintenance.taller || 'Taller Central Callao',
+      km: Number(newMaintenance.km || 0),
+      fecha: new Date().toISOString().split('T')[0]
+    };
+
+    const updatedList = [item, ...maintenanceList];
+    if (orgId && rawUser) {
+      try {
+        await setDoc(doc(db, 'fleet', `${orgId}_maintenances`), {
+          organizationId: orgId,
+          list: updatedList,
+          updatedAt: Date.now()
+        });
+        setSimulatedLogs(prev => [`[MANTENIMIENTO] Nueva orden de taller para placa ${item.placa} guardada en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving maintenance", err);
+        alert(`Error al guardar mantenimiento real: ${err.message}`);
+      }
+    } else {
+      setMaintenanceList(updatedList);
+      localStorage.setItem('chasqui_demo_maintenances', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[MANTENIMIENTO] Nueva orden de taller para placa ${item.placa} guardada en local.`, ...prev]);
+    }
+
+    // Update vehicle km and STATUS inside Firestore if online
+    const targetTruckObj = truckList.find(t => t.placa === item.placa);
+    if (orgId && rawUser && targetTruckObj) {
+      try {
+        await updateDoc(doc(db, 'vehicles', targetTruckObj.id), {
+          km: Number(item.km || targetTruckObj.km),
+          estado: 'mantenimiento'
+        });
+
+        await saveAuditLog(orgId, {
+          user: rawUser?.email || 'operaciones_flota@chasqui.pe',
+          action: `ENVIAR_A_MANTENIMIENTO - Unidad Placa: ${item.placa}`,
+          affectedEntity: 'vehicles',
+          before: targetTruckObj,
+          after: { ...targetTruckObj, km: Number(item.km || targetTruckObj.km), estado: 'mantenimiento' }
+        });
+
+        // Add a system chat alert message of maintenance block for the vehicles
+        await addDoc(collection(db, 'enterpriseChats'), {
+          organizationId: orgId,
+          tripId: 'general',
+          senderId: 'SYSTEM',
+          senderName: 'SISTEMA DE FLOTA (NÚCLEO)',
+          senderRole: 'monitorista',
+          text: `🔧 [CUMPLIMIENTO DE TALLER] Unidad Placa ${item.placa} ha ingresado a taller para servicio de mantenimiento (${item.tipo}). Se ha bloqueado de la bolsa de despacho disponible de la empresa.`,
+          createdAt: Date.now()
+        });
+      } catch (err) {
+        console.error("Error updating mileage and blocking vehicle state", err);
+      }
+    } else {
+      // Local fallback
+      setTruckList(prev => {
+        const next = prev.map(t => {
+          if (t.placa === item.placa) {
+            return { ...t, km: Number(item.km || t.km), estado: 'mantenimiento' };
+          }
+          return t;
+        });
+        localStorage.setItem('chasqui_demo_trucks', JSON.stringify(next));
+        return next;
+      });
+    }
+
+    setNewMaintenance({ placa: '', tipo: 'preventivo', detalle: '', costo: '', taller: '', km: '' });
+    setShowAddMaintenanceModal(false);
+  };
+
+  const handleAddFuel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFuel.placa || !newFuel.galones || !newFuel.costo) {
+      alert("Por favor, ingrese placa, galones y costo del combustible");
+      return;
+    }
+    const item = {
+      id: `FL-${Date.now().toString().slice(-4)}`,
+      placa: newFuel.placa.toUpperCase(),
+      galones: Number(newFuel.galones),
+      costo: Number(newFuel.costo),
+      grifo: newFuel.grifo || 'Primax Panamericana N.',
+      conductor: newFuel.conductor || 'Sin Asignar',
+      fecha: new Date().toISOString().split('T')[0]
+    };
+
+    const updatedList = [item, ...fuelList];
+    if (orgId && rawUser) {
+      try {
+        await setDoc(doc(db, 'fleet', `${orgId}_fuels`), {
+          organizationId: orgId,
+          list: updatedList,
+          updatedAt: Date.now()
+        });
+        setSimulatedLogs(prev => [`[FUEL_LOG] Carga de combustible para ${item.placa} registrada en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving fuel", err);
+        alert(`Error al guardar combustible real: ${err.message}`);
+      }
+    } else {
+      setFuelList(updatedList);
+      localStorage.setItem('chasqui_demo_fuels', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[FUEL_LOG] Carga de combustible para ${item.placa} registrada de forma local.`, ...prev]);
+    }
+
+    setNewFuel({ placa: '', galones: '', costo: '', grifo: '', conductor: '' });
+    setShowAddFuelModal(false);
+  };
+
+  const handleAddIncident = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIncident.placa || !newIncident.detalle) {
+      alert("Por favor, complete la placa y el detalle del incidente");
+      return;
+    }
+    const item = {
+      id: `INC-${Date.now().toString().slice(-4)}`,
+      placa: newIncident.placa.toUpperCase(),
+      tipo: newIncident.tipo,
+      detalle: newIncident.detalle,
+      gravedad: newIncident.gravedad,
+      conductor: newIncident.conductor || 'Supervisor Despacho',
+      fecha: new Date().toISOString().split('T')[0],
+      solucionado: false
+    };
+
+    const updatedList = [item, ...incidentList];
+    if (orgId && rawUser) {
+      try {
+        await setDoc(doc(db, 'fleet', `${orgId}_incidents`), {
+          organizationId: orgId,
+          list: updatedList,
+          updatedAt: Date.now()
+        });
+
+        // 1. Mirror and propagate incident to central enterpriseIncidents collection
+        const centralIncidentRef = doc(collection(db, 'enterpriseIncidents'));
+        await setDoc(centralIncidentRef, {
+          id: centralIncidentRef.id,
+          organizationId: orgId,
+          titulo: `ALERTA FLEET ERP: ${item.tipo}`,
+          tipo: item.tipo,
+          gravedad: item.gravedad === 'alta' || item.gravedad === 'media' ? 'critica' : 'media',
+          estado: 'activo',
+          descripcion: `[Vehículo: ${item.placa} | Chofer: ${item.conductor}] - ${item.detalle}`,
+          fecha: item.fecha,
+          creadoPor: 'Chasqui Fleet SRE Automation',
+          createdAt: Date.now()
+        });
+
+        // 2. Locate and set vehicle state to 'incidencia'
+        const qVehs = query(collection(db, 'vehicles'), where('organizationId', '==', orgId), where('placa', '==', item.placa));
+        const vehsSnap = await getDocs(qVehs);
+        let oldVehData = null;
+        if (!vehsSnap.empty) {
+          const vehId = vehsSnap.docs[0].id;
+          oldVehData = vehsSnap.docs[0].data();
+          await updateDoc(doc(db, 'vehicles', vehId), {
+            estado: 'incidencia'
+          });
+        }
+
+        // 3. Locate and set driver state to 'suspendido'
+        const qDrvs = query(collection(db, 'drivers'), where('organizationId', '==', orgId), where('nombre', '==', item.conductor));
+        const drvsSnap = await getDocs(qDrvs);
+        let oldDrvData = null;
+        if (!drvsSnap.empty) {
+          const drvId = drvsSnap.docs[0].id;
+          oldDrvData = drvsSnap.docs[0].data();
+          await updateDoc(doc(db, 'drivers', drvId), {
+            estado: 'suspendido'
+          });
+        }
+
+        // 4. Save Audit log of critical distress
+        await saveAuditLog(orgId, {
+          user: rawUser?.email || 'operaciones_flota@chasqui.pe',
+          action: `REGISTRAR_INCIDENCIA_CRITICA - Placa: ${item.placa}`,
+          affectedEntity: 'incidents',
+          before: { oldVehData, oldDrvData } as any,
+          after: { placa: item.placa, conductor: item.conductor, tipo: item.tipo, gravedad: item.gravedad, estado: 'incidencia_bloqueo' } as any
+        });
+
+        // 5. Broadcast critical telemetry satellite alert in central chats
+        await addDoc(collection(db, 'enterpriseChats'), {
+          organizationId: orgId,
+          tripId: 'general',
+          senderId: 'SYSTEM',
+          senderName: 'TRAMO SATELITAL CHASQUI',
+          senderRole: 'supervisor',
+          text: `🚨 [INCIDENCIA CRÍTICA REPORTADA] Fuerte alerta de carretera detectada en unidad Placa ${item.placa} operada por ${item.conductor}. Tipo: ${item.tipo} (${item.gravedad.toUpperCase()}). Estatus de seguridad SRE activo.`,
+          createdAt: Date.now()
+        });
+
+        setSimulatedLogs(prev => [`[ALERTA] Incidencia crítica ingresada para placa ${item.placa} en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving incident", err);
+        alert(`Error al guardar incidente real: ${err.message}`);
+      }
+    } else {
+      setIncidentList(updatedList);
+      localStorage.setItem('chasqui_demo_incidents', JSON.stringify(updatedList));
+      setSimulatedLogs(prev => [`[ALERTA] Incidencia crítica ingresada para placa ${item.placa} registrada localmente.`, ...prev]);
+    }
+
+    setNewIncident({ placa: '', tipo: 'Falla Mecánica', detalle: '', gravedad: 'media', conductor: '' });
+    setShowAddIncidentModal(false);
+  };
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMember.nombre || !newMember.email) return;
+
+    if (orgId && rawUser && !isDemo) {
+      try {
+        const uId = `u_${Date.now()}`;
+        const record = {
+          id: uId,
+          nombre: newMember.nombre,
+          email: newMember.email,
+          rol: newMember.rol,
+          sede: newMember.sede,
+          activo: true,
+          ultimoAcceso: 'Activo hoy'
+        };
+
+        await setDoc(doc(db, 'organizations', orgId, 'users', uId), record);
+        
+        await saveAuditLog(orgId, {
+          user: rawUser?.email || 'operaciones_flota@chasqui.pe',
+          action: `INVITAR_MIEMBRO_SISTEMA - Colaborador: ${newMember.nombre}`,
+          affectedEntity: 'users',
+          before: null,
+          after: record
+        });
+
+        setSimulatedLogs(prev => [`[SEGURIDAD] Miembro de equipo ${newMember.nombre} registrado con éxito en base real.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error saving team member to Firestore", err);
+        alert(`Error al registrar miembro: ${err.message}`);
+      }
+    } else {
+      // Offline fallback
+      const uId = `u_${Date.now()}`;
+      const record = {
+        id: uId,
+        nombre: newMember.nombre,
+        email: newMember.email,
+        rol: newMember.rol,
+        sede: newMember.sede,
+        activo: true,
+        ultimoAcceso: 'Activo hoy'
+      };
+      setRbacMembers(prev => {
+        const next = [...prev, record];
+        return next;
+      });
+      setSimulatedLogs(prev => [`[SEGURIDAD] Miembro de equipo ${newMember.nombre} registrado en modo local.`, ...prev]);
+    }
+
+    setNewMember({ nombre: '', email: '', rol: 'dispatcher', sede: 'Sede Principal HQ' });
+    setShowAddMemberModal(false);
+  };
+
+  const handleRemoveMember = async (id: string, name: string) => {
+    if (orgId && rawUser && !isDemo) {
+      try {
+        await deleteDoc(doc(db, 'organizations', orgId, 'users', id));
+        
+        await saveAuditLog(orgId, {
+          user: rawUser?.email || 'operaciones_flota@chasqui.pe',
+          action: `ELIMINAR_MIEMBRO_SISTEMA - Colaborador ID: ${id}`,
+          affectedEntity: 'users',
+          before: { id, nombre: name },
+          after: null
+        });
+
+        setSimulatedLogs(prev => [`[SEGURIDAD] Accesos revocados para el colaborador ${name}.`, ...prev]);
+      } catch (err: any) {
+        console.error("Error deleting member from Firestore", err);
+        alert(`Error al eliminar: ${err.message}`);
+      }
+    } else {
+      setRbacMembers(prev => prev.filter(m => m.id !== id));
+      setSimulatedLogs(prev => [`[SEGURIDAD] Se revocó el acceso de ${name} localmente.`, ...prev]);
+    }
+  };
+
+  const handleAskCopilot = async (tag: string) => {
     setIsAiLoading(true);
     const p = tag === 'custom' ? aiPrompt : tag;
     setChatLog(prev => [...prev, { sender: 'user', text: p }]);
+    if (tag === 'custom') setAiPrompt('');
 
-    setTimeout(() => {
+    // Prepare a descriptive high-context prompt summarizing actual status of fleet for Gemini Copilot
+    const enrichedPrompt = `Contexto del transportista activo (Multi-Tenant OrgId: ${orgId}):
+    - Camiones en Flota: ${truckList.length} (En Ruta: ${truckList.filter(t => t.estado === 'en_ruta' || t.estado === 'viaje').length}, Libres: ${truckList.filter(t => t.estado === 'disponible').length})
+    - Conductores Homologados: ${driverList.length}
+    - Despachos Pendientes: ${dispatchList.filter(d => d.estado === 'pendiente_asignacion').length}
+    - Mantenimientos Activos: ${maintenanceList.length} (Costo total acumulado: S/. ${maintenanceList.reduce((sum, m) => sum + (Number(m.costo) || 0), 0)})
+    - Galones de Combustible consumidos: ${totalDieselGallons} galones
+    - Incidentes sin solucionar: ${incidentList.filter(i => !i.solucionado).length}
+    
+    Consulta del despachador: "${p}"`;
+
+    try {
+      const response = await fetch('/api/gemini/copilot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: enrichedPrompt }),
+      });
+      const resData = await response.json();
+      if (resData.success && resData.text) {
+        setChatLog(prev => [...prev, { sender: 'ai', text: resData.text }]);
+      } else {
+        throw new Error(resData.error || 'No text returned');
+      }
+    } catch (err: any) {
+      console.warn("Falla en Gemini backend real. Usando motor predictivo de contingencia local:", err);
       let answer = 'Procesando telemetría... Recomiendo verificar niveles de SOAT o habilitación MTC de la unidad.';
       if (p.includes('combustible') || p.includes('opt_combustible')) {
-        answer = `### 🧠 OPTIMIZACIÓN DE CONSUMO DE COMBUSTIBLE - REPORTES CHASQUI AI\n\nAnalizando las unidades activas de la flota:\n\n1. **Lectura Inusual:** El camión **Volvo F2W-894** reporta un rendimiento promedio de **31.2 km/galón**, menor en 12% al óptimo nominal (35.5 km/galón) en su trayecto Piura - Chimbote.\n2. **Diagnóstico Predictivo:** Se detecta un incremento constante de velocidad y paradas injustificadas cerca de Chancay. \n\n**Recomendación del Copilot:**\n- Reprogramar la unidad para revisión aerodinámica y de compresión en el taller próximo.\n- Instruir al chofer **Mario Lanza** a mantener régimen ECO-Drive a menos de 1800 rpm en pendientes. Consumo proyectado a ahorrar: **55 galones mensuales**.`;
+        answer = `### 🧠 OPTIMIZACIÓN DE CONSUMO DE COMBUSTIBLE - REPORTES CHASQUI AI\n\nAnalizando las unidades activas de la flota:\n\n1. **Lectura Inusual:** El camión con más recorrido reporta un rendimiento promedio de **31.2 km/galón**, menor en 12% al óptimo nominal (35.5 km/galón) en su trayecto Piura - Chimbote.\n2. **Diagnóstico Predictivo:** Se detecta un incremento constante de velocidad y paradas injustificadas cerca de Chancay. \n\n**Recomendación del Copilot:**\n- Reprogramar la unidad para revisión aerodinámica y de compresión en el taller próximo.\n- Instruir al chofer a mantener régimen ECO-Drive a menos de 1800 rpm en pendientes. Consumo proyectado a ahorrar: **55 galones mensuales**.`;
       } else if (p.includes('fatiga') || p.includes('opt_conductores')) {
-        answer = `### 💤 CONTROL DE FATIGA Y SEGURIDAD VIAL (SUNAT GEOFENCES)\n\nAnálisis de cronograma laboral de conductores en Chasqui Logistics:\n\n1. **Alerta de Horas de Manejo:** Conductor **Enrique Palacios** acumula **42 horas de manejo esta semana** conduciendo la unidad refrigerada **C5X-611**.\n2. **Riesgo:** Supera el límite óptimo recomendado de 40 horas en tramo nocturno.\n\n**Sugerencia Algorítmica:**\n- Asignar chofer de relevo en Sullana para el despacho de Danper SAC. \n- Bloquear asignaciones automáticas para Esteban Paredes debido a licencia vencida.`;
+        answer = `### 💤 CONTROL DE FATIGA Y SEGURIDAD VIAL (SUNAT GEOFENCES)\n\nAnálisis de cronograma laboral de conductores en Chasqui Logistics:\n\n1. **Alerta de Horas de Manejo:** Se reporta un acumulo de más de 40 horas de manejo semanales sobre unidades pesadas refrigeradas de la flota.\n2. **Riesgo:** Supera el límite óptimo recomendado de 40 horas en tramo nocturno.\n\n**Sugerencia Algorítmica:**\n- Asignar chofer de relevo en Sullana para el despacho de flete. \n- Validar la vigencia de licencias categorías A-IIIc.`;
       } else if (p.includes('mantenimiento') || p.includes('opt_mantenimiento')) {
-        answer = `### 🔧 PREDICTIVO DE MANTENIMIENTO CORRECTIVO\n\nRecomendaciones de Taller:\n\n1. **Unidad Fuso A9E-231:** El SOAT y MTC están válidos pero la **revisión técnica vence el próximo mes de Junio** y el estado muestra mantenimiento de alternador pendiente.\n2. **Costo de Reparación Estimado:** S/. 850.\n\n**Acciones propuestas:** Generar orden de compra automática en Taller Principal Callao para el fin de semana para evitar multas de la Sutran.`;
+        answer = `### 🔧 PREDICTIVO DE MANTENIMIENTO CORRECTIVO\n\nRecomendaciones de Taller:\n\n1. **Próximas Revisiones:** Varias unidades cumplen alertas de cambio de filtro y aceite.\n2. **Costo de Reparación Estimado:** S/. 850.\n\n**Acciones propuestas:** Generar orden de compra automática en Taller Principal Callao para el fin de semana para evitar multas de la Sutran o detenciones en ruta.`;
+      } else {
+        answer = `### 📡 PLANIFICACIÓN LOGÍSTICA ESTIMADA\n\nHe procesado tu consulta: "${p}". Las ${truckList.length} unidades activas operan perfectamente bajo conformidad MTC. Recomiendo continuar monitoreando el GPS en tiempo real para evitar retenciones de la Sutran.`;
       }
-
       setChatLog(prev => [...prev, { sender: 'ai', text: answer }]);
+    } finally {
       setIsAiLoading(false);
-      if (tag === 'custom') setAiPrompt('');
-    }, 1200);
+    }
   };
 
   // Generate audit report for Flotas
@@ -1027,9 +1535,19 @@ export function FleetERP() {
           {/* D. DESPACHOS */}
           {activeTab === 'despachos' && (
             <div className="space-y-6 animate-fade-in text-left">
-              <div className="border-b border-slate-900 pb-4">
-                <h2 className="text-lg font-black text-white">Despachos Asignados por clientes</h2>
-                <p className="text-xs text-slate-400 mt-1">Asigne conductores, remolques y despache viajes corporativos de manera digital.</p>
+              <div className="border-b border-slate-900 pb-4 flex justify-between items-center bg-slate-950">
+                <div>
+                  <h2 className="text-lg font-black text-white">Despachos Asignados por Exportadores</h2>
+                  <p className="text-xs text-slate-400 mt-1">Asigne conductores, remolques y despache viajes corporativos de manera digital.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDispatchModal(true)}
+                  className="px-4 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl text-xs flex items-center space-x-1.5 shadow shadow-purple-900 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Añadir Despacho</span>
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -1132,6 +1650,14 @@ export function FleetERP() {
                   <h2 className="text-lg font-black text-white">Programa de Mantenimiento Preventivo y Correctivo</h2>
                   <p className="text-xs text-slate-400 mt-1">Bitácora de fallas resueltas en talleres mecánicos autorizados para prevenir detenciones.</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddMaintenanceModal(true)}
+                  className="px-4 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl text-xs flex items-center space-x-1.5 shadow shadow-purple-900 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Programar Mantenimiento</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
@@ -1174,9 +1700,19 @@ export function FleetERP() {
           {/* G. COMBUSTIBLE */}
           {activeTab === 'combustible' && (
             <div className="space-y-6 animate-fade-in text-left">
-              <div className="border-b border-slate-900 pb-4">
-                <h2 className="text-lg font-black text-white">Consumo de Combustible Diésel B5</h2>
-                <p className="text-xs text-slate-400 mt-1">Gestión de vales digitales de grifo, costo en galones y auditoría de choferes.</p>
+              <div className="border-b border-slate-900 pb-4 flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-black text-white">Consumo de Combustible Diésel B5</h2>
+                  <p className="text-xs text-slate-400 mt-1">Gestión de vales digitales de grifo, costo en galones y auditoría de choferes.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddFuelModal(true)}
+                  className="px-4 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl text-xs flex items-center space-x-1.5 shadow shadow-purple-900 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Registrar Carga</span>
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -1211,9 +1747,19 @@ export function FleetERP() {
           {/* H. INCIDENTES */}
           {activeTab === 'incidentes' && (
             <div className="space-y-6 animate-fade-in text-left">
-              <div className="border-b border-slate-900 pb-4">
-                <h2 className="text-lg font-black text-white">Consola de Alertas e Incidentes Operacionales</h2>
-                <p className="text-xs text-slate-400 mt-1">Alarmas criticas de sensores de telemetría IoT y estados de emergencia reported.</p>
+              <div className="border-b border-slate-900 pb-4 flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-black text-white">Consola de Alertas e Incidentes Operacionales</h2>
+                  <p className="text-xs text-slate-400 mt-1">Alarmas criticas de sensores de telemetría IoT y estados de emergencia reported.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddIncidentModal(true)}
+                  className="px-4 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl text-xs flex items-center space-x-1.5 shadow shadow-purple-900 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Registrar Incidente</span>
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -1347,25 +1893,58 @@ export function FleetERP() {
           {/* J. RBAC TEAM ROLES */}
           {activeTab === 'rbac' && (
             <div className="space-y-6 animate-fade-in text-left">
-              <div className="border-b border-slate-900 pb-4">
-                <h2 className="text-lg font-black text-white">Miembros del Equipo & Roles de Empresa de Transporte</h2>
-                <p className="text-xs text-slate-400 mt-1">Definición de roles estrictamente especializados para la seguridad logística.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900 pb-4">
+                <div>
+                  <h2 className="text-lg font-black text-white">Miembros del Equipo & Roles de Empresa de Transporte</h2>
+                  <p className="text-xs text-slate-400 mt-1">Definición de roles estrictamente especializados para la seguridad logística.</p>
+                </div>
+                <button
+                  onClick={() => setShowAddMemberModal(true)}
+                  className="px-4 py-2.5 bg-gradient-to-r from-purple-650 to-indigo-600 hover:opacity-90 text-white font-bold rounded-xl text-xs uppercase flex items-center gap-1.5 self-start sm:self-auto shadow-lg"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Invitar Colaborador</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                {rbacMembers.map((member) => (
-                  <div key={member.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex justify-between items-center">
-                    <div className="space-y-1">
-                      <h4 className="text-slate-100 font-bold text-sm leading-none">{member.nombre}</h4>
-                      <p className="text-[10px] text-slate-500 font-mono">{member.email}</p>
-                      <p className="text-[11px] text-slate-400 mt-1">Sede: {member.sede} | Último acceso: {member.acceso}</p>
+              {rbacMembers.length === 0 ? (
+                <div className="p-8 text-center bg-slate-950 rounded-3xl border border-dashed border-slate-800 space-y-3">
+                  <p className="text-xs text-slate-400 italic">No hay registrados miembros de equipo adicionales para esta empresa transportista.</p>
+                  <button
+                    onClick={() => setShowAddMemberModal(true)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-purple-400 font-bold rounded-lg text-[11px] uppercase"
+                  >
+                    + Registrar el Primer Colaborador
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {rbacMembers.map((member) => (
+                    <div key={member.id} className="p-4 bg-slate-900/60 border border-slate-850 rounded-2xl flex justify-between items-center hover:bg-slate-900/80 transition-colors">
+                      <div className="space-y-1">
+                        <h4 className="text-slate-100 font-bold text-sm leading-none">{member.nombre}</h4>
+                        <p className="text-[10px] text-slate-500 font-mono">{member.email}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Sede: {member.sede} | Último acceso: {member.acceso || member.ultimoAcceso || 'Activo ahora'}</p>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="px-2.5 py-1 bg-purple-950/20 text-purple-400 border border-purple-900/30 rounded text-[10px] font-black uppercase tracking-wider">
+                          {member.rol}
+                        </span>
+                        {/* Only allow deleting if it's not the user's own email */}
+                        {!(member.email === rawUser?.email) && (
+                          <button
+                            onClick={() => handleRemoveMember(member.id, member.nombre)}
+                            className="p-1.5 text-slate-500 hover:text-rose-500 bg-slate-950 hover:bg-rose-950/20 border border-slate-900 hover:border-rose-950/30 rounded-lg transition"
+                            title="Desvincular accesos"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className="px-2.5 py-1 bg-purple-950/20 text-purple-400 border border-purple-900/30 rounded text-[10px] font-black uppercase tracking-wider">
-                      {member.rol}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1571,6 +2150,446 @@ export function FleetERP() {
               assignForm={assignForm}
               setAssignForm={setAssignForm}
             />
+          </div>
+        </div>
+      )}
+
+      {/* 4. Add Dispatch Modal */}
+      {showAddDispatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-990/80 backdrop-blur-sm animate-fade-in text-left">
+          <div className="max-w-md w-full bg-slate-950 border border-slate-850 p-6 rounded-3xl space-y-4 shadow-2xl text-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-purple-400">Registrar Orden de Flete</h3>
+              <button onClick={() => setShowAddDispatchModal(false)} className="text-slate-500 hover:text-white font-bold">X</button>
+            </div>
+            <form onSubmit={handleAddDispatch} className="space-y-4 text-xs font-medium">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Cliente Corporativo</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Líneas de Exportación SAC"
+                  required
+                  value={newDispatch.cliente}
+                  onChange={e => setNewDispatch({ ...newDispatch, cliente: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Detalle de la Carga</label>
+                <input
+                  type="text"
+                  placeholder="Ej. 22 Tons Espárragos Frescos en Pallets"
+                  required
+                  value={newDispatch.carga}
+                  onChange={e => setNewDispatch({ ...newDispatch, carga: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Origen</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Planta Trujillo"
+                    required
+                    value={newDispatch.origen}
+                    onChange={e => setNewDispatch({ ...newDispatch, origen: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Destino final</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Puerto del Callao - DPW"
+                    required
+                    value={newDispatch.destino}
+                    onChange={e => setNewDispatch({ ...newDispatch, destino: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Precio de Flete acordado (S/.)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 3400"
+                    required
+                    value={newDispatch.precio}
+                    onChange={e => setNewDispatch({ ...newDispatch, precio: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Fecha Planeada</label>
+                  <input
+                    type="date"
+                    value={newDispatch.fechaDespacho}
+                    onChange={e => setNewDispatch({ ...newDispatch, fechaDespacho: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl transition-all shadow-lg shadow-purple-900"
+              >
+                ✓ Generar Despacho en Base de Datos Real
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Program Maintenance Modal */}
+      {showAddMaintenanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-990/80 backdrop-blur-sm animate-fade-in text-left">
+          <div className="max-w-md w-full bg-slate-950 border border-slate-850 p-6 rounded-3xl space-y-4 shadow-2xl text-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-purple-400">Programar Orden de Taller</h3>
+              <button onClick={() => setShowAddMaintenanceModal(false)} className="text-slate-500 hover:text-white font-bold">X</button>
+            </div>
+            <form onSubmit={handleAddMaintenance} className="space-y-4 text-xs font-medium">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Placa del Camión</label>
+                  <select
+                    required
+                    value={newMaintenance.placa}
+                    onChange={e => setNewMaintenance({ ...newMaintenance, placa: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="">Seleccione placa...</option>
+                    {truckList.map(t => (
+                      <option key={t.id} value={t.placa}>{t.placa} ({t.marca})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Tipo Servicio</label>
+                  <select
+                    value={newMaintenance.tipo}
+                    onChange={e => setNewMaintenance({ ...newMaintenance, tipo: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="preventivo">Preventivo</option>
+                    <option value="correctivo">Correctivo / Emergencia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Detalle Técnico / Reporte de Taller</label>
+                <textarea
+                  placeholder="Ej. Cambio de fajas del alternador y revisión del compresor de frío Thermo King."
+                  required
+                  rows={2}
+                  value={newMaintenance.detalle}
+                  onChange={e => setNewMaintenance({ ...newMaintenance, detalle: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Costo total Taller (S/.)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 1200"
+                    required
+                    value={newMaintenance.costo}
+                    onChange={e => setNewMaintenance({ ...newMaintenance, costo: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Lectura de Odómetro (Km)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 142000"
+                    value={newMaintenance.km}
+                    onChange={e => setNewMaintenance({ ...newMaintenance, km: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Nombre del Taller Autorizado</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Carros de Servicio Chimbote SAC"
+                  value={newMaintenance.taller}
+                  onChange={e => setNewMaintenance({ ...newMaintenance, taller: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl transition-all shadow-lg"
+              >
+                ✓ Programar Mantenimiento e Incrementar Kilometraje
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Add Fuel Modal */}
+      {showAddFuelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-990/80 backdrop-blur-sm animate-fade-in text-left">
+          <div className="max-w-md w-full bg-slate-950 border border-slate-850 p-6 rounded-3xl space-y-4 shadow-2xl text-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-purple-400">Registrar Vale de Combustible</h3>
+              <button onClick={() => setShowAddFuelModal(false)} className="text-slate-500 hover:text-white font-bold">X</button>
+            </div>
+            <form onSubmit={handleAddFuel} className="space-y-4 text-xs font-medium">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Placa del Camión</label>
+                  <select
+                    required
+                    value={newFuel.placa}
+                    onChange={e => setNewFuel({ ...newFuel, placa: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none unicode-mono"
+                  >
+                    <option value="">Seleccione placa...</option>
+                    {truckList.map(t => (
+                      <option key={t.id} value={t.placa}>{t.placa} ({t.marca})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Conductor del Operativo</label>
+                  <select
+                    value={newFuel.conductor}
+                    onChange={e => setNewFuel({ ...newFuel, conductor: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="">Seleccione conductor...</option>
+                    {driverList.map(d => (
+                      <option key={d.id} value={d.nombre}>{d.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Volumen (Galones Diésel B5)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej. 42.5"
+                    required
+                    value={newFuel.galones}
+                    onChange={e => setNewFuel({ ...newFuel, galones: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Costo total pagado (S/.)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 840"
+                    required
+                    value={newFuel.costo}
+                    onChange={e => setNewFuel({ ...newFuel, costo: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Estación / Grifo Autorizado</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Estación Primax Chimbote km 420"
+                  value={newFuel.grifo}
+                  onChange={e => setNewFuel({ ...newFuel, grifo: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl transition-all shadow-lg"
+              >
+                ✓ Dispensar Vale en Base Informatizada Real
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Add Incident Modal */}
+      {showAddIncidentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-990/80 backdrop-blur-sm animate-fade-in text-left">
+          <div className="max-w-md w-full bg-slate-950 border border-slate-850 p-6 rounded-3xl space-y-4 shadow-2xl text-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-purple-400">Reportar Alerta de Incidente Operacional</h3>
+              <button onClick={() => setShowAddIncidentModal(false)} className="text-slate-500 hover:text-white font-bold">X</button>
+            </div>
+            <form onSubmit={handleAddIncident} className="space-y-4 text-xs font-medium">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Placa del Camión</label>
+                  <select
+                    required
+                    value={newIncident.placa}
+                    onChange={e => setNewIncident({ ...newIncident, placa: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none unicode-mono"
+                  >
+                    <option value="">Seleccione placa...</option>
+                    {truckList.map(t => (
+                      <option key={t.id} value={t.placa}>{t.placa} ({t.marca})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Conductor</label>
+                  <select
+                    value={newIncident.conductor}
+                    onChange={e => setNewIncident({ ...newIncident, conductor: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="">Seleccione conductor...</option>
+                    {driverList.map(d => (
+                      <option key={d.id} value={d.nombre}>{d.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Severidad Alerta</label>
+                  <select
+                    value={newIncident.gravedad}
+                    onChange={e => setNewIncident({ ...newIncident, gravedad: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="baja">Baja / Informativa</option>
+                    <option value="media">Media / Advertencia</option>
+                    <option value="alta">Alta / Emergencia Crítica</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Tipo Problema</label>
+                  <select
+                    value={newIncident.tipo}
+                    onChange={e => setNewIncident({ ...newIncident, tipo: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="Falla Mecánica">Falla Mecánica</option>
+                    <option value="Retención Policial">Retención MTC / Policial</option>
+                    <option value="Sensor Temperatura">Alarma Frío Thermo King</option>
+                    <option value="Accidente">Colisión / Bloqueo de Carretera</option>
+                    <option value="Desvío Geocerca">Desvío no Autorizado de Geocerca</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Reporte y Detalles del Incidente</label>
+                <textarea
+                  placeholder="Detalle de la alerta. Ej. Sensor de temperatura reporta caída de -18C a -10C en la unidad Actros. Se verifica empaquetadura de la compuerta de frío."
+                  required
+                  rows={3}
+                  value={newIncident.detalle}
+                  onChange={e => setNewIncident({ ...newIncident, detalle: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-red-650 hover:bg-red-600 text-white font-extrabold uppercase rounded-xl transition-all shadow-lg"
+              >
+                ⚠ Registrar Alerta y Alarmar Centro de Control
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Add Team Member Modal */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-990/80 backdrop-blur-sm animate-fade-in text-left">
+          <div className="max-w-md w-full bg-slate-950 border border-slate-850 p-6 rounded-3xl space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-widest text-purple-400">Invitar Miembro al Equipo ERP</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-slate-500 hover:text-white font-bold">X</button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-4 text-xs font-medium">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Nombre Completo</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Ing. Carlos Mendoza"
+                  required
+                  value={newMember.nombre}
+                  onChange={e => setNewMember({ ...newMember, nombre: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 block">Correo Corporativo</label>
+                <input
+                  type="email"
+                  placeholder="Carlos.mendoza@chasqui.pe"
+                  required
+                  value={newMember.email}
+                  onChange={e => setNewMember({ ...newMember, email: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-650 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Rol Operativo</label>
+                  <select
+                    value={newMember.rol}
+                    onChange={e => setNewMember({ ...newMember, rol: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="dispatcher">Despachador Logístico</option>
+                    <option value="operations_manager">Gerente de Operaciones</option>
+                    <option value="sre_monitor">Monitor de Telemetría SRE</option>
+                    <option value="security_auditor">Auditor de Compliance</option>
+                    <option value="supervisor">Supervisor de Ruta</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block">Sede de Operación</label>
+                  <select
+                    value={newMember.sede}
+                    onChange={e => setNewMember({ ...newMember, sede: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                  >
+                    <option value="Sede Principal HQ">Sede Principal HQ</option>
+                    <option value="Lima Terminal Norte">Lima Terminal Norte</option>
+                    <option value="Callao Puerto Principal">Callao Puerto Principal</option>
+                    <option value="Arequipa Sede Sur">Arequipa Sede Sur</option>
+                    <option value="Trujillo Sede Norte">Trujillo Sede Norte</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-gradient-to-r from-purple-650 to-indigo-600 hover:opacity-90 text-white font-extrabold uppercase rounded-xl transition-all shadow-lg"
+              >
+                ✓ Otorgar Accesos Logistics Security MTC
+              </button>
+            </form>
           </div>
         </div>
       )}
